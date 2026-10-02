@@ -1,0 +1,17 @@
+# Local credentials
+.env
+.env.*
+!.env.example
+
+# OS temporary files
+Thumbs.db
+Desktop.ini
+.DS_Store
+*.tmp
+*.bak
+
+# Exported playable packages (keep the directory placeholder)
+/builds/*
+!/builds/.gitkeep
+
+# Add engine-specific cache rules after choosing the engine.
