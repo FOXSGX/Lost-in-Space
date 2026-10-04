@@ -6,7 +6,7 @@ GitHub 仓库：[FOXSGX/Lost-in-Space](https://github.com/FOXSGX/Lost-in-Space)�
 
 多人合作生存射击闯关游戏：迷航的地球人前往不同星球搜集燃料与物资，最终返回地球。支持单人尝试通关。
 
-当前处于设计阶段，尚未创建引擎项目，没有可运行版本。引擎、视角、联机人数和比赛截止时间待确认。
+当前已完成第一周 Godot 4 联机测试工程，位于 `game/`。项目先以 2D 俯视角、四人局域网灰盒为第一版工程基线，后续内容按开发里程碑推进。
 
 ## 从这里开始
 
@@ -42,3 +42,14 @@ GitHub 仓库：[FOXSGX/Lost-in-Space](https://github.com/FOXSGX/Lost-in-Space)�
 - 试玩包使用版本目录，如 `builds/v0.1.0/`，附运行方式和已知问题。
 - 选定引擎后再确定 `game/` 内部结构、运行步骤和缓存忽略规则。
 - 使用 Git 管理代码和文档；试玩包默认不入库，可通过 GitHub Releases 分享。大型原稿的版本管理方式待确认。
+
+## 第一周联机测试
+
+- Godot 工程：[`game/`](game/)
+- 运行入口：`game/project.godot`
+- 成员1交付说明：[`game/docs/week1-member1.md`](game/docs/week1-member1.md)
+- 主机端口：`24567`
+- 示范星球测试：主机切换阶段后，靠近 3 个示范信标按 `E` 扫描；电磁星球暂作为后续关卡保留。
+- Windows 导出预设：`game/export_presets.cfg`
+
+用 Godot 4.3+ 导入 `game/project.godot` 后运行。一个实例点击“创建主机”，其他实例输入主机局域网 IP 并点击“加入主机”。

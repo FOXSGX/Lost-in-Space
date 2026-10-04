@@ -15,3 +15,7 @@ Desktop.ini
 !/builds/.gitkeep
 
 # Add engine-specific cache rules after choosing the engine.
+
+# Godot 4 editor/import cache
+**/.godot/
+
