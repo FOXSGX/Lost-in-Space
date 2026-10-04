@@ -2,11 +2,14 @@ extends CharacterBody2D
 class_name NetworkPlayer
 
 const SPEED := 260.0
+const max_health := 5
+var health := max_health
 var peer_id: int = 1
 var player_color := Color("#61dafb")
 var display_name := "玩家"
 var _last_sent_position := Vector2.INF
 var _send_accumulator := 0.0
+var _attack_cooldown := 0.0
 
 func setup(id: int, color: Color) -> void:
     peer_id = id
@@ -28,6 +31,7 @@ func _ready() -> void:
 func _physics_process(delta: float) -> void:
     if not is_multiplayer_authority():
         return
+    _attack_cooldown = maxf(_attack_cooldown - delta, 0.0)
     var input_vector := Input.get_vector("move_left", "move_right", "move_up", "move_down")
     velocity = input_vector * SPEED
     move_and_slide()
@@ -47,6 +51,13 @@ func _physics_process(delta: float) -> void:
                     stage_controller.activate_interaction_from_peer(peer_id, nearest_id)
                 else:
                     stage_controller.request_activate_interaction.rpc_id(1, nearest_id)
+    if Input.is_action_pressed("attack") and _attack_cooldown <= 0.0:
+        _attack_cooldown = 0.35
+        var stage_controller := get_parent()
+        if multiplayer.is_server():
+            stage_controller.attack_enemy_from_peer(peer_id)
+        else:
+            stage_controller.request_attack.rpc_id(1)
     queue_redraw()
 
 @rpc("any_peer", "unreliable", "call_remote")
@@ -61,3 +72,5 @@ func _draw() -> void:
     draw_circle(Vector2(-5.0, -5.0), 5.0, Color(1, 1, 1, 0.65))
     draw_arc(Vector2.ZERO, 22.0, 0.0, TAU, 32, Color(1, 1, 1, 0.65), 2.0)
     draw_string(ThemeDB.fallback_font, Vector2(-26.0, -28.0), display_name, HORIZONTAL_ALIGNMENT_CENTER, 52.0, 14, Color("#e8f2ff"))
+    draw_rect(Rect2(-20, 25, 40, 4), Color("#1b2430"))
+    draw_rect(Rect2(-20, 25, 40.0 * float(health) / max_health, 4), Color("#8be28b"))
