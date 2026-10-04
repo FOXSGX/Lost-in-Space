@@ -6,6 +6,7 @@ const PLAYER_SCENE := preload("res://scenes/player.tscn")
 const DEMO_STAGE_SCENE := preload("res://scenes/demo_stage.tscn")
 const DEMO_BEACON_SCENE := preload("res://scenes/demo_beacon.tscn")
 const POWER_NODE_SCENE := preload("res://scenes/power_node.tscn")
+const ENEMY_SCENE := preload("res://scenes/enemy.tscn")
 const DEMO_BEACON_POSITIONS := [Vector2(185, 255), Vector2(500, 520), Vector2(790, 285)]
 const POWER_NODE_POSITIONS := [Vector2(210, 235), Vector2(505, 455), Vector2(785, 260)]
 const PLAYER_COLORS := [
@@ -36,6 +37,51 @@ var demo_beacons: Dictionary = {}
 var activated_demo_beacon_ids: Array[int] = []
 var power_nodes: Dictionary = {}
 var activated_node_ids: Array[int] = []
+const EXTRACTION_POSITION := Vector2(845, 575)
+const EXTRACTION_RADIUS := 58.0
+const EXTRACTION_HOLD_TIME := 3.0
+var extraction_progress := 0.0
+var extraction_enabled := false
+var mission_completed := false
+var enemies: Dictionary = {}
+var enemy_spawned := false
+
+func _process(delta: float) -> void:
+    if not is_host or current_stage != "demo" or mission_completed:
+        return
+    for enemy_id in enemies.keys():
+        var enemy := enemies[enemy_id] as DungeonEnemy
+        if enemy == null:
+            continue
+        var result := enemy.server_tick(delta, players)
+        if result.get("sync", false):
+            enemy.sync_timer = 0.0
+            sync_enemy_transform.rpc(enemy_id, enemy.position)
+        if result.has("target_id"):
+            damage_player.rpc(int(result.target_id), int(result.damage))
+    if not enemy_spawned:
+        return
+    if not enemies.is_empty():
+        extraction_progress = 0.0
+        return
+    if activated_demo_beacon_ids.size() < demo_beacons.size():
+        extraction_progress = 0.0
+        return
+    if not extraction_enabled:
+        extraction_enabled = true
+        _set_status("All beacons scanned. Reach the extraction point.", Color("#8be28b"))
+    var all_at_extraction := not connected_ids.is_empty()
+    for peer_id in connected_ids:
+        var player := players.get(peer_id) as NetworkPlayer
+        if player == null or player.position.distance_to(EXTRACTION_POSITION) > EXTRACTION_RADIUS:
+            all_at_extraction = false
+            break
+    if all_at_extraction:
+        extraction_progress = minf(extraction_progress + delta, EXTRACTION_HOLD_TIME)
+        if extraction_progress >= EXTRACTION_HOLD_TIME:
+            complete_demo_mission.rpc()
+    else:
+        extraction_progress = 0.0
 
 func _ready() -> void:
     _build_world()
@@ -102,6 +148,17 @@ func _build_demo_beacons() -> void:
         _demo_beacons_root.add_child(beacon)
         demo_beacons[beacon_id] = beacon
     _demo_beacons_root.visible = false
+
+func _spawn_demo_enemies() -> void:
+    if enemy_spawned:
+        return
+    enemy_spawned = true
+    for index in 4:
+        var enemy := ENEMY_SCENE.instantiate() as DungeonEnemy
+        enemy.setup(index + 1)
+        enemy.position = [Vector2(730, 250), Vector2(820, 330), Vector2(760, 390), Vector2(670, 300)][index]
+        add_child(enemy)
+        enemies[index + 1] = enemy
 
 func _build_power_nodes() -> void:
     _power_nodes_root = Node2D.new()
@@ -224,12 +281,14 @@ func _build_ui() -> void:
     column.add_child(address_edit)
 
     host_button = Button.new()
+    host_button.focus_mode = Control.FOCUS_NONE
     host_button.text = "创建主机"
     host_button.custom_minimum_size.y = 38
     host_button.pressed.connect(_create_host)
     column.add_child(host_button)
 
     join_button = Button.new()
+    join_button.focus_mode = Control.FOCUS_NONE
     join_button.text = "加入主机"
     join_button.custom_minimum_size.y = 38
     join_button.pressed.connect(_join_host)
@@ -252,12 +311,14 @@ func _build_ui() -> void:
     column.add_child(player_list_label)
 
     stage_button = Button.new()
+    stage_button.focus_mode = Control.FOCUS_NONE
     stage_button.text = "进入示范星球"
     stage_button.disabled = true
     stage_button.pressed.connect(_toggle_stage)
     column.add_child(stage_button)
 
     leave_button = Button.new()
+    leave_button.focus_mode = Control.FOCUS_NONE
     leave_button.text = "断开并返回大厅"
     leave_button.disabled = true
     leave_button.pressed.connect(_leave_network)
@@ -398,8 +459,16 @@ func request_activate_interaction(interaction_id: int) -> void:
         return
     activate_interaction_from_peer(multiplayer.get_remote_sender_id(), interaction_id)
 
+@rpc("any_peer", "unreliable")
+func request_attack() -> void:
+    if is_host:
+        attack_enemy_from_peer(multiplayer.get_remote_sender_id())
+
 func activate_demo_beacon_from_peer(peer_id: int, beacon_id: int) -> void:
     if not is_host or current_stage != "demo":
+        return
+    if not enemies.is_empty():
+        _set_status("先清除危险区内的敌人。", Color("#ffcf5c"))
         return
     if not demo_beacons.has(beacon_id) or activated_demo_beacon_ids.has(beacon_id):
         return
@@ -429,9 +498,67 @@ func set_demo_beacon_state(beacon_id: int, active: bool, scanning_peer: int) -> 
 
 func _reset_demo_beacons_local() -> void:
     activated_demo_beacon_ids.clear()
+    extraction_progress = 0.0
+    extraction_enabled = false
+    mission_completed = false
+    enemy_spawned = false
+    for enemy in enemies.values():
+        enemy.queue_free()
+    enemies.clear()
     for beacon in demo_beacons.values():
         beacon.set_active(false)
     _update_progress_text()
+
+@rpc("authority", "call_local", "reliable")
+func complete_demo_mission() -> void:
+    mission_completed = true
+    extraction_enabled = true
+    extraction_progress = EXTRACTION_HOLD_TIME
+    _set_status("示范星球任务完成：全体队员已成功撤离！", Color("#8be28b"))
+    _update_progress_text()
+
+@rpc("authority", "call_local", "reliable")
+func damage_player(peer_id: int, amount: int) -> void:
+    if not players.has(peer_id):
+        return
+    var player := players[peer_id] as NetworkPlayer
+    player.health -= amount
+    if player.health <= 0:
+        player.health = player.max_health
+        player.position = _spawn_position(peer_id)
+        _set_status("玩家 %d 被击倒，已返回入口。" % peer_id, Color("#ff6b8a"))
+    player.queue_redraw()
+
+func attack_enemy_from_peer(peer_id: int) -> void:
+    if not is_host or current_stage != "demo" or not players.has(peer_id):
+        return
+    var player := players[peer_id] as NetworkPlayer
+    var nearest_id := -1
+    var nearest_distance := 58.0
+    for enemy_id in enemies:
+        var enemy := enemies[enemy_id] as DungeonEnemy
+        var distance := player.position.distance_to(enemy.position)
+        if distance <= nearest_distance:
+            nearest_distance = distance
+            nearest_id = enemy_id
+    if nearest_id < 0:
+        return
+    var target := enemies[nearest_id] as DungeonEnemy
+    if target.take_damage(1):
+        target.queue_free()
+        enemies.erase(nearest_id)
+    sync_enemy_state.rpc(nearest_id, target.health if is_instance_valid(target) else 0)
+
+@rpc("authority", "call_local", "reliable")
+func sync_enemy_state(enemy_id: int, health: int) -> void:
+    if enemies.has(enemy_id) and health <= 0:
+        enemies[enemy_id].queue_free()
+        enemies.erase(enemy_id)
+
+@rpc("authority", "unreliable", "call_remote")
+func sync_enemy_transform(enemy_id: int, next_position: Vector2) -> void:
+    if not multiplayer.is_server() and enemies.has(enemy_id):
+        (enemies[enemy_id] as DungeonEnemy).position = next_position
 
 func activate_power_node_from_peer(peer_id: int, node_id: int) -> void:
     if not is_host or current_stage != "electromagnetic":
@@ -487,6 +614,8 @@ func sync_shared_state(next_stage: String, active_node_ids: Array) -> void:
 @rpc("authority", "call_local", "reliable")
 func change_stage(next_stage: String) -> void:
     current_stage = next_stage
+    if current_stage == "demo":
+        _spawn_demo_enemies()
     if current_stage == "ship":
         _reset_demo_beacons_local()
         _reset_power_nodes_local()
