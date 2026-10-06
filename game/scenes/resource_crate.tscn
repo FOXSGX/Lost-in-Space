@@ -1,0 +1,8 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/resource_crate.gd" id="1_resource_crate"]
+
+[node name="ResourceCrate" type="Area2D"]
+collision_layer = 8
+collision_mask = 1
+script = ExtResource("1_resource_crate")
