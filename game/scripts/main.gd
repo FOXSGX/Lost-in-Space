@@ -21,6 +21,7 @@ const HEAT_POSITION := Vector2(490, 500)
 const HEAT_RADIUS := 42.0
 const OXYGEN_DRAIN_BASE := 1.0
 const OXYGEN_DRAIN_COLD := 3.0
+const OXYGEN_RECOVER := 12.0
 const WARMTH_DRAIN := 0.05
 const WARMTH_RECOVER := 0.4
 const VITALS_SYNC_INTERVAL := 0.1
@@ -68,6 +69,7 @@ var extraction_progress := 0.0
 var extraction_enabled := false
 var mission_completed := false
 var mission_failed := false
+var mission_return_timer := 0.0
 var enemies: Dictionary = {}
 var enemy_spawned := false
 var _resource_crates_root: Node2D
@@ -80,7 +82,14 @@ var revive_progress: Dictionary = {}
 var _vitals_accumulator := 0.0
 
 func _process(delta: float) -> void:
-    if not is_host or current_stage != "demo" or mission_completed or mission_failed:
+    if not is_host or current_stage != "demo":
+        return
+    if mission_completed:
+        mission_return_timer -= delta
+        if mission_return_timer <= 0.0:
+            change_stage.rpc("ship")
+        return
+    if mission_failed:
         return
     _tick_enemies(delta)
     _tick_survival(delta)
@@ -108,6 +117,7 @@ func _tick_survival(delta: float) -> void:
         var in_heat := player.position.distance_to(HEAT_POSITION) <= HEAT_RADIUS
         if in_heat:
             player.warmth = minf(player.warmth + WARMTH_RECOVER * delta, 1.0)
+            player.oxygen = minf(player.oxygen + OXYGEN_RECOVER * delta, player.max_oxygen)
         else:
             player.warmth = maxf(player.warmth - WARMTH_DRAIN * delta, 0.0)
         var drain := OXYGEN_DRAIN_BASE + (1.0 - player.warmth) * OXYGEN_DRAIN_COLD
@@ -189,6 +199,7 @@ func _tick_extraction(delta: float) -> void:
             complete_demo_mission.rpc()
     else:
         extraction_progress = 0.0
+    sync_extraction_state.rpc(extraction_enabled, extraction_progress, mission_completed)
 
 func _ready() -> void:
     _build_world()
@@ -572,10 +583,12 @@ func _on_peer_connected(peer_id: int) -> void:
     var active_state: Array[int] = activated_demo_beacon_ids if current_stage == "demo" else activated_node_ids
     var taken_crates: Array[int] = taken_crate_ids if current_stage == "demo" else []
     sync_shared_state.rpc_id(peer_id, current_stage, active_state, alive_enemy_ids(), taken_crates, deposited_resources)
+    sync_extraction_state.rpc_id(peer_id, extraction_enabled, extraction_progress, mission_completed)
     _set_status("玩家 %d 已加入。" % peer_id, Color("#8be28b"))
     _update_player_list()
 
 func _on_peer_disconnected(peer_id: int) -> void:
+    _release_carried_resource(peer_id)
     connected_ids.erase(peer_id)
     despawn_player.rpc(peer_id)
     _set_status("玩家 %d 已断开。" % peer_id, Color("#ffcf5c"))
@@ -610,7 +623,7 @@ func _spawn_player(peer_id: int) -> void:
         return
     var player := PLAYER_SCENE.instantiate() as NetworkPlayer
     player.setup(peer_id, PLAYER_COLORS[(peer_id - 1) % PLAYER_COLORS.size()])
-    player.position = _spawn_position(peer_id)
+    player.teleport(_spawn_position(peer_id))
     add_child(player)
     players[peer_id] = player
     _update_vitals_text()
@@ -690,6 +703,7 @@ func _reset_demo_progress_local() -> void:
     extraction_enabled = false
     mission_completed = false
     mission_failed = false
+    mission_return_timer = 0.0
     enemy_spawned = false
     reviving.clear()
     revive_progress.clear()
@@ -714,7 +728,7 @@ func pickup_crate_from_peer(peer_id: int, crate_id: int) -> void:
         _set_status("玩家 %d 需要靠近资源箱才能拾取。" % peer_id, Color("#ffcf5c"))
         return
     set_crate_taken.rpc(crate_id, true)
-    set_player_carrying.rpc(peer_id, 1)
+    set_player_carrying.rpc(peer_id, 1, crate_id)
     _set_status("玩家 %d 已拾取资源，共 %d / %d。" % [peer_id, taken_crate_ids.size() + 1, resource_crates.size()], Color("#8be28b"))
 
 @rpc("authority", "call_local", "reliable")
@@ -729,12 +743,22 @@ func set_crate_taken(crate_id: int, value: bool) -> void:
     _update_progress_text()
 
 @rpc("authority", "call_local", "reliable")
-func set_player_carrying(peer_id: int, amount: int) -> void:
+func set_player_carrying(peer_id: int, amount: int, crate_id: int = -1) -> void:
     if not players.has(peer_id):
         return
     var player := players[peer_id] as NetworkPlayer
     player.carrying = amount
+    player.carrying_crate_id = crate_id if amount > 0 else -1
     player.queue_redraw()
+
+func _release_carried_resource(peer_id: int) -> void:
+    if not players.has(peer_id):
+        return
+    var player := players[peer_id] as NetworkPlayer
+    if player.carrying > 0 and player.carrying_crate_id > 0:
+        set_crate_taken.rpc(player.carrying_crate_id, false)
+    player.carrying = 0
+    player.carrying_crate_id = -1
 
 func deposit_resources_from_peer(peer_id: int) -> void:
     if not is_host or current_stage != "demo":
@@ -746,7 +770,7 @@ func deposit_resources_from_peer(peer_id: int) -> void:
         _set_status("玩家 %d 需要把资源带到投送撤离点。" % peer_id, Color("#ffcf5c"))
         return
     var amount := player.carrying
-    set_player_carrying.rpc(peer_id, 0)
+    set_player_carrying.rpc(peer_id, 0, -1)
     set_deposited_resources.rpc(deposited_resources + amount)
     _set_status("玩家 %d 已投送 %d 份资源，合计 %d / %d。" % [peer_id, amount, deposited_resources + amount, resource_crates.size()], Color("#8be28b"))
 
@@ -788,8 +812,7 @@ func set_player_downed(peer_id: int, value: bool) -> void:
     player.downed = value
     player.velocity = Vector2.ZERO
     if value:
-        # 倒地的玩家会掉落携带的资源，避免卡住关卡进度。
-        player.carrying = 0
+        # 携带的资源随玩家保留，救起后可以继续完成投送。
         _set_status("玩家 %d 倒地，等待队友靠近救援。" % peer_id, Color("#ff6b8a"))
     player.queue_redraw()
     if value and is_host:
@@ -821,14 +844,15 @@ func fail_mission() -> void:
     if mission_failed:
         return
     mission_failed = true
-    _set_status("全员倒地，本次登陆失败，返回飞船准备区。", Color("#ff6b8a"))
     change_stage.rpc("ship")
+    _set_status("全员倒地，本次登陆失败，已返回飞船准备区。", Color("#ff6b8a"))
 
 @rpc("authority", "call_local", "reliable")
 func complete_demo_mission() -> void:
     mission_completed = true
     extraction_enabled = true
     extraction_progress = EXTRACTION_HOLD_TIME
+    mission_return_timer = 2.5
     _set_status("示范星球任务完成：全体队员已成功撤离！", Color("#8be28b"))
     _update_progress_text()
 
@@ -874,7 +898,14 @@ func sync_enemy_state(enemy_id: int, health: int) -> void:
 @rpc("authority", "unreliable", "call_remote")
 func sync_enemy_transform(enemy_id: int, next_position: Vector2) -> void:
     if not multiplayer.is_server() and enemies.has(enemy_id):
-        (enemies[enemy_id] as DungeonEnemy).position = next_position
+        (enemies[enemy_id] as DungeonEnemy).apply_network_position(next_position)
+
+@rpc("authority", "unreliable", "call_remote")
+func sync_extraction_state(enabled: bool, progress: float, completed: bool) -> void:
+    extraction_enabled = enabled
+    extraction_progress = progress
+    mission_completed = completed
+    _update_progress_text()
 
 func activate_power_node_from_peer(peer_id: int, node_id: int) -> void:
     if not is_host or current_stage != "electromagnetic":
@@ -948,11 +979,12 @@ func change_stage(next_stage: String) -> void:
     _set_stage_visuals()
     for peer_id in players:
         var player := players[peer_id] as NetworkPlayer
-        player.position = _spawn_position(peer_id)
+        player.teleport(_spawn_position(peer_id))
         player.health = player.max_health
         player.oxygen = player.max_oxygen
         player.warmth = 1.0
         player.carrying = 0
+        player.carrying_crate_id = -1
         player.downed = false
         player.velocity = Vector2.ZERO
         player.queue_redraw()
@@ -983,9 +1015,15 @@ func _update_progress_text() -> void:
     if not progress_label:
         return
     if current_stage == "demo":
-        progress_label.text = "信标 %d / %d　资源 %d / %d" % [
+        var extraction_text := ""
+        if extraction_enabled:
+            extraction_text = "　撤离集合 %.1f / %.1f" % [extraction_progress, EXTRACTION_HOLD_TIME]
+        else:
+            extraction_text = "　撤离：清敌、扫描、投送未完成"
+        progress_label.text = "信标 %d / %d　资源 %d / %d%s" % [
             activated_demo_beacon_ids.size(), demo_beacons.size(),
             deposited_resources, resource_crates.size(),
+            extraction_text,
         ]
     elif current_stage == "electromagnetic":
         progress_label.text = "电力节点：%d / %d" % [activated_node_ids.size(), power_nodes.size()]

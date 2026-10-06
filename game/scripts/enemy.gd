@@ -6,12 +6,28 @@ var health := 3
 var target: Node2D
 var attack_timer := 0.0
 var sync_timer := 0.0
+var _target_position := Vector2.ZERO
+var _has_target_position := false
 const SPEED := 72.0
 const ATTACK_RANGE := 34.0
 
 func setup(id: int) -> void:
     enemy_id = id
     name = "Enemy_%d" % id
+
+func _ready() -> void:
+    _target_position = position
+
+func _process(delta: float) -> void:
+    if not multiplayer.is_server() and _has_target_position:
+        position = position.lerp(_target_position, 1.0 - exp(-18.0 * delta))
+
+func apply_network_position(next_position: Vector2) -> void:
+    if position.distance_to(next_position) > 160.0:
+        position = next_position
+    else:
+        _target_position = next_position
+        _has_target_position = true
 
 func server_tick(delta: float, players: Dictionary) -> Dictionary:
     if target == null or not is_instance_valid(target):
