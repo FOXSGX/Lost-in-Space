@@ -174,15 +174,19 @@ func _tick_revive(delta: float) -> void:
 func _tick_extraction(delta: float) -> void:
     if not enemy_spawned:
         extraction_progress = 0.0
+        _broadcast_extraction_state()
         return
     if not enemies.is_empty():
         extraction_progress = 0.0
+        _broadcast_extraction_state()
         return
     if activated_demo_beacon_ids.size() < demo_beacons.size():
         extraction_progress = 0.0
+        _broadcast_extraction_state()
         return
     if deposited_resources < resource_crates.size():
         extraction_progress = 0.0
+        _broadcast_extraction_state()
         return
     if not extraction_enabled:
         extraction_enabled = true
@@ -199,6 +203,9 @@ func _tick_extraction(delta: float) -> void:
             complete_demo_mission.rpc()
     else:
         extraction_progress = 0.0
+    _broadcast_extraction_state()
+
+func _broadcast_extraction_state() -> void:
     sync_extraction_state.rpc(extraction_enabled, extraction_progress, mission_completed)
 
 func _ready() -> void:
