@@ -25,6 +25,7 @@ const WARMTH_DRAIN := 0.05
 const WARMTH_RECOVER := 0.4
 const VITALS_SYNC_INTERVAL := 0.1
 const CRATE_PICKUP_RANGE := 64.0
+const ATTACK_RANGE := 96.0
 const REVIVE_RANGE := 64.0
 const REVIVE_TIME := 3.0
 const REVIVE_OXYGEN := 40.0
@@ -647,16 +648,13 @@ func request_interaction(kind: int, target_id: int) -> void:
         return
     handle_interaction(multiplayer.get_remote_sender_id(), kind, target_id)
 
-@rpc("any_peer", "unreliable")
+@rpc("any_peer", "reliable")
 func request_attack() -> void:
     if is_host:
         attack_enemy_from_peer(multiplayer.get_remote_sender_id())
 
 func activate_demo_beacon_from_peer(peer_id: int, beacon_id: int) -> void:
     if not is_host or current_stage != "demo":
-        return
-    if not enemies.is_empty():
-        _set_status("先清除危险区内的敌人。", Color("#ffcf5c"))
         return
     if not demo_beacons.has(beacon_id) or activated_demo_beacon_ids.has(beacon_id):
         return
@@ -851,7 +849,7 @@ func attack_enemy_from_peer(peer_id: int) -> void:
         return
     var player := players[peer_id] as NetworkPlayer
     var nearest_id := -1
-    var nearest_distance := 58.0
+    var nearest_distance := ATTACK_RANGE
     for enemy_id in enemies:
         var enemy := enemies[enemy_id] as DungeonEnemy
         var distance := player.position.distance_to(enemy.position)
@@ -859,6 +857,7 @@ func attack_enemy_from_peer(peer_id: int) -> void:
             nearest_distance = distance
             nearest_id = enemy_id
     if nearest_id < 0:
+        _set_status("攻击未命中：靠近敌人后按空格。", Color("#ffcf5c"))
         return
     var target := enemies[nearest_id] as DungeonEnemy
     if target.take_damage(1):
@@ -1056,12 +1055,9 @@ func _update_stage_text() -> void:
         stage_button.text = "进入示范星球"
     elif current_stage == "demo":
         stage_badge.text = "当前阶段：示范星球"
-        stage_hint.text = "按 E 拾取资源、扫描信标、向倒地的队友施救；把资源送到投送撤离点。离开热源会失温并加快氧气消耗。"
+        stage_hint.text = "按空格攻击；按 E 拾取资源、扫描信标、向倒地的队友施救（战斗中也可扫描）；把资源送到投送撤离点。离开热源会失温并加快氧气消耗。"
         stage_button.text = "返回飞船准备区"
     else:
         stage_badge.text = "当前阶段：电磁星球测试区"
         stage_hint.text = "靠近蓝色电力节点按 E 激活；主机验证距离并同步所有玩家。"
         stage_button.text = "返回飞船准备区"
-
-
-

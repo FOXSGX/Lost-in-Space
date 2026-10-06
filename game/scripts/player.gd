@@ -65,7 +65,8 @@ func _physics_process(delta: float) -> void:
                     stage_controller.handle_interaction(peer_id, kind, target_id)
                 else:
                     stage_controller.request_interaction.rpc_id(1, kind, target_id)
-    if Input.is_action_pressed("attack") and _attack_cooldown <= 0.0:
+    # 一次按键触发一次攻击，由冷却控制连续攻击，避免战斗操作不明确。
+    if Input.is_action_just_pressed("attack") and _attack_cooldown <= 0.0:
         _attack_cooldown = 0.35
         var stage_controller := get_parent()
         if multiplayer.is_server():
