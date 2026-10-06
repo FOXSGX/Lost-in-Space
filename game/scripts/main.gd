@@ -419,18 +419,25 @@ func _build_ui() -> void:
 
     stage_hint = Label.new()
     stage_hint.position = Vector2(52, 103)
+    stage_hint.size = Vector2(590, 42)
+    stage_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+    stage_hint.add_theme_font_size_override("font_size", 14)
     stage_hint.add_theme_color_override("font_color", Color("#9fb4c8"))
     stage_hint.text = "连接后使用 WASD / 方向键移动；玩家会在所有实例中同步显示。"
     layer.add_child(stage_hint)
 
     progress_label = Label.new()
     progress_label.position = Vector2(690, 82)
+    progress_label.size = Vector2(280, 24)
+    progress_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
     progress_label.add_theme_color_override("font_color", Color("#8be28b"))
-    progress_label.add_theme_font_size_override("font_size", 16)
+    progress_label.add_theme_font_size_override("font_size", 14)
     layer.add_child(progress_label)
 
     vitals_label = Label.new()
     vitals_label.position = Vector2(690, 104)
+    vitals_label.size = Vector2(280, 22)
+    vitals_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
     vitals_label.add_theme_color_override("font_color", Color("#61dafb"))
     vitals_label.add_theme_font_size_override("font_size", 14)
     layer.add_child(vitals_label)
@@ -1022,12 +1029,10 @@ func _update_progress_text() -> void:
     if not progress_label:
         return
     if current_stage == "demo":
-        var extraction_text := ""
+        var extraction_text := "撤离-"
         if extraction_enabled:
-            extraction_text = "　撤离集合 %.1f / %.1f" % [extraction_progress, EXTRACTION_HOLD_TIME]
-        else:
-            extraction_text = "　撤离：清敌、扫描、投送未完成"
-        progress_label.text = "信标 %d / %d　资源 %d / %d%s" % [
+            extraction_text = "撤离 %.1f/%.1f" % [extraction_progress, EXTRACTION_HOLD_TIME]
+        progress_label.text = "信标%d/%d 资源%d/%d %s" % [
             activated_demo_beacon_ids.size(), demo_beacons.size(),
             deposited_resources, resource_crates.size(),
             extraction_text,

@@ -30,15 +30,22 @@ func apply_network_position(next_position: Vector2) -> void:
         _has_target_position = true
 
 func server_tick(delta: float, players: Dictionary) -> Dictionary:
-    if target == null or not is_instance_valid(target):
+    var current_target := target as NetworkPlayer
+    if current_target == null or not is_instance_valid(current_target) \
+            or current_target.downed or not players.has(current_target.peer_id):
+        target = null
         var nearest := INF
         for candidate in players.values():
-            var distance := global_position.distance_to(candidate.global_position)
+            var player := candidate as NetworkPlayer
+            if player == null or not is_instance_valid(player) or player.downed:
+                continue
+            var distance := global_position.distance_to(player.global_position)
             if distance < nearest:
                 nearest = distance
-                target = candidate
+                target = player
     if target == null:
-        return {}
+        velocity = Vector2.ZERO
+        return {"sync": sync_timer >= 0.05}
     var distance := global_position.distance_to(target.global_position)
     if distance > ATTACK_RANGE:
         velocity = global_position.direction_to(target.global_position) * SPEED
