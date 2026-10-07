@@ -74,6 +74,8 @@ func _label(text: String, pos: Vector2, bounds: Vector2, font_size: int, color: 
     label.size = bounds
     label.text = text
     label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+    label.clip_text = true
+    label.vertical_alignment = VERTICAL_ALIGNMENT_TOP
     label.add_theme_font_size_override("font_size", font_size)
     label.add_theme_color_override("font_color", color)
     label.mouse_filter = Control.MOUSE_FILTER_IGNORE
