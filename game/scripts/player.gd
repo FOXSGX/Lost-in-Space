@@ -57,7 +57,7 @@ func _physics_process(delta: float) -> void:
     if not is_multiplayer_authority():
         return
     _attack_cooldown = maxf(_attack_cooldown - delta, 0.0)
-    if downed:
+    if downed or not get_parent().is_gameplay_active():
         velocity = Vector2.ZERO
         queue_redraw()
         return

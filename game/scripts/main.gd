@@ -1,6 +1,9 @@
 extends Node2D
 
 const PORT := 24567
+const SHIP_STAGE_SCENE := preload("res://scenes/ship_stage.tscn")
+const FRONTEND_SCENE := preload("res://scenes/frontend.tscn")
+const TRANSITION_DURATION := 2.4
 const MAX_PLAYERS := 4
 const PLAYER_SCENE := preload("res://scenes/player.tscn")
 const DEMO_STAGE_SCENE := preload("res://scenes/demo_stage.tscn")
@@ -55,6 +58,7 @@ var stage_hint: Label
 var stage_badge: Label
 var progress_label: Label
 var _world_bodies: Node2D
+var _ship_stage: Node2D
 var _demo_stage: Node2D
 var _demo_beacons_root: Node2D
 var _power_nodes_root: Node2D
@@ -80,14 +84,29 @@ var vitals_label: Label
 var reviving: Dictionary = {}
 var revive_progress: Dictionary = {}
 var _vitals_accumulator := 0.0
+var frontend: SpaceFrontend
+var _interface_layer: CanvasLayer
+var transition_active := false
+var transition_destination := "ship"
+var transition_reason := ""
+var transition_remaining := 0.0
+var transition_token := 0
+var solo_session := false
 
 func _process(delta: float) -> void:
+    if transition_active:
+        if is_host:
+            transition_remaining -= delta
+            if transition_remaining <= 0.0:
+                change_stage.rpc(transition_destination)
+                finish_stage_transition.rpc(transition_token)
+        return
     if not is_host or current_stage != "demo":
         return
     if mission_completed:
         mission_return_timer -= delta
         if mission_return_timer <= 0.0:
-            change_stage.rpc("ship")
+            request_stage_transition("ship", "任务完成 · 船员与物资已回收，正在离开星球轨道。")
         return
     if mission_failed:
         return
@@ -210,11 +229,15 @@ func _broadcast_extraction_state() -> void:
 
 func _ready() -> void:
     _build_world()
+    _ship_stage = SHIP_STAGE_SCENE.instantiate()
+    add_child(_ship_stage)
     _build_demo_stage()
     _build_demo_beacons()
     _build_resource_crates()
     _build_power_nodes()
     _build_ui()
+    _build_frontend()
+    _set_stage_visuals()
     multiplayer.peer_connected.connect(_on_peer_connected)
     multiplayer.peer_disconnected.connect(_on_peer_disconnected)
     multiplayer.connected_to_server.connect(_on_connected_to_server)
@@ -403,12 +426,13 @@ func get_nearest_demo_beacon_id(player_position: Vector2) -> int:
 func _build_ui() -> void:
     var layer := CanvasLayer.new()
     layer.name = "Interface"
+    _interface_layer = layer
     add_child(layer)
 
     stage_title = Label.new()
     stage_title.position = Vector2(52, 38)
     stage_title.add_theme_font_size_override("font_size", 27)
-    stage_title.text = "迷失太空 · 联机工程测试"
+    stage_title.text = "迷失太空 · 归航号"
     layer.add_child(stage_title)
 
     stage_badge = Label.new()
@@ -418,8 +442,9 @@ func _build_ui() -> void:
     layer.add_child(stage_badge)
 
     stage_hint = Label.new()
-    stage_hint.position = Vector2(52, 103)
-    stage_hint.size = Vector2(590, 42)
+    stage_hint.position = Vector2(52, 91)
+    stage_hint.size = Vector2(590, 40)
+    stage_hint.clip_text = true
     stage_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
     stage_hint.add_theme_font_size_override("font_size", 14)
     stage_hint.add_theme_color_override("font_color", Color("#9fb4c8"))
@@ -467,7 +492,7 @@ func _build_ui() -> void:
     margin.add_child(column)
 
     var title := Label.new()
-    title.text = "第一周联机大厅"
+    title.text = "飞船 / 航行控制"
     title.add_theme_font_size_override("font_size", 20)
     column.add_child(title)
 
@@ -515,7 +540,7 @@ func _build_ui() -> void:
 
     stage_button = Button.new()
     stage_button.focus_mode = Control.FOCUS_NONE
-    stage_button.text = "进入示范星球"
+    stage_button.text = "打开星际航线图"
     stage_button.disabled = true
     stage_button.pressed.connect(_toggle_stage)
     column.add_child(stage_button)
@@ -528,7 +553,7 @@ func _build_ui() -> void:
     column.add_child(leave_button)
 
     var footer := Label.new()
-    footer.text = "端口 %d · 上限 %d 人\n成员1：联机 / 架构 / 整合" % [PORT, MAX_PLAYERS]
+    footer.text = "端口 %d · 上限 %d 人\n航线 · 登陆 · 撤离" % [PORT, MAX_PLAYERS]
     footer.add_theme_color_override("font_color", Color("#708ca4"))
     column.add_child(footer)
 
@@ -553,6 +578,7 @@ func _create_host() -> void:
     connected_ids = [1]
     _spawn_player(1)
     _set_connected_ui(true)
+    _show_gameplay()
     _set_status("主机已创建：等待其他玩家加入。把本机局域网 IP 告诉队友。", Color("#8be28b"))
     _update_player_list()
 
@@ -573,16 +599,16 @@ func _join_host() -> void:
     _set_status("正在连接 %s:%d…" % [address, PORT], Color("#ffcf5c"))
 
 func _on_connected_to_server() -> void:
+    _show_gameplay()
     _set_status("已加入主机，等待玩家列表…", Color("#8be28b"))
 
 func _on_connection_failed() -> void:
-    _set_status("连接失败：请检查 IP、防火墙和端口 %d。" % PORT, Color("#ff6b8a"))
     _leave_network()
+    frontend.show_room("连接失败：检查主机 IP，确认同一局域网以及端口 %d。" % PORT)
 
 func _on_server_disconnected() -> void:
-    _clear_players()
-    _set_status("主机已断开，其他玩家已返回大厅。", Color("#ff6b8a"))
-    _set_connected_ui(false)
+    _leave_network()
+    frontend.show_room("主机已断开，已返回主界面。可以重新加入飞船。")
 
 func _on_peer_connected(peer_id: int) -> void:
     if not is_host:
@@ -597,7 +623,10 @@ func _on_peer_connected(peer_id: int) -> void:
     var active_state: Array[int] = activated_demo_beacon_ids if current_stage == "demo" else activated_node_ids
     var taken_crates: Array[int] = taken_crate_ids if current_stage == "demo" else []
     sync_shared_state.rpc_id(peer_id, current_stage, active_state, alive_enemy_ids(), taken_crates, deposited_resources)
+    sync_session_snapshot.rpc_id(peer_id, _player_snapshot(), _enemy_snapshot())
     sync_extraction_state.rpc_id(peer_id, extraction_enabled, extraction_progress, mission_completed)
+    if transition_active:
+        begin_stage_transition.rpc_id(peer_id, transition_destination, transition_reason, transition_token, maxf(transition_remaining, 0.1))
     _set_status("玩家 %d 已加入。" % peer_id, Color("#8be28b"))
     _update_player_list()
 
@@ -649,13 +678,73 @@ func _spawn_position(peer_id: int) -> Vector2:
     return slots[(peer_id - 1) % slots.size()]
 
 func _toggle_stage() -> void:
-    if not is_host:
-        _set_status("只有主机可以切换测试阶段。", Color("#ffcf5c"))
+    if transition_active:
         return
-    change_stage.rpc("demo" if current_stage == "ship" else "ship")
+    if current_stage == "ship":
+        frontend.show_route(is_host, connected_ids.size())
+    elif is_host:
+        request_stage_transition("ship", "结束本次探索 · 正在接回全体船员，未投送物资将重置。")
+
+func _build_frontend() -> void:
+    var layer := CanvasLayer.new()
+    layer.name = "Navigation"
+    layer.layer = 20
+    add_child(layer)
+    frontend = FRONTEND_SCENE.instantiate() as SpaceFrontend
+    layer.add_child(frontend)
+    frontend.host_requested.connect(func(solo: bool): solo_session = solo; _create_host())
+    frontend.join_requested.connect(func(address: String):
+        solo_session = false
+        address_edit.text = address
+        address_edit.release_focus()
+        frontend.set_connecting(true)
+        _join_host()
+    )
+    frontend.destination_requested.connect(func(id: String): request_stage_transition(id, "前往%s · 全队将同步进入登陆区。" % PlanetRegistry.info(id).get("title", id)))
+    frontend.closed.connect(_show_gameplay)
+    frontend.disconnect_requested.connect(_leave_network)
+    _interface_layer.hide()
+
+func _show_gameplay() -> void:
+    frontend.hide_screen()
+    _interface_layer.show()
+    address_edit.release_focus()
+    _set_connected_ui(_has_active_peer())
+
+func is_gameplay_active() -> bool:
+    return _has_active_peer() and not transition_active and not frontend.visible and not mission_completed and not mission_failed
+
+func request_stage_transition(destination: String, reason: String) -> void:
+    if not is_host or transition_active or not PlanetRegistry.can_land(destination):
+        return
+    if destination == current_stage:
+        return
+    begin_stage_transition.rpc(destination, reason, transition_token + 1, TRANSITION_DURATION)
+
+@rpc("authority", "call_local", "reliable")
+func begin_stage_transition(destination: String, reason: String, token: int, duration: float) -> void:
+    if not PlanetRegistry.can_land(destination) or token <= transition_token:
+        return
+    transition_token = token
+    transition_active = true
+    transition_destination = destination
+    transition_reason = reason
+    transition_remaining = duration
+    for player in players.values():
+        player.velocity = Vector2.ZERO
+    _interface_layer.hide()
+    frontend.show_transit(destination, reason, duration)
+
+@rpc("authority", "call_local", "reliable")
+func finish_stage_transition(token: int) -> void:
+    if token != transition_token:
+        return
+    transition_active = false
+    transition_remaining = 0.0
+    _show_gameplay()
 
 func handle_interaction(peer_id: int, kind: int, target_id: int) -> void:
-    if not is_host:
+    if not is_host or transition_active or mission_completed or mission_failed:
         return
     match kind:
         INTERACT_BEACON:
@@ -858,8 +947,9 @@ func fail_mission() -> void:
     if mission_failed:
         return
     mission_failed = true
-    change_stage.rpc("ship")
-    _set_status("全员倒地，本次登陆失败，已返回飞船准备区。", Color("#ff6b8a"))
+    if is_host:
+        request_stage_transition("ship", "登陆失败 · 全员失去行动能力，启动紧急救援返航。")
+    _set_status("全员倒地，本次登陆失败，正在紧急返航。", Color("#ff6b8a"))
 
 @rpc("authority", "call_local", "reliable")
 func complete_demo_mission() -> void:
@@ -883,9 +973,11 @@ func damage_player(peer_id: int, amount: int) -> void:
     player.queue_redraw()
 
 func attack_enemy_from_peer(peer_id: int) -> void:
-    if not is_host or current_stage != "demo" or not players.has(peer_id):
+    if not is_host or transition_active or mission_completed or mission_failed or current_stage != "demo" or not players.has(peer_id):
         return
     var player := players[peer_id] as NetworkPlayer
+    if player.downed:
+        return
     var nearest_id := -1
     var nearest_distance := ATTACK_RANGE
     for enemy_id in enemies:
@@ -956,6 +1048,42 @@ func set_power_node_state(node_id: int, active: bool, activating_peer: int) -> v
     elif active:
         _set_status("玩家 %d 已激活节点 %d。" % [activating_peer, node_id], Color("#8be28b"))
 
+func _player_snapshot() -> Array:
+    var snapshot: Array = []
+    for id in players:
+        var player := players[id] as NetworkPlayer
+        snapshot.append([id, player.position, player.health, player.oxygen, player.warmth, player.carrying, player.carrying_crate_id, player.downed])
+    return snapshot
+
+func _enemy_snapshot() -> Array:
+    var snapshot: Array = []
+    for id in enemies:
+        var enemy := enemies[id] as DungeonEnemy
+        snapshot.append([id, enemy.position, enemy.health])
+    return snapshot
+
+@rpc("authority", "reliable")
+func sync_session_snapshot(player_state: Array, enemy_state: Array) -> void:
+    for entry in player_state:
+        if not players.has(int(entry[0])):
+            continue
+        var player := players[int(entry[0])] as NetworkPlayer
+        player.teleport(entry[1])
+        player.health = int(entry[2])
+        player.oxygen = float(entry[3])
+        player.warmth = float(entry[4])
+        player.carrying = int(entry[5])
+        player.carrying_crate_id = int(entry[6])
+        player.downed = bool(entry[7])
+    for entry in enemy_state:
+        if enemies.has(int(entry[0])):
+            var enemy := enemies[int(entry[0])] as DungeonEnemy
+            enemy.position = entry[1]
+            enemy.apply_network_position(entry[1])
+            enemy.health = int(entry[2])
+            enemy.queue_redraw()
+    _update_vitals_text()
+
 @rpc("authority", "reliable")
 func sync_shared_state(next_stage: String, active_node_ids: Array, surviving_enemy_ids: Array, taken_crates: Array, deposited: int) -> void:
     current_stage = next_stage
@@ -1014,6 +1142,8 @@ func _reset_power_nodes_local() -> void:
     _update_progress_text()
 
 func _set_stage_visuals() -> void:
+    if is_instance_valid(_ship_stage):
+        _ship_stage.visible = current_stage == "ship"
     if _demo_stage:
         _demo_stage.visible = current_stage == "demo"
     if _demo_beacons_root:
@@ -1062,6 +1192,14 @@ func _leave_network() -> void:
     is_host = false
     connected_ids.clear()
     _clear_players()
+    transition_active = false
+    transition_remaining = 0.0
+    transition_token = 0
+    current_stage = "ship"
+    _reset_demo_progress_local()
+    _set_stage_visuals()
+    _interface_layer.hide()
+    frontend.show_home()
     _set_connected_ui(false)
     _set_status("已断开。请创建主机或加入现有主机。", Color("#ffcf5c"))
 
@@ -1075,10 +1213,14 @@ func _set_connected_ui(connected: bool) -> void:
     host_button.disabled = connected
     join_button.disabled = connected
     address_edit.editable = not connected
-    stage_button.disabled = not connected
+    stage_button.disabled = not connected or transition_active or (current_stage != "ship" and not is_host)
     leave_button.disabled = not connected
 
 func _set_status(message: String, color: Color) -> void:
+    if is_instance_valid(frontend):
+        frontend.set_notice(message)
+        if "失败" in message:
+            frontend.set_connecting(false)
     if status_label:
         status_label.text = "状态：" + message
         status_label.add_theme_color_override("font_color", color)
@@ -1101,11 +1243,11 @@ func _update_stage_text() -> void:
         return
     if current_stage == "ship":
         stage_badge.text = "当前阶段：飞船准备区"
-        stage_hint.text = "连接后使用 WASD / 方向键移动；蓝框内是基础碰撞测试区。"
-        stage_button.text = "进入示范星球"
+        stage_hint.text = "WASD / 方向键移动。打开航线图选择目的地，主机确认后全队一起登陆。"
+        stage_button.text = "打开星际航线图"
     elif current_stage == "demo":
         stage_badge.text = "当前阶段：示范星球"
-        stage_hint.text = "按空格攻击；按 E 拾取资源、扫描信标、向倒地的队友施救（战斗中也可扫描）；把资源送到投送撤离点。离开热源会失温并加快氧气消耗。"
+        stage_hint.text = "空格攻击 · E 扫描 / 搬运 / 救援 · 热源补氧回温。\n完成信标、清敌和投送后，全员在撤离点集合 3 秒。"
         stage_button.text = "返回飞船准备区"
     else:
         stage_badge.text = "当前阶段：电磁星球测试区"
