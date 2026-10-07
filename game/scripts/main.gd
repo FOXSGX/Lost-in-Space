@@ -436,17 +436,19 @@ func _build_ui() -> void:
     layer.add_child(stage_title)
 
     stage_badge = Label.new()
-    stage_badge.position = Vector2(52, 82)
+    stage_badge.position = Vector2(52, 72)
+    stage_badge.size = Vector2(590, 24)
+    stage_badge.clip_text = true
     stage_badge.add_theme_color_override("font_color", Color("#61dafb"))
     stage_badge.add_theme_font_size_override("font_size", 17)
     layer.add_child(stage_badge)
 
     stage_hint = Label.new()
-    stage_hint.position = Vector2(52, 91)
-    stage_hint.size = Vector2(590, 40)
+    stage_hint.position = Vector2(52, 101)
+    stage_hint.size = Vector2(590, 24)
     stage_hint.clip_text = true
-    stage_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-    stage_hint.add_theme_font_size_override("font_size", 14)
+    stage_hint.autowrap_mode = TextServer.AUTOWRAP_OFF
+    stage_hint.add_theme_font_size_override("font_size", 13)
     stage_hint.add_theme_color_override("font_color", Color("#9fb4c8"))
     stage_hint.text = "连接后使用 WASD / 方向键移动；玩家会在所有实例中同步显示。"
     layer.add_child(stage_hint)
@@ -524,6 +526,7 @@ func _build_ui() -> void:
 
     status_label = Label.new()
     status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+    status_label.clip_text = true
     status_label.custom_minimum_size.y = 62
     status_label.add_theme_color_override("font_color", Color("#ffcf5c"))
     column.add_child(status_label)
@@ -534,6 +537,7 @@ func _build_ui() -> void:
     column.add_child(people_title)
 
     player_list_label = Label.new()
+    player_list_label.clip_text = true
     player_list_label.custom_minimum_size.y = 100
     player_list_label.add_theme_color_override("font_color", Color("#d5e7f7"))
     column.add_child(player_list_label)
@@ -1243,13 +1247,13 @@ func _update_stage_text() -> void:
         return
     if current_stage == "ship":
         stage_badge.text = "当前阶段：飞船准备区"
-        stage_hint.text = "WASD / 方向键移动。打开航线图选择目的地，主机确认后全队一起登陆。"
+        stage_hint.text = "WASD / 方向键移动 · 打开航线图选择目的地 · 主机确认后全队登陆"
         stage_button.text = "打开星际航线图"
     elif current_stage == "demo":
         stage_badge.text = "当前阶段：示范星球"
-        stage_hint.text = "空格攻击 · E 扫描 / 搬运 / 救援 · 热源补氧回温。\n完成信标、清敌和投送后，全员在撤离点集合 3 秒。"
+        stage_hint.text = "空格攻击 · E 扫描/搬运/救援 · 热源补氧回温 · 撤离点停留 3 秒"
         stage_button.text = "返回飞船准备区"
     else:
         stage_badge.text = "当前阶段：电磁星球测试区"
-        stage_hint.text = "靠近蓝色电力节点按 E 激活；主机验证距离并同步所有玩家。"
+        stage_hint.text = "靠近蓝色电力节点按 E 激活 · 主机验证距离并同步全队"
         stage_button.text = "返回飞船准备区"
