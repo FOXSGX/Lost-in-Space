@@ -3,16 +3,22 @@ class_name DungeonEnemy
 
 var enemy_id := 0
 var health := 3
+var max_health := 3
+var move_speed := 72.0
+var attack_damage := 1
 var target: Node2D
 var attack_timer := 0.0
 var sync_timer := 0.0
 var _target_position := Vector2.ZERO
 var _has_target_position := false
-const SPEED := 72.0
 const ATTACK_RANGE := 34.0
 
-func setup(id: int) -> void:
+func setup(id: int, player_count := 1) -> void:
     enemy_id = id
+    max_health = 3 + maxi((player_count - 1) / 2, 0)
+    health = max_health
+    move_speed = 72.0 + maxi(player_count - 1, 0) * 4.0
+    attack_damage = 2 if player_count >= 4 else 1
     name = "Enemy_%d" % id
 
 func _ready() -> void:
@@ -48,7 +54,7 @@ func server_tick(delta: float, players: Dictionary) -> Dictionary:
         return {"sync": sync_timer >= 0.05}
     var distance := global_position.distance_to(target.global_position)
     if distance > ATTACK_RANGE:
-        velocity = global_position.direction_to(target.global_position) * SPEED
+        velocity = global_position.direction_to(target.global_position) * move_speed
         move_and_slide()
         sync_timer += delta
     else:
@@ -56,7 +62,7 @@ func server_tick(delta: float, players: Dictionary) -> Dictionary:
         attack_timer -= delta
         if attack_timer <= 0.0:
             attack_timer = 1.0
-            return {"target_id": target.peer_id, "damage": 1}
+            return {"target_id": target.peer_id, "damage": attack_damage}
     queue_redraw()
     return {"sync": sync_timer >= 0.05}
 
@@ -71,4 +77,4 @@ func _draw() -> void:
     draw_circle(Vector2(-5, -3), 3.0, Color("#fff1b8"))
     draw_circle(Vector2(5, -3), 3.0, Color("#fff1b8"))
     draw_rect(Rect2(-18, -28, 36, 4), Color("#1b1018"))
-    draw_rect(Rect2(-18, -28, 36.0 * float(health) / 3.0, 4), Color("#8be28b"))
+    draw_rect(Rect2(-18, -28, 36.0 * float(health) / max_health, 4), Color("#8be28b"))
