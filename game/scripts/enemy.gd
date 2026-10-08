@@ -11,6 +11,9 @@ var attack_timer := 0.0
 var sync_timer := 0.0
 var _target_position := Vector2.ZERO
 var _has_target_position := false
+var _damage_flash_timer := 0.0
+var _damage_text := ""
+var _damage_text_timer := 0.0
 const ATTACK_RANGE := 34.0
 
 func setup(id: int, player_count := 1) -> void:
@@ -25,8 +28,18 @@ func _ready() -> void:
     _target_position = position
 
 func _process(delta: float) -> void:
+    _damage_flash_timer = maxf(_damage_flash_timer - delta, 0.0)
+    _damage_text_timer = maxf(_damage_text_timer - delta, 0.0)
     if not multiplayer.is_server() and _has_target_position:
         position = position.lerp(_target_position, 1.0 - exp(-18.0 * delta))
+    if _damage_flash_timer > 0.0 or _damage_text_timer > 0.0:
+        queue_redraw()
+
+func show_damage(amount: int) -> void:
+    _damage_flash_timer = 0.18
+    _damage_text = "-%d" % amount
+    _damage_text_timer = 0.75
+    queue_redraw()
 
 func apply_network_position(next_position: Vector2) -> void:
     if position.distance_to(next_position) > 160.0:
@@ -68,13 +81,20 @@ func server_tick(delta: float, players: Dictionary) -> Dictionary:
 
 func take_damage(amount: int) -> bool:
     health -= amount
+    show_damage(amount)
     queue_redraw()
     return health <= 0
 
 func _draw() -> void:
+    if _damage_flash_timer > 0.0:
+        draw_circle(Vector2.ZERO, 24.0, Color(1.0, 0.22, 0.30, 0.34))
     draw_circle(Vector2.ZERO, 18.0, Color("#351b2b"))
     draw_circle(Vector2.ZERO, 14.0, Color("#e05b67"))
     draw_circle(Vector2(-5, -3), 3.0, Color("#fff1b8"))
     draw_circle(Vector2(5, -3), 3.0, Color("#fff1b8"))
     draw_rect(Rect2(-18, -28, 36, 4), Color("#1b1018"))
     draw_rect(Rect2(-18, -28, 36.0 * float(health) / max_health, 4), Color("#8be28b"))
+    if _damage_text_timer > 0.0:
+        var damage_alpha := minf(_damage_text_timer / 0.75, 1.0)
+        var damage_y := -42.0 - (0.75 - _damage_text_timer) * 16.0
+        draw_string(ThemeDB.fallback_font, Vector2(-28.0, damage_y), _damage_text, HORIZONTAL_ALIGNMENT_CENTER, 56.0, 15, Color(1.0, 0.42, 0.48, damage_alpha))
