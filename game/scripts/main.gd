@@ -33,7 +33,9 @@ const WARMTH_DRAIN := 0.05
 const WARMTH_RECOVER := 0.4
 const VITALS_SYNC_INTERVAL := 0.1
 const CRATE_PICKUP_RANGE := 64.0
-const ATTACK_RANGE := 96.0
+const ATTACK_RANGE := 150.0
+const ENEMY_WAVE_INTERVAL := 15.0
+const MAX_ENEMY_WAVES := 3
 const REVIVE_RANGE := 64.0
 const REVIVE_TIME := 3.0
 const REVIVE_OXYGEN := 40.0
@@ -87,11 +89,16 @@ var mission_failed := false
 var mission_return_timer := 0.0
 var enemies: Dictionary = {}
 var enemy_spawned := false
+var enemy_wave_index := 0
+var enemy_wave_timer := 0.0
+var next_enemy_id := 1
 var _resource_crates_root: Node2D
 var resource_crates: Dictionary = {}
 var taken_crate_ids: Array[int] = []
 var deposited_resources := 0
 var vitals_label: Label
+var player_status_container: VBoxContainer
+var player_status_rows: Dictionary = {}
 var reviving: Dictionary = {}
 var revive_progress: Dictionary = {}
 var _vitals_accumulator := 0.0
@@ -105,6 +112,7 @@ var transition_token := 0
 var solo_session := false
 
 func _process(delta: float) -> void:
+    _update_player_status_rows()
     if transition_active:
         if is_host:
             transition_remaining -= delta
@@ -121,11 +129,22 @@ func _process(delta: float) -> void:
         return
     if mission_failed:
         return
+    _tick_enemy_waves(delta)
     _tick_enemies(delta)
     _tick_survival(delta)
     _tick_revive(delta)
     _tick_extraction(delta)
     _update_vitals_text()
+
+func _tick_enemy_waves(delta: float) -> void:
+    if enemy_wave_index >= MAX_ENEMY_WAVES:
+        enemy_wave_timer = 0.0
+        return
+    enemy_wave_timer += delta
+    if enemy_wave_timer < ENEMY_WAVE_INTERVAL:
+        return
+    enemy_wave_timer = 0.0
+    _spawn_enemy_wave()
 
 func _tick_enemies(delta: float) -> void:
     for enemy_id in enemies.keys():
@@ -204,6 +223,11 @@ func _tick_revive(delta: float) -> void:
 func _tick_extraction(delta: float) -> void:
     if not enemy_spawned:
         extraction_progress = 0.0
+        _broadcast_extraction_state()
+        return
+    if enemy_wave_index < MAX_ENEMY_WAVES:
+        extraction_progress = 0.0
+        extraction_enabled = false
         _broadcast_extraction_state()
         return
     if not enemies.is_empty():
@@ -409,19 +433,75 @@ func _build_demo_beacons() -> void:
         demo_beacons[beacon_id] = beacon
     _demo_beacons_root.visible = false
 
-func _spawn_demo_enemies(alive_ids: Array = [1, 2, 3, 4]) -> void:
+func _spawn_demo_enemies(alive_ids: Array = []) -> void:
     if enemy_spawned:
         return
     enemy_spawned = true
+    enemy_wave_index = 1
+    enemy_wave_timer = 0.0
+    next_enemy_id = demo_enemy_positions.size() + 1
     for index in demo_enemy_positions.size():
         var enemy_id := index + 1
-        if not alive_ids.has(enemy_id):
+        if not alive_ids.is_empty() and not alive_ids.has(enemy_id):
             continue
         var enemy := ENEMY_SCENE.instantiate() as DungeonEnemy
         enemy.setup(enemy_id, demo_difficulty_player_count)
         enemy.position = demo_enemy_positions[index]
         add_child(enemy)
         enemies[enemy_id] = enemy
+
+func _generate_enemy_wave_positions(count: int) -> Array[Vector2]:
+    var positions: Array[Vector2] = []
+    var rng := RandomNumberGenerator.new()
+    rng.randomize()
+    var attempts := 0
+    while positions.size() < count and attempts < 500:
+        attempts += 1
+        var candidate := Vector2(
+            rng.randf_range(demo_danger_rect.position.x + 34.0, demo_danger_rect.end.x - 34.0),
+            rng.randf_range(demo_danger_rect.position.y + 34.0, demo_danger_rect.end.y - 34.0)
+        )
+        var too_close := false
+        for existing in positions:
+            if candidate.distance_to(existing) < 54.0:
+                too_close = true
+                break
+        if not too_close:
+            positions.append(candidate)
+    return positions
+
+func _spawn_enemy_wave() -> void:
+    if not is_host or current_stage != "demo" or enemy_wave_index >= MAX_ENEMY_WAVES:
+        return
+    var wave_size := 2 + demo_difficulty_player_count
+    var positions := _generate_enemy_wave_positions(wave_size)
+    for position in positions:
+        var enemy := ENEMY_SCENE.instantiate() as DungeonEnemy
+        enemy.setup(next_enemy_id, demo_difficulty_player_count)
+        enemy.position = position
+        add_child(enemy)
+        enemies[next_enemy_id] = enemy
+        next_enemy_id += 1
+    enemy_wave_index += 1
+    enemy_spawned = true
+    sync_enemy_wave.rpc(_enemy_snapshot())
+    _set_status("第 %d / %d 波敌人已生成。" % [enemy_wave_index, MAX_ENEMY_WAVES], Color("#ffcf5c"))
+
+@rpc("authority", "call_local", "reliable")
+func sync_enemy_wave(enemy_state: Array) -> void:
+    enemy_spawned = true
+    for entry in enemy_state:
+        var enemy_id := int(entry[0])
+        var enemy: DungeonEnemy = enemies.get(enemy_id) as DungeonEnemy
+        if enemy == null:
+            enemy = ENEMY_SCENE.instantiate() as DungeonEnemy
+            enemy.setup(enemy_id, demo_difficulty_player_count)
+            add_child(enemy)
+            enemies[enemy_id] = enemy
+        enemy.position = entry[1]
+        enemy.health = int(entry[2])
+        enemy.queue_redraw()
+        next_enemy_id = maxi(next_enemy_id, enemy_id + 1)
 
 func alive_enemy_ids() -> Array:
     var ids: Array = []
@@ -599,11 +679,11 @@ func _build_ui() -> void:
     var margin := MarginContainer.new()
     margin.add_theme_constant_override("margin_left", 18)
     margin.add_theme_constant_override("margin_right", 18)
-    margin.add_theme_constant_override("margin_top", 18)
-    margin.add_theme_constant_override("margin_bottom", 18)
+    margin.add_theme_constant_override("margin_top", 12)
+    margin.add_theme_constant_override("margin_bottom", 12)
     lobby_panel.add_child(margin)
     var column := VBoxContainer.new()
-    column.add_theme_constant_override("separation", 10)
+    column.add_theme_constant_override("separation", 6)
     margin.add_child(column)
 
     var title := Label.new()
@@ -640,20 +720,19 @@ func _build_ui() -> void:
     status_label = Label.new()
     status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
     status_label.clip_text = true
-    status_label.custom_minimum_size.y = 62
+    status_label.custom_minimum_size.y = 46
     status_label.add_theme_color_override("font_color", Color("#ffcf5c"))
     column.add_child(status_label)
 
     var people_title := Label.new()
-    people_title.text = "当前玩家"
+    people_title.text = "全体船员状态"
     people_title.add_theme_font_size_override("font_size", 16)
     column.add_child(people_title)
 
-    player_list_label = Label.new()
-    player_list_label.clip_text = true
-    player_list_label.custom_minimum_size.y = 100
-    player_list_label.add_theme_color_override("font_color", Color("#d5e7f7"))
-    column.add_child(player_list_label)
+    player_status_container = VBoxContainer.new()
+    player_status_container.custom_minimum_size = Vector2(0, 178)
+    player_status_container.add_theme_constant_override("separation", 4)
+    column.add_child(player_status_container)
 
     stage_button = Button.new()
     stage_button.focus_mode = Control.FOCUS_NONE
@@ -742,6 +821,8 @@ func _on_peer_connected(peer_id: int) -> void:
     if demo_layout_ready or transition_destination == "demo":
         sync_demo_layout.rpc_id(peer_id, _demo_layout_payload())
     sync_shared_state.rpc_id(peer_id, current_stage, active_state, alive_enemy_ids(), taken_crates, deposited_resources)
+    if current_stage == "demo" or transition_destination == "demo":
+        sync_enemy_wave.rpc_id(peer_id, _enemy_snapshot())
     sync_session_snapshot.rpc_id(peer_id, _player_snapshot(), _enemy_snapshot())
     sync_extraction_state.rpc_id(peer_id, extraction_enabled, extraction_progress, mission_completed)
     if transition_active:
@@ -936,6 +1017,9 @@ func _reset_demo_progress_local() -> void:
     for enemy in enemies.values():
         enemy.queue_free()
     enemies.clear()
+    enemy_wave_index = 0
+    enemy_wave_timer = 0.0
+    next_enemy_id = 1
     for beacon in demo_beacons.values():
         beacon.set_active(false)
     for crate in resource_crates.values():
@@ -1092,6 +1176,7 @@ func damage_player(peer_id: int, amount: int) -> void:
     if player.downed:
         return
     player.health = maxi(player.health - amount, 0)
+    player.show_damage(amount)
     if player.health <= 0:
         down_player(peer_id)
     player.queue_redraw()
@@ -1124,6 +1209,12 @@ func sync_enemy_state(enemy_id: int, health: int) -> void:
     if enemies.has(enemy_id) and health <= 0:
         enemies[enemy_id].queue_free()
         enemies.erase(enemy_id)
+    elif enemies.has(enemy_id):
+        var enemy := enemies[enemy_id] as DungeonEnemy
+        var damage := maxi(enemy.health - health, 1)
+        enemy.health = health
+        enemy.show_damage(damage)
+        enemy.queue_redraw()
 
 @rpc("authority", "unreliable", "call_remote")
 func sync_enemy_transform(enemy_id: int, next_position: Vector2) -> void:
@@ -1229,9 +1320,6 @@ func sync_shared_state(next_stage: String, active_node_ids: Array, surviving_ene
             resource_crates[crate_id].set_taken(true)
     if current_stage == "demo":
         _apply_demo_layout()
-        # 敌人节点不会随阶段广播补发，中途加入的玩家必须在这里生成，
-        # 否则客户端会看到空无一人的危险区，和主机判定不一致。
-        _spawn_demo_enemies(surviving_enemy_ids)
     _set_stage_visuals()
     _update_stage_text()
     _update_vitals_text()
@@ -1352,18 +1440,111 @@ func _set_status(message: String, color: Color) -> void:
         status_label.text = "状态：" + message
         status_label.add_theme_color_override("font_color", color)
 
-func _update_player_list() -> void:
-    if not player_list_label:
+func _make_status_bar(fill_color: Color) -> ProgressBar:
+    var bar := ProgressBar.new()
+    bar.custom_minimum_size = Vector2(54, 8)
+    bar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    bar.show_percentage = false
+    var background := StyleBoxFlat.new()
+    background.bg_color = Color("#081523")
+    background.set_corner_radius_all(3)
+    var fill := StyleBoxFlat.new()
+    fill.bg_color = fill_color
+    fill.set_corner_radius_all(3)
+    bar.add_theme_stylebox_override("background", background)
+    bar.add_theme_stylebox_override("fill", fill)
+    return bar
+
+func _make_status_metric(title: String, color: Color) -> Dictionary:
+    var column := VBoxContainer.new()
+    column.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    column.add_theme_constant_override("separation", 1)
+    var label := Label.new()
+    label.text = title
+    label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+    label.add_theme_font_size_override("font_size", 10)
+    label.add_theme_color_override("font_color", Color("#91a8bb"))
+    column.add_child(label)
+    var bar := _make_status_bar(color)
+    column.add_child(bar)
+    return {"root": column, "bar": bar}
+
+func _rebuild_player_status_rows() -> void:
+    if not is_instance_valid(player_status_container):
         return
+    for child in player_status_container.get_children():
+        child.queue_free()
+    player_status_rows.clear()
     if connected_ids.is_empty():
-        player_list_label.text = "（暂无玩家）"
+        var empty_label := Label.new()
+        empty_label.text = "（暂无玩家）"
+        empty_label.add_theme_color_override("font_color", Color("#708ca4"))
+        player_status_container.add_child(empty_label)
         return
-    var rows: Array[String] = []
     connected_ids.sort()
     for peer_id in connected_ids:
-        var role := "主机" if peer_id == 1 else "客户端"
-        rows.append("● 玩家 %d　%s" % [peer_id, role])
-    player_list_label.text = "\n".join(rows)
+        var card := PanelContainer.new()
+        card.custom_minimum_size = Vector2(0, 39)
+        var card_style := StyleBoxFlat.new()
+        card_style.bg_color = Color("#0d2033")
+        card_style.border_color = Color("#24445c")
+        card_style.set_border_width_all(1)
+        card_style.set_corner_radius_all(5)
+        card.add_theme_stylebox_override("panel", card_style)
+        player_status_container.add_child(card)
+
+        var card_column := VBoxContainer.new()
+        card_column.add_theme_constant_override("separation", 1)
+        card.add_child(card_column)
+        var caption := Label.new()
+        caption.add_theme_font_size_override("font_size", 11)
+        caption.add_theme_color_override("font_color", Color("#d5e7f7"))
+        card_column.add_child(caption)
+        var metric_row := HBoxContainer.new()
+        metric_row.add_theme_constant_override("separation", 4)
+        card_column.add_child(metric_row)
+        var health_metric := _make_status_metric("生命", Color("#ff6b8a"))
+        var oxygen_metric := _make_status_metric("氧气", Color("#61dafb"))
+        var warmth_metric := _make_status_metric("体温", Color("#ffcf5c"))
+        metric_row.add_child(health_metric["root"])
+        metric_row.add_child(oxygen_metric["root"])
+        metric_row.add_child(warmth_metric["root"])
+        player_status_rows[peer_id] = {
+            "caption": caption,
+            "health": health_metric["bar"],
+            "oxygen": oxygen_metric["bar"],
+            "warmth": warmth_metric["bar"],
+        }
+
+func _update_player_status_rows() -> void:
+    if not is_instance_valid(player_status_container):
+        return
+    if player_status_rows.size() != connected_ids.size():
+        _rebuild_player_status_rows()
+    for peer_id in connected_ids:
+        if not player_status_rows.has(peer_id):
+            continue
+        var row: Dictionary = player_status_rows[peer_id]
+        var player := players.get(peer_id) as NetworkPlayer
+        if player == null:
+            row["caption"].text = "玩家 %d · 连接中" % peer_id
+            row["health"].value = 0.0
+            row["oxygen"].value = 0.0
+            row["warmth"].value = 0.0
+            continue
+        var state := "倒地" if player.downed else ("主机" if peer_id == 1 else "在线")
+        row["caption"].text = "玩家 %d · %s · 生命 %d/%d" % [peer_id, state, player.health, player.max_health]
+        row["caption"].add_theme_color_override("font_color", Color("#ff6b8a") if player.downed else Color("#d5e7f7"))
+        row["health"].value = float(player.health) / player.max_health * 100.0
+        row["oxygen"].value = player.oxygen / player.max_oxygen * 100.0
+        row["warmth"].value = player.warmth * 100.0
+        row["health"].tooltip_text = "生命 %d / %d" % [player.health, player.max_health]
+        row["oxygen"].tooltip_text = "氧气 %d%%" % int(player.oxygen)
+        row["warmth"].tooltip_text = "体温 %d%%" % int(player.warmth * 100.0)
+
+func _update_player_list() -> void:
+    _rebuild_player_status_rows()
+    _update_player_status_rows()
 
 func _update_stage_text() -> void:
     if not stage_badge:
