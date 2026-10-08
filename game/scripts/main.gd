@@ -13,14 +13,18 @@ const ENEMY_SCENE := preload("res://scenes/enemy.tscn")
 const RESOURCE_CRATE_SCENE := preload("res://scenes/resource_crate.tscn")
 const DEMO_BEACON_POSITIONS := [Vector2(185, 255), Vector2(500, 520), Vector2(790, 285)]
 const POWER_NODE_POSITIONS := [Vector2(210, 235), Vector2(505, 455), Vector2(785, 260)]
-const ENEMY_POSITIONS := [Vector2(730, 250), Vector2(820, 330), Vector2(760, 390), Vector2(670, 300)]
-const RESOURCE_CRATE_POSITIONS := [Vector2(105, 240), Vector2(145, 300), Vector2(245, 220), Vector2(275, 300)]
+const DEFAULT_SAFEHOUSE_RECT := Rect2(365, 400, 250, 205)
+const DEFAULT_DANGER_RECT := Rect2(690, 175, 190, 230)
+const MAP_BOUNDS := Rect2(62, 152, 850, 500)
+const RESOURCE_COUNT := 4
+const RESOURCE_MIN_DISTANCE := 72.0
+const RESOURCE_ZONE_PADDING := 34.0
+const DANGER_ENEMY_PADDING := 34.0
 const PLAYER_COLORS := [
     Color("#61dafb"), Color("#ffcf5c"), Color("#ff6b8a"), Color("#a78bfa")
 ]
 
 # 示范星球的环境与资源数值。全部是占位数值，等四人试玩后再调平衡。
-const HEAT_POSITION := Vector2(490, 500)
 const HEAT_RADIUS := 42.0
 const OXYGEN_DRAIN_BASE := 1.0
 const OXYGEN_DRAIN_COLD := 3.0
@@ -66,6 +70,13 @@ var demo_beacons: Dictionary = {}
 var activated_demo_beacon_ids: Array[int] = []
 var power_nodes: Dictionary = {}
 var activated_node_ids: Array[int] = []
+var demo_safehouse_rect := DEFAULT_SAFEHOUSE_RECT
+var demo_danger_rect := DEFAULT_DANGER_RECT
+var demo_heat_position := DEFAULT_SAFEHOUSE_RECT.get_center()
+var demo_resource_positions: Array[Vector2] = []
+var demo_enemy_positions: Array[Vector2] = []
+var demo_layout_ready := false
+var demo_difficulty_player_count := 1
 const EXTRACTION_POSITION := Vector2(845, 575)
 const EXTRACTION_RADIUS := 58.0
 const EXTRACTION_HOLD_TIME := 3.0
@@ -133,7 +144,7 @@ func _tick_survival(delta: float) -> void:
         var player := players.get(peer_id) as NetworkPlayer
         if player == null or player.downed:
             continue
-        var in_heat := player.position.distance_to(HEAT_POSITION) <= HEAT_RADIUS
+        var in_heat := player.position.distance_to(demo_heat_position) <= HEAT_RADIUS
         if in_heat:
             player.warmth = minf(player.warmth + WARMTH_RECOVER * delta, 1.0)
             player.oxygen = minf(player.oxygen + OXYGEN_RECOVER * delta, player.max_oxygen)
@@ -283,7 +294,107 @@ func _build_demo_stage() -> void:
     _demo_stage = DEMO_STAGE_SCENE.instantiate()
     add_child(_demo_stage)
     move_child(_demo_stage, 0)
+    _generate_demo_layout()
     _demo_stage.visible = false
+
+func _generate_demo_layout() -> void:
+    var rng := RandomNumberGenerator.new()
+    rng.randomize()
+    demo_difficulty_player_count = maxi(connected_ids.size(), 1)
+
+    var safe_size := Vector2(rng.randf_range(190.0, 245.0), rng.randf_range(155.0, 195.0))
+    var danger_size := Vector2(rng.randf_range(175.0, 220.0), rng.randf_range(190.0, 240.0))
+    var danger_x_min := 620.0
+    var danger_x_max := MAP_BOUNDS.end.x - danger_size.x
+    var danger_x := rng.randf_range(danger_x_min, danger_x_max)
+    var safe_x_max := minf(500.0, danger_x - safe_size.x - 72.0)
+    var safe_x := rng.randf_range(MAP_BOUNDS.position.x + 30.0, safe_x_max)
+    var safe_y_max := MAP_BOUNDS.end.y - safe_size.y
+    var safe_y := rng.randf_range(285.0, safe_y_max)
+    var danger_y_max := minf(360.0, MAP_BOUNDS.end.y - danger_size.y)
+    var danger_y := rng.randf_range(MAP_BOUNDS.position.y + 24.0, danger_y_max)
+
+    demo_safehouse_rect = Rect2(Vector2(safe_x, safe_y), safe_size)
+    demo_danger_rect = Rect2(Vector2(danger_x, danger_y), danger_size)
+    demo_heat_position = demo_safehouse_rect.get_center()
+
+    demo_resource_positions.clear()
+    var resource_rng := RandomNumberGenerator.new()
+    resource_rng.seed = rng.randi()
+    var attempts := 0
+    while demo_resource_positions.size() < RESOURCE_COUNT and attempts < 600:
+        attempts += 1
+        var candidate := Vector2(
+            resource_rng.randf_range(MAP_BOUNDS.position.x + 22.0, MAP_BOUNDS.end.x - 22.0),
+            resource_rng.randf_range(MAP_BOUNDS.position.y + 22.0, MAP_BOUNDS.end.y - 22.0)
+        )
+        if demo_safehouse_rect.grow(RESOURCE_ZONE_PADDING).has_point(candidate) \
+                or demo_danger_rect.grow(RESOURCE_ZONE_PADDING).has_point(candidate) \
+                or candidate.distance_to(EXTRACTION_POSITION) < 84.0:
+            continue
+        var too_close := false
+        for existing in demo_resource_positions:
+            if candidate.distance_to(existing) < RESOURCE_MIN_DISTANCE:
+                too_close = true
+                break
+        if too_close:
+            continue
+        demo_resource_positions.append(candidate)
+    while demo_resource_positions.size() < RESOURCE_COUNT:
+        demo_resource_positions.append(Vector2(90.0 + demo_resource_positions.size() * 88.0, 205.0))
+
+    demo_enemy_positions.clear()
+    var enemy_rng := RandomNumberGenerator.new()
+    enemy_rng.seed = rng.randi()
+    var enemy_count := 3 + demo_difficulty_player_count
+    for index in enemy_count:
+        var enemy_position := Vector2(
+            enemy_rng.randf_range(demo_danger_rect.position.x + DANGER_ENEMY_PADDING, demo_danger_rect.end.x - DANGER_ENEMY_PADDING),
+            enemy_rng.randf_range(demo_danger_rect.position.y + DANGER_ENEMY_PADDING, demo_danger_rect.end.y - DANGER_ENEMY_PADDING)
+        )
+        demo_enemy_positions.append(enemy_position)
+    _apply_demo_layout()
+
+func _demo_layout_payload() -> Array:
+    return [
+        demo_safehouse_rect.position,
+        demo_safehouse_rect.size,
+        demo_danger_rect.position,
+        demo_danger_rect.size,
+        demo_resource_positions,
+        demo_enemy_positions,
+        demo_difficulty_player_count,
+    ]
+
+func _apply_demo_layout() -> void:
+    demo_heat_position = demo_safehouse_rect.get_center()
+    if is_instance_valid(_demo_stage) and _demo_stage.has_method("set_layout"):
+        _demo_stage.set_layout(demo_safehouse_rect, demo_danger_rect, demo_heat_position)
+    var resource_index := 0
+    for crate in resource_crates.values():
+        if resource_index < demo_resource_positions.size():
+            (crate as ResourceCrate).position = demo_resource_positions[resource_index]
+        resource_index += 1
+
+func _apply_demo_layout_payload(payload: Array) -> void:
+    if payload.size() < 6:
+        return
+    demo_safehouse_rect = Rect2(payload[0], payload[1])
+    demo_danger_rect = Rect2(payload[2], payload[3])
+    demo_resource_positions.clear()
+    for raw_position in payload[4]:
+        demo_resource_positions.append(raw_position)
+    demo_enemy_positions.clear()
+    for raw_position in payload[5]:
+        demo_enemy_positions.append(raw_position)
+    if payload.size() >= 7:
+        demo_difficulty_player_count = maxi(int(payload[6]), 1)
+    demo_layout_ready = true
+    _apply_demo_layout()
+
+@rpc("authority", "call_local", "reliable")
+func sync_demo_layout(payload: Array) -> void:
+    _apply_demo_layout_payload(payload)
 
 func _build_demo_beacons() -> void:
     _demo_beacons_root = Node2D.new()
@@ -302,13 +413,13 @@ func _spawn_demo_enemies(alive_ids: Array = [1, 2, 3, 4]) -> void:
     if enemy_spawned:
         return
     enemy_spawned = true
-    for index in ENEMY_POSITIONS.size():
+    for index in demo_enemy_positions.size():
         var enemy_id := index + 1
         if not alive_ids.has(enemy_id):
             continue
         var enemy := ENEMY_SCENE.instantiate() as DungeonEnemy
-        enemy.setup(enemy_id)
-        enemy.position = ENEMY_POSITIONS[index]
+        enemy.setup(enemy_id, demo_difficulty_player_count)
+        enemy.position = demo_enemy_positions[index]
         add_child(enemy)
         enemies[enemy_id] = enemy
 
@@ -322,14 +433,15 @@ func _build_resource_crates() -> void:
     _resource_crates_root = Node2D.new()
     _resource_crates_root.name = "DemoResourceCrates"
     add_child(_resource_crates_root)
-    for index in RESOURCE_CRATE_POSITIONS.size():
+    for index in RESOURCE_COUNT:
         var crate := RESOURCE_CRATE_SCENE.instantiate() as ResourceCrate
         var crate_id := index + 1
         crate.setup(crate_id)
-        crate.position = RESOURCE_CRATE_POSITIONS[index]
+        crate.position = demo_resource_positions[index] if index < demo_resource_positions.size() else Vector2(100 + index * 80, 220)
         _resource_crates_root.add_child(crate)
         resource_crates[crate_id] = crate
     _resource_crates_root.visible = false
+    _apply_demo_layout()
 
 func _build_power_nodes() -> void:
     _power_nodes_root = Node2D.new()
@@ -454,15 +566,16 @@ func _build_ui() -> void:
     layer.add_child(stage_hint)
 
     progress_label = Label.new()
-    progress_label.position = Vector2(690, 82)
-    progress_label.size = Vector2(280, 24)
-    progress_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+    progress_label.position = Vector2(690, 78)
+    progress_label.size = Vector2(280, 42)
+    progress_label.clip_text = true
+    progress_label.autowrap_mode = TextServer.AUTOWRAP_OFF
     progress_label.add_theme_color_override("font_color", Color("#8be28b"))
-    progress_label.add_theme_font_size_override("font_size", 14)
+    progress_label.add_theme_font_size_override("font_size", 13)
     layer.add_child(progress_label)
 
     vitals_label = Label.new()
-    vitals_label.position = Vector2(690, 104)
+    vitals_label.position = Vector2(690, 122)
     vitals_label.size = Vector2(280, 22)
     vitals_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
     vitals_label.add_theme_color_override("font_color", Color("#61dafb"))
@@ -626,6 +739,8 @@ func _on_peer_connected(peer_id: int) -> void:
         spawn_existing_players.rpc_id(peer_id, existing)
     var active_state: Array[int] = activated_demo_beacon_ids if current_stage == "demo" else activated_node_ids
     var taken_crates: Array[int] = taken_crate_ids if current_stage == "demo" else []
+    if demo_layout_ready or transition_destination == "demo":
+        sync_demo_layout.rpc_id(peer_id, _demo_layout_payload())
     sync_shared_state.rpc_id(peer_id, current_stage, active_state, alive_enemy_ids(), taken_crates, deposited_resources)
     sync_session_snapshot.rpc_id(peer_id, _player_snapshot(), _enemy_snapshot())
     sync_extraction_state.rpc_id(peer_id, extraction_enabled, extraction_progress, mission_completed)
@@ -723,6 +838,10 @@ func request_stage_transition(destination: String, reason: String) -> void:
         return
     if destination == current_stage:
         return
+    if destination == "demo":
+        _generate_demo_layout()
+        demo_layout_ready = true
+        sync_demo_layout.rpc(_demo_layout_payload())
     begin_stage_transition.rpc(destination, reason, transition_token + 1, TRANSITION_DURATION)
 
 @rpc("authority", "call_local", "reliable")
@@ -834,9 +953,10 @@ func pickup_crate_from_peer(peer_id: int, crate_id: int) -> void:
     if player.position.distance_to(resource_crates[crate_id].position) > CRATE_PICKUP_RANGE:
         _set_status("玩家 %d 需要靠近资源箱才能拾取。" % peer_id, Color("#ffcf5c"))
         return
+    var collected_count := taken_crate_ids.size() + 1
     set_crate_taken.rpc(crate_id, true)
     set_player_carrying.rpc(peer_id, 1, crate_id)
-    _set_status("玩家 %d 已拾取资源，共 %d / %d。" % [peer_id, taken_crate_ids.size() + 1, resource_crates.size()], Color("#8be28b"))
+    _set_status("玩家 %d 已拾取资源，已收集 %d / %d。" % [peer_id, collected_count, resource_crates.size()], Color("#8be28b"))
 
 @rpc("authority", "call_local", "reliable")
 func set_crate_taken(crate_id: int, value: bool) -> void:
@@ -1108,6 +1228,7 @@ func sync_shared_state(next_stage: String, active_node_ids: Array, surviving_ene
             taken_crate_ids.append(crate_id)
             resource_crates[crate_id].set_taken(true)
     if current_stage == "demo":
+        _apply_demo_layout()
         # 敌人节点不会随阶段广播补发，中途加入的玩家必须在这里生成，
         # 否则客户端会看到空无一人的危险区，和主机判定不一致。
         _spawn_demo_enemies(surviving_enemy_ids)
@@ -1121,6 +1242,7 @@ func change_stage(next_stage: String) -> void:
     _reset_demo_progress_local()
     _reset_power_nodes_local()
     if current_stage == "demo":
+        _apply_demo_layout()
         _spawn_demo_enemies()
     _set_stage_visuals()
     for peer_id in players:
@@ -1163,11 +1285,12 @@ func _update_progress_text() -> void:
     if not progress_label:
         return
     if current_stage == "demo":
-        var extraction_text := "撤离-"
+        var extraction_text := "撤离 -"
         if extraction_enabled:
             extraction_text = "撤离 %.1f/%.1f" % [extraction_progress, EXTRACTION_HOLD_TIME]
-        progress_label.text = "信标%d/%d 资源%d/%d %s" % [
+        progress_label.text = "信标 %d/%d · 资源 %d/%d · 投送 %d/%d\n%s" % [
             activated_demo_beacon_ids.size(), demo_beacons.size(),
+            taken_crate_ids.size(), resource_crates.size(),
             deposited_resources, resource_crates.size(),
             extraction_text,
         ]
