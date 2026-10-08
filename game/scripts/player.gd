@@ -4,6 +4,7 @@ class_name NetworkPlayer
 const SPEED := 260.0
 const max_health := 5
 const max_oxygen := 100.0
+const ATTACK_RANGE := 150.0
 const CARRY_SPEED_FACTOR := 0.72
 const SYNC_INTERVAL := 1.0 / 30.0
 const SMOOTH_RATE := 18.0
@@ -22,6 +23,9 @@ var _send_accumulator := 0.0
 var _attack_cooldown := 0.0
 var _target_position := Vector2.ZERO
 var _has_target_position := false
+var _damage_flash_timer := 0.0
+var _damage_text := ""
+var _damage_text_timer := 0.0
 
 func setup(id: int, color: Color) -> void:
     peer_id = id
@@ -41,9 +45,19 @@ func _ready() -> void:
     _target_position = position
 
 func _process(delta: float) -> void:
+    _damage_flash_timer = maxf(_damage_flash_timer - delta, 0.0)
+    _damage_text_timer = maxf(_damage_text_timer - delta, 0.0)
     # 客户端平滑远端玩家；主机保持权威位置，避免距离校验使用滞后坐标。
     if not is_multiplayer_authority() and not multiplayer.is_server() and _has_target_position:
         position = position.lerp(_target_position, 1.0 - exp(-SMOOTH_RATE * delta))
+    if _damage_flash_timer > 0.0 or _damage_text_timer > 0.0:
+        queue_redraw()
+
+func show_damage(amount: int) -> void:
+    _damage_flash_timer = 0.18
+    _damage_text = "-%d" % amount
+    _damage_text_timer = 0.75
+    queue_redraw()
 
 func teleport(next_position: Vector2) -> void:
     position = next_position
@@ -107,6 +121,12 @@ func sync_transform(next_position: Vector2) -> void:
         _has_target_position = true
 
 func _draw() -> void:
+    var controller := get_parent()
+    var can_show_attack_range: bool = is_multiplayer_authority() and controller.has_method("is_gameplay_active") and controller.is_gameplay_active()
+    if can_show_attack_range:
+        draw_arc(Vector2.ZERO, ATTACK_RANGE, 0.0, TAU, 96, Color(0.35, 0.85, 1.0, 0.28), 2.0)
+    if _damage_flash_timer > 0.0:
+        draw_circle(Vector2.ZERO, 25.0, Color(1.0, 0.22, 0.30, 0.34))
     var body_color := player_color
     if downed:
         body_color = Color("#7c8798")
@@ -130,3 +150,7 @@ func _draw() -> void:
         draw_string(ThemeDB.fallback_font, Vector2(-32.0, 52.0), "资源 ×%d" % carrying, HORIZONTAL_ALIGNMENT_CENTER, 64.0, 12, Color("#8fe5cb"))
     if downed:
         draw_string(ThemeDB.fallback_font, Vector2(-46.0, 68.0), "倒地 · 等待队友救援", HORIZONTAL_ALIGNMENT_CENTER, 92.0, 12, Color("#ff6b8a"))
+    if _damage_text_timer > 0.0:
+        var damage_alpha := minf(_damage_text_timer / 0.75, 1.0)
+        var damage_y := -45.0 - (0.75 - _damage_text_timer) * 16.0
+        draw_string(ThemeDB.fallback_font, Vector2(-32.0, damage_y), _damage_text, HORIZONTAL_ALIGNMENT_CENTER, 64.0, 16, Color(1.0, 0.35, 0.42, damage_alpha))
