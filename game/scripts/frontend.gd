@@ -160,13 +160,10 @@ func set_connecting(connecting: bool) -> void:
 func show_help() -> void:
     _reset("help")
     _label("宇航员操作手册", Vector2(60, 126), Vector2(600, 66), 42)
-    _label("WASD / 方向键     移动
-空格                       按住连续攻击
-E                            扫描、拾取、投送、救援
-ESC                        关闭航线图或返回上级菜单", Vector2(64, 225), Vector2(600, 224), 22)
-    _label("示范星球：扫描 3 个信标、清除敌人、投送 4 份资源。
-进入安全屋的热源范围补氧回温；全员在撤离点停留 3 秒。
-队友倒地后靠近按 E 开始救援，保持距离 3 秒完成。", Vector2(64, 459), Vector2(880, 116), 18, MUTED)
+    _label("WASD / 方向键      移动\n空格                         按住连续攻击\nQ                             扫描脉冲（期间无法移动）\nE                              修复信标 / 激活电力节点\nF / G                        拾取电池 / 投送电池\nR                              救援队友\nESC                         关闭航线图 / 返回上级菜单", Vector2(64, 220), Vector2(860, 226), 20)
+    _label("霜烬星：修复 3 个气象信标、收集并投送 4 枚热能电池。
+进入安全屋的热源范围补氧回温；暴风雪期间能见度与扫描范围下降。
+每 15 秒出现一波敌人；目标就绪后停止增援。队友倒地后靠近按 R 救援。", Vector2(64, 459), Vector2(1040, 116), 18, MUTED)
     _button("back", "← 返回主界面", Vector2(64, 587), Vector2(270, 44), show_home)
 
 func show_route(host: bool, count: int) -> void:
@@ -178,8 +175,8 @@ func show_route(host: bool, count: int) -> void:
     _label("当前位置", Vector2(84, 340), Vector2(200, 30), 16, MUTED)
     _label("归航号", Vector2(84, 375), Vector2(200, 50), 28)
     _label("01 / 可登陆", Vector2(426, 312), Vector2(300, 30), 16, CYAN)
-    _label("示范星球", Vector2(426, 356), Vector2(330, 48), 32)
-    _label("信标扫描 · 物资搬运 · 生存撤离", Vector2(426, 416), Vector2(340, 60), 17, MUTED)
+    _label("霜烬星", Vector2(426, 356), Vector2(330, 48), 32)
+    _label("气象信标 · 热能电池 · 暴风雪撤离", Vector2(426, 416), Vector2(340, 60), 17, MUTED)
     _button("land_demo", "确认航程 / 登陆  →", Vector2(426, 498), Vector2(320, 48), func(): destination_requested.emit("demo"), true).disabled = not host
     _label("02 / 尚未开放", Vector2(876, 316), Vector2(330, 30), 16, MUTED)
     _label("电磁星球", Vector2(876, 359), Vector2(330, 48), 28, MUTED)

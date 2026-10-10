@@ -19,3 +19,10 @@ Desktop.ini
 # Godot 4 editor/import cache
 **/.godot/
 
+# Local runtime and validation artifacts
+/.local-tools/
+/.validation/
+/.validation-remote-tree.json
+**/.local-*.log
+/Play.cmd
+

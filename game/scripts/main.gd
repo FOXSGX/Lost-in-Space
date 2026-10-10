@@ -11,11 +11,12 @@ const DEMO_BEACON_SCENE := preload("res://scenes/demo_beacon.tscn")
 const POWER_NODE_SCENE := preload("res://scenes/power_node.tscn")
 const ENEMY_SCENE := preload("res://scenes/enemy.tscn")
 const RESOURCE_CRATE_SCENE := preload("res://scenes/resource_crate.tscn")
-const DEMO_BEACON_POSITIONS := [Vector2(185, 255), Vector2(500, 520), Vector2(790, 285)]
-const POWER_NODE_POSITIONS := [Vector2(210, 235), Vector2(505, 455), Vector2(785, 260)]
-const DEFAULT_SAFEHOUSE_RECT := Rect2(365, 400, 250, 205)
-const DEFAULT_DANGER_RECT := Rect2(690, 175, 190, 230)
-const MAP_BOUNDS := Rect2(62, 152, 850, 500)
+const DEMO_BEACON_POSITIONS := [Vector2(280, 360), Vector2(760, 650), Vector2(1160, 330)]
+const POWER_NODE_POSITIONS := [Vector2(260, 300), Vector2(730, 520), Vector2(1160, 320)]
+const DEFAULT_SAFEHOUSE_RECT := Rect2(475, 515, 290, 225)
+const DEFAULT_DANGER_RECT := Rect2(1030, 225, 260, 300)
+const MAP_BOUNDS := Rect2(72, 152, 1320, 680)
+const WORLD_BOUNDS := Rect2(48, 120, 1380, 780)
 const RESOURCE_COUNT := 4
 const RESOURCE_MIN_DISTANCE := 72.0
 const RESOURCE_ZONE_PADDING := 34.0
@@ -24,7 +25,7 @@ const PLAYER_COLORS := [
     Color("#61dafb"), Color("#ffcf5c"), Color("#ff6b8a"), Color("#a78bfa")
 ]
 
-# 示范星球的环境与资源数值。全部是占位数值，等四人试玩后再调平衡。
+# 霜烬星的环境与资源数值。数值仍可在多人试玩后继续平衡。
 const HEAT_RADIUS := 42.0
 const OXYGEN_DRAIN_BASE := 1.0
 const OXYGEN_DRAIN_COLD := 3.0
@@ -35,10 +36,13 @@ const VITALS_SYNC_INTERVAL := 0.1
 const CRATE_PICKUP_RANGE := 64.0
 const ATTACK_RANGE := 150.0
 const ENEMY_WAVE_INTERVAL := 15.0
-const MAX_ENEMY_WAVES := 3
 const REVIVE_RANGE := 64.0
 const REVIVE_TIME := 3.0
 const REVIVE_OXYGEN := 40.0
+const STORM_INTERVAL := 28.0
+const STORM_DURATION := 10.0
+const CLEAR_SCAN_RANGE := 96.0
+const STORM_SCAN_RANGE := 68.0
 
 # 交互类型。kind 决定 id 在哪个命名空间里解释。
 const INTERACT_BEACON := 1
@@ -77,9 +81,10 @@ var demo_danger_rect := DEFAULT_DANGER_RECT
 var demo_heat_position := DEFAULT_SAFEHOUSE_RECT.get_center()
 var demo_resource_positions: Array[Vector2] = []
 var demo_enemy_positions: Array[Vector2] = []
+var demo_obstacle_layout: Array = []
 var demo_layout_ready := false
 var demo_difficulty_player_count := 1
-const EXTRACTION_POSITION := Vector2(845, 575)
+const EXTRACTION_POSITION := Vector2(1290, 760)
 const EXTRACTION_RADIUS := 58.0
 const EXTRACTION_HOLD_TIME := 3.0
 var extraction_progress := 0.0
@@ -110,9 +115,28 @@ var transition_reason := ""
 var transition_remaining := 0.0
 var transition_token := 0
 var solo_session := false
+var storm_active := false
+var storm_elapsed := 0.0
+var storm_remaining := 0.0
+var storm_overlay: ColorRect
+var storm_banner: Label
+var scan_remaining := 0.0
+var scan_cooldown := 0.0
+var scan_origin := Vector2.ZERO
+var scan_duration := 4.0
+var scan_radius := 520.0
+const CLEAR_SCAN_TIME := 4.0
+const STORM_SCAN_TIME := 4.0
+const SCAN_COOLDOWN := 6.0
+const SCAN_PULSE_MAX_RADIUS := 520.0
 
 func _process(delta: float) -> void:
     _update_player_status_rows()
+    var local_player := players.get(multiplayer.get_unique_id()) as NetworkPlayer
+    if local_player != null:
+        scan_remaining = local_player.scan_lock_remaining
+        scan_cooldown = local_player.scan_cooldown_remaining
+    _update_storm_overlay()
     if transition_active:
         if is_host:
             transition_remaining -= delta
@@ -129,6 +153,7 @@ func _process(delta: float) -> void:
         return
     if mission_failed:
         return
+    _tick_storm(delta)
     _tick_enemy_waves(delta)
     _tick_enemies(delta)
     _tick_survival(delta)
@@ -136,15 +161,130 @@ func _process(delta: float) -> void:
     _tick_extraction(delta)
     _update_vitals_text()
 
+func _tick_storm(delta: float) -> void:
+    storm_elapsed += delta
+    if storm_active:
+        storm_remaining = maxf(storm_remaining - delta, 0.0)
+        _update_storm_overlay()
+        if storm_remaining <= 0.0:
+            storm_active = false
+            storm_elapsed = 0.0
+            sync_storm_state.rpc(false, 0.0)
+            _set_status("暴风雪减弱，能见度与扫描范围恢复。", Color("#8be28b"))
+        return
+    if storm_elapsed >= STORM_INTERVAL:
+        storm_active = true
+        storm_remaining = STORM_DURATION
+        sync_storm_state.rpc(true, storm_remaining)
+        _update_storm_overlay()
+        _set_status("暴风雪来袭：能见度下降，气象信标扫描范围缩小。", Color("#ffcf7a"))
+
+func _beacon_scan_range() -> float:
+    return STORM_SCAN_RANGE if storm_active else CLEAR_SCAN_RANGE
+
+func _update_storm_overlay() -> void:
+    if not is_instance_valid(storm_overlay):
+        return
+    if multiplayer.multiplayer_peer == null:
+        storm_overlay.visible = false
+        storm_banner.visible = false
+        return
+    var on_planet := current_stage == "demo"
+    var local_player := players.get(multiplayer.get_unique_id()) as NetworkPlayer
+    storm_overlay.visible = on_planet and local_player != null
+    storm_banner.visible = on_planet
+    if local_player == null:
+        return
+    var fog := storm_overlay.material as ShaderMaterial
+    var overlay_screen := storm_overlay.get_global_transform_with_canvas().origin
+    var canvas_transform := get_viewport().get_canvas_transform()
+    fog.set_shader_parameter("viewer", local_player.get_global_transform_with_canvas().origin - overlay_screen)
+    fog.set_shader_parameter("heat", (canvas_transform * demo_heat_position) - overlay_screen)
+    fog.set_shader_parameter("storm", storm_active)
+    fog.set_shader_parameter("scanning", scan_remaining > 0.0)
+    var scan_progress := 0.0 if scan_remaining <= 0.0 else clampf(1.0 - scan_remaining / scan_duration, 0.0, 1.0)
+    fog.set_shader_parameter("scan_progress", scan_progress)
+    fog.set_shader_parameter("scan_origin", (canvas_transform * scan_origin) - overlay_screen)
+    fog.set_shader_parameter("scan_max_radius", scan_radius * canvas_transform.x.length())
+    for index in DEMO_BEACON_POSITIONS.size():
+        fog.set_shader_parameter("beacon_%d" % index, (canvas_transform * DEMO_BEACON_POSITIONS[index]) - overlay_screen)
+        fog.set_shader_parameter("beacon_active_%d" % index, activated_demo_beacon_ids.has(index + 1))
+    if scan_remaining > 0.0:
+        storm_banner.text = "扫描中 · 移动锁定 · %.1f 秒 · 最大范围 %d" % [scan_remaining, int(scan_radius)]
+    else:
+        storm_banner.text = "暴风雪 · Q 扫描受干扰" if storm_active else "局部视野 · Q 扫描 · E 修复"
+
+func scan_local_area() -> void:
+    var player := players.get(multiplayer.get_unique_id()) as NetworkPlayer
+    if current_stage != "demo" or not is_gameplay_active() or player == null or player.scan_cooldown_remaining > 0.0:
+        return
+    if is_host:
+        start_scan_from_peer(player.peer_id)
+    else:
+        # 请求前先停住本地角色，可靠同步会确认起点、时长与范围。
+        if player.downed:
+            return
+        player.begin_scan(CLEAR_SCAN_TIME, SCAN_COOLDOWN, player.position)
+        _apply_local_scan(player.position, CLEAR_SCAN_TIME, SCAN_PULSE_MAX_RADIUS * (0.72 if storm_active else 1.0))
+        request_scan.rpc_id(1)
+
+func _apply_local_scan(origin: Vector2, duration: float, radius: float) -> void:
+    scan_origin = origin
+    scan_duration = duration
+    scan_radius = radius
+    scan_remaining = duration
+    scan_cooldown = SCAN_COOLDOWN
+    _update_storm_overlay()
+
+func start_scan_from_peer(peer_id: int) -> void:
+    if not is_host or current_stage != "demo" or transition_active or mission_completed or mission_failed:
+        return
+    var player := players.get(peer_id) as NetworkPlayer
+    if player == null or player.downed:
+        return
+    if player.scan_cooldown_remaining > 0.0:
+        sync_scan_state.rpc_id(peer_id, peer_id, player.scan_origin, player.scan_lock_remaining, player.scan_cooldown_remaining, player.scan_pulse_radius)
+        return
+    var duration := STORM_SCAN_TIME if storm_active else CLEAR_SCAN_TIME
+    var radius := SCAN_PULSE_MAX_RADIUS * (0.72 if storm_active else 1.0)
+    sync_scan_state.rpc(peer_id, player.position, duration, SCAN_COOLDOWN, radius)
+
+@rpc("any_peer", "reliable")
+func request_scan() -> void:
+    if is_host:
+        start_scan_from_peer(multiplayer.get_remote_sender_id())
+
+@rpc("authority", "call_local", "reliable")
+func sync_scan_state(peer_id: int, origin: Vector2, remaining: float, cooldown: float, radius: float) -> void:
+    var player := players.get(peer_id) as NetworkPlayer
+    if player == null:
+        return
+    player.begin_scan(remaining, cooldown, origin)
+    player.scan_pulse_radius = radius
+    if peer_id == multiplayer.get_unique_id():
+        _apply_local_scan(origin, CLEAR_SCAN_TIME, radius)
+        scan_remaining = remaining
+        scan_cooldown = cooldown
+
+@rpc("authority", "call_local", "reliable")
+func sync_storm_state(active: bool, remaining: float) -> void:
+    storm_active = active
+    storm_remaining = remaining
+    if not active:
+        storm_elapsed = 0.0
+    _update_storm_overlay()
+
 func _tick_enemy_waves(delta: float) -> void:
-    if enemy_wave_index >= MAX_ENEMY_WAVES:
-        enemy_wave_timer = 0.0
+    # 主机每 15 秒增援一次，不限制总波数；任务就绪后停止增援，清场后撤离。
+    if not is_host or current_stage != "demo" or mission_completed or mission_failed or transition_active or _demo_objectives_ready():
         return
     enemy_wave_timer += delta
-    if enemy_wave_timer < ENEMY_WAVE_INTERVAL:
-        return
-    enemy_wave_timer = 0.0
-    _spawn_enemy_wave()
+    while enemy_wave_timer >= ENEMY_WAVE_INTERVAL:
+        enemy_wave_timer -= ENEMY_WAVE_INTERVAL
+        _spawn_enemy_wave()
+
+func _demo_objectives_ready() -> bool:
+    return activated_demo_beacon_ids.size() >= demo_beacons.size() and deposited_resources >= resource_crates.size()
 
 func _tick_enemies(delta: float) -> void:
     for enemy_id in enemies.keys():
@@ -225,11 +365,6 @@ func _tick_extraction(delta: float) -> void:
         extraction_progress = 0.0
         _broadcast_extraction_state()
         return
-    if enemy_wave_index < MAX_ENEMY_WAVES:
-        extraction_progress = 0.0
-        extraction_enabled = false
-        _broadcast_extraction_state()
-        return
     if not enemies.is_empty():
         extraction_progress = 0.0
         _broadcast_extraction_state()
@@ -244,7 +379,7 @@ func _tick_extraction(delta: float) -> void:
         return
     if not extraction_enabled:
         extraction_enabled = true
-        _set_status("信标与资源均已完成，全体队员到投送撤离点集合。", Color("#8be28b"))
+        _set_status("求救信号与热能电池已就绪，全体队员到撤离点集合。", Color("#8be28b"))
     var all_at_extraction := not connected_ids.is_empty()
     for peer_id in connected_ids:
         var player := players.get(peer_id) as NetworkPlayer
@@ -281,25 +416,28 @@ func _ready() -> void:
     queue_redraw()
 
 func _draw() -> void:
-    draw_rect(Rect2(0, 0, 1280, 720), Color("#07101f"))
-    draw_rect(Rect2(24, 24, 950, 672), Color("#0d1b2e"), true)
-    for x in range(48, 950, 48):
-        draw_line(Vector2(x, 120), Vector2(x, 690), Color(0.15, 0.28, 0.40, 0.18), 1.0)
-    for y in range(144, 690, 48):
-        draw_line(Vector2(30, y), Vector2(965, y), Color(0.15, 0.28, 0.40, 0.18), 1.0)
-    draw_rect(Rect2(30, 120, 915, 570), Color("#16314a"), false, 3.0)
+    draw_rect(Rect2(0, 0, 1500, 960), Color("#050b15"))
+    draw_rect(Rect2(24, 24, 1395, 876), Color("#0a1525"), true)
+    for x in range(48, 1430, 48):
+        draw_line(Vector2(x, 120), Vector2(x, 900), Color(0.15, 0.28, 0.40, 0.15), 1.0)
+    for y in range(144, 900, 48):
+        draw_line(Vector2(30, y), Vector2(1420, y), Color(0.15, 0.28, 0.40, 0.15), 1.0)
+    draw_rect(Rect2(30, 120, 1390, 780), Color("#16314a"), false, 3.0)
     if current_stage == "electromagnetic":
-        draw_rect(Rect2(48, 138, 879, 534), Color(0.15, 0.55, 0.75, 0.07), true)
-        draw_string(ThemeDB.fallback_font, Vector2(72, 650), "电磁干扰区 · 激活全部电力节点以恢复设备", HORIZONTAL_ALIGNMENT_LEFT, -1, 16, Color("#61dafb"))
+        draw_rect(Rect2(62, 138, 1350, 730), Color(0.15, 0.55, 0.75, 0.07), true)
+        draw_string(ThemeDB.fallback_font, Vector2(92, 835), "电磁干扰区 · 激活全部电力节点以恢复设备", HORIZONTAL_ALIGNMENT_LEFT, -1, 16, Color("#61dafb"))
 
 func _build_world() -> void:
     _world_bodies = Node2D.new()
     _world_bodies.name = "WorldCollision"
     add_child(_world_bodies)
-    _make_wall("TopWall", Vector2(487.5, 120.0), Vector2(915.0, 20.0))
-    _make_wall("BottomWall", Vector2(487.5, 690.0), Vector2(915.0, 20.0))
-    _make_wall("LeftWall", Vector2(30.0, 405.0), Vector2(20.0, 570.0))
-    _make_wall("RightWall", Vector2(945.0, 405.0), Vector2(20.0, 570.0))
+    _make_wall("TopWall", Vector2(WORLD_BOUNDS.get_center().x, WORLD_BOUNDS.position.y), Vector2(WORLD_BOUNDS.size.x, 20.0))
+    _make_wall("BottomWall", Vector2(WORLD_BOUNDS.get_center().x, WORLD_BOUNDS.end.y), Vector2(WORLD_BOUNDS.size.x, 20.0))
+    _make_wall("LeftWall", Vector2(WORLD_BOUNDS.position.x, WORLD_BOUNDS.get_center().y), Vector2(20.0, WORLD_BOUNDS.size.y))
+    _make_wall("RightWall", Vector2(WORLD_BOUNDS.end.x, WORLD_BOUNDS.get_center().y), Vector2(20.0, WORLD_BOUNDS.size.y))
+
+func get_player_bounds() -> Rect2:
+    return WORLD_BOUNDS.grow(-26.0)
 
 func _make_wall(wall_name: String, center: Vector2, size: Vector2) -> void:
     var body := StaticBody2D.new()
@@ -328,14 +466,14 @@ func _generate_demo_layout() -> void:
 
     var safe_size := Vector2(rng.randf_range(190.0, 245.0), rng.randf_range(155.0, 195.0))
     var danger_size := Vector2(rng.randf_range(175.0, 220.0), rng.randf_range(190.0, 240.0))
-    var danger_x_min := 620.0
+    var danger_x_min := 850.0
     var danger_x_max := MAP_BOUNDS.end.x - danger_size.x
     var danger_x := rng.randf_range(danger_x_min, danger_x_max)
-    var safe_x_max := minf(500.0, danger_x - safe_size.x - 72.0)
+    var safe_x_max := minf(760.0, danger_x - safe_size.x - 120.0)
     var safe_x := rng.randf_range(MAP_BOUNDS.position.x + 30.0, safe_x_max)
     var safe_y_max := MAP_BOUNDS.end.y - safe_size.y
-    var safe_y := rng.randf_range(285.0, safe_y_max)
-    var danger_y_max := minf(360.0, MAP_BOUNDS.end.y - danger_size.y)
+    var safe_y := rng.randf_range(MAP_BOUNDS.position.y + 170.0, safe_y_max)
+    var danger_y_max := MAP_BOUNDS.end.y - danger_size.y - 24.0
     var danger_y := rng.randf_range(MAP_BOUNDS.position.y + 24.0, danger_y_max)
 
     demo_safehouse_rect = Rect2(Vector2(safe_x, safe_y), safe_size)
@@ -354,7 +492,9 @@ func _generate_demo_layout() -> void:
         )
         if demo_safehouse_rect.grow(RESOURCE_ZONE_PADDING).has_point(candidate) \
                 or demo_danger_rect.grow(RESOURCE_ZONE_PADDING).has_point(candidate) \
-                or candidate.distance_to(EXTRACTION_POSITION) < 84.0:
+                or candidate.distance_to(EXTRACTION_POSITION) < 84.0 \
+                or candidate.distance_to(Vector2(170, 220)) < 82.0 \
+                or candidate.distance_to(Vector2(440, 220)) < 98.0:
             continue
         var too_close := false
         for existing in demo_resource_positions:
@@ -377,7 +517,67 @@ func _generate_demo_layout() -> void:
             enemy_rng.randf_range(demo_danger_rect.position.y + DANGER_ENEMY_PADDING, demo_danger_rect.end.y - DANGER_ENEMY_PADDING)
         )
         demo_enemy_positions.append(enemy_position)
+    _generate_demo_obstacles(rng)
     _apply_demo_layout()
+
+func _generate_demo_obstacles(source_rng: RandomNumberGenerator) -> void:
+    demo_obstacle_layout.clear()
+    var obstacle_rng := RandomNumberGenerator.new()
+    obstacle_rng.seed = source_rng.randi()
+    var reserved: Array[Rect2] = [
+        demo_safehouse_rect.grow(28.0), demo_danger_rect.grow(30.0),
+        Rect2(EXTRACTION_POSITION - Vector2(82.0, 82.0), Vector2(164.0, 164.0)),
+    ]
+    for beacon_position in DEMO_BEACON_POSITIONS:
+        reserved.append(Rect2(beacon_position - Vector2(58.0, 58.0), Vector2(116.0, 116.0)))
+    for spawn_position in [Vector2(170, 360), Vector2(260, 360), Vector2(350, 360), Vector2(440, 360)]:
+        reserved.append(Rect2(spawn_position - Vector2(54.0, 54.0), Vector2(108.0, 108.0)))
+    # 出生点上方保留两组清晰的冰原地标，进入关卡即可看到 2.5D 顶面、立面和阴影。
+    for landmark in [
+        [Vector2(170, 220), Vector2(78, 62), 0, 0.0],
+        [Vector2(440, 220), Vector2(132, 42), 1, -0.08],
+    ]:
+        demo_obstacle_layout.append(landmark)
+    var attempts := 0
+    while demo_obstacle_layout.size() < 11 and attempts < 900:
+        attempts += 1
+        var kind := obstacle_rng.randi_range(0, 3)
+        var size := Vector2.ZERO
+        match kind:
+            1:
+                size = Vector2(obstacle_rng.randf_range(120.0, 190.0), obstacle_rng.randf_range(32.0, 48.0))
+            2:
+                size = Vector2(obstacle_rng.randf_range(84.0, 140.0), obstacle_rng.randf_range(28.0, 44.0))
+            3:
+                size = Vector2(obstacle_rng.randf_range(70.0, 112.0), obstacle_rng.randf_range(54.0, 82.0))
+            _:
+                size = Vector2(obstacle_rng.randf_range(54.0, 82.0), obstacle_rng.randf_range(52.0, 86.0))
+        var candidate := Vector2(
+            obstacle_rng.randf_range(MAP_BOUNDS.position.x + size.x * 0.5 + 18.0, MAP_BOUNDS.end.x - size.x * 0.5 - 18.0),
+            obstacle_rng.randf_range(MAP_BOUNDS.position.y + size.y * 0.5 + 18.0, MAP_BOUNDS.end.y - size.y * 0.5 - 18.0)
+        )
+        var bounds := Rect2(candidate - size * 0.5, size).grow(18.0)
+        var blocked := false
+        for area in reserved:
+            if bounds.intersects(area):
+                blocked = true
+                break
+        if not blocked:
+            for resource_position in demo_resource_positions:
+                if bounds.grow(34.0).has_point(resource_position):
+                    blocked = true
+                    break
+        if blocked:
+            continue
+        for raw in demo_obstacle_layout:
+            var other_bounds := Rect2(raw[0] - raw[1] * 0.5, raw[1]).grow(22.0)
+            if bounds.intersects(other_bounds):
+                blocked = true
+                break
+        if blocked:
+            continue
+        var angle := obstacle_rng.randf_range(-0.35, 0.35) if kind != 2 else obstacle_rng.randf_range(-0.18, 0.18)
+        demo_obstacle_layout.append([candidate, size, kind, angle])
 
 func _demo_layout_payload() -> Array:
     return [
@@ -388,12 +588,13 @@ func _demo_layout_payload() -> Array:
         demo_resource_positions,
         demo_enemy_positions,
         demo_difficulty_player_count,
+        demo_obstacle_layout,
     ]
 
 func _apply_demo_layout() -> void:
     demo_heat_position = demo_safehouse_rect.get_center()
     if is_instance_valid(_demo_stage) and _demo_stage.has_method("set_layout"):
-        _demo_stage.set_layout(demo_safehouse_rect, demo_danger_rect, demo_heat_position)
+        _demo_stage.set_layout(demo_safehouse_rect, demo_danger_rect, demo_heat_position, demo_obstacle_layout)
     var resource_index := 0
     for crate in resource_crates.values():
         if resource_index < demo_resource_positions.size():
@@ -413,6 +614,11 @@ func _apply_demo_layout_payload(payload: Array) -> void:
         demo_enemy_positions.append(raw_position)
     if payload.size() >= 7:
         demo_difficulty_player_count = maxi(int(payload[6]), 1)
+    demo_obstacle_layout.clear()
+    if payload.size() >= 8:
+        for raw_obstacle in payload[7]:
+            if raw_obstacle is Array and raw_obstacle.size() >= 4:
+                demo_obstacle_layout.append([raw_obstacle[0], raw_obstacle[1], int(raw_obstacle[2]), float(raw_obstacle[3])])
     demo_layout_ready = true
     _apply_demo_layout()
 
@@ -427,7 +633,7 @@ func _build_demo_beacons() -> void:
     for index in DEMO_BEACON_POSITIONS.size():
         var beacon := DEMO_BEACON_SCENE.instantiate()
         var beacon_id := index + 1
-        beacon.setup(beacon_id, "示范信标 %d" % beacon_id)
+        beacon.setup(beacon_id, "气象信标 %d" % beacon_id)
         beacon.position = DEMO_BEACON_POSITIONS[index]
         _demo_beacons_root.add_child(beacon)
         demo_beacons[beacon_id] = beacon
@@ -471,7 +677,7 @@ func _generate_enemy_wave_positions(count: int) -> Array[Vector2]:
     return positions
 
 func _spawn_enemy_wave() -> void:
-    if not is_host or current_stage != "demo" or enemy_wave_index >= MAX_ENEMY_WAVES:
+    if not is_host or current_stage != "demo" or mission_completed or mission_failed or _demo_objectives_ready():
         return
     var wave_size := 2 + demo_difficulty_player_count
     var positions := _generate_enemy_wave_positions(wave_size)
@@ -484,12 +690,14 @@ func _spawn_enemy_wave() -> void:
         next_enemy_id += 1
     enemy_wave_index += 1
     enemy_spawned = true
-    sync_enemy_wave.rpc(_enemy_snapshot())
-    _set_status("第 %d / %d 波敌人已生成。" % [enemy_wave_index, MAX_ENEMY_WAVES], Color("#ffcf5c"))
+    sync_enemy_wave.rpc(_enemy_snapshot(), enemy_wave_index, enemy_wave_timer)
+    _set_status("第 %d 波敌人已生成，下一次增援间隔 15 秒。" % enemy_wave_index, Color("#ffcf5c"))
 
 @rpc("authority", "call_local", "reliable")
-func sync_enemy_wave(enemy_state: Array) -> void:
+func sync_enemy_wave(enemy_state: Array, wave: int, wave_timer: float) -> void:
     enemy_spawned = true
+    enemy_wave_index = wave
+    enemy_wave_timer = wave_timer
     for entry in enemy_state:
         var enemy_id := int(entry[0])
         var enemy: DungeonEnemy = enemies.get(enemy_id) as DungeonEnemy
@@ -502,6 +710,7 @@ func sync_enemy_wave(enemy_state: Array) -> void:
         enemy.health = int(entry[2])
         enemy.queue_redraw()
         next_enemy_id = maxi(next_enemy_id, enemy_id + 1)
+    _update_progress_text()
 
 func alive_enemy_ids() -> Array:
     var ids: Array = []
@@ -551,52 +760,42 @@ func get_nearest_power_node_id(player_position: Vector2) -> int:
             nearest_id = node_id
     return nearest_id
 
-func get_nearest_interaction(player_position: Vector2) -> Dictionary:
-    if current_stage == "demo":
-        return _nearest_demo_interaction(player_position)
-    if current_stage == "electromagnetic":
+func get_action_target(player_position: Vector2, action: String) -> Dictionary:
+    if action == "repair":
+        var beacon_id := get_nearest_demo_beacon_id(player_position)
+        if beacon_id >= 0:
+            return {"kind": INTERACT_BEACON, "id": beacon_id}
         var node_id := get_nearest_power_node_id(player_position)
         if node_id >= 0:
             return {"kind": INTERACT_POWER_NODE, "id": node_id}
-    return {}
-
-func _nearest_demo_interaction(player_position: Vector2) -> Dictionary:
-    # 救援优先：倒地队友比其他目标更急。
-    var revive_target := -1
-    var revive_distance := REVIVE_RANGE
-    for peer_id in connected_ids:
-        var mate := players.get(peer_id) as NetworkPlayer
-        if mate == null or not mate.downed:
-            continue
-        var distance := player_position.distance_to(mate.position)
-        if distance <= revive_distance:
-            revive_distance = distance
-            revive_target = peer_id
-    if revive_target >= 0:
-        return {"kind": INTERACT_REVIVE, "id": revive_target}
-
-    # 资源和信标取更近的一个；投送点只在两者都不在范围内时兜底。
-    var best_kind := 0
-    var best_id := 0
-    var best_distance := INF
-    for crate_id in resource_crates:
-        if taken_crate_ids.has(crate_id):
-            continue
-        var crate = resource_crates[crate_id]
-        var distance := player_position.distance_to(crate.position)
-        if distance <= CRATE_PICKUP_RANGE and distance < best_distance:
-            best_distance = distance
-            best_kind = INTERACT_CRATE
-            best_id = crate_id
-    var beacon_id := get_nearest_demo_beacon_id(player_position)
-    if beacon_id >= 0:
-        var beacon_distance := player_position.distance_to(demo_beacons[beacon_id].position)
-        if beacon_distance < best_distance:
-            best_kind = INTERACT_BEACON
-            best_id = beacon_id
-    if best_kind != 0:
-        return {"kind": best_kind, "id": best_id}
-    if player_position.distance_to(EXTRACTION_POSITION) <= EXTRACTION_RADIUS:
+    if current_stage != "demo":
+        return {}
+    if action == "revive":
+        var nearest_id := -1
+        var nearest_distance := REVIVE_RANGE
+        for peer_id in connected_ids:
+            var mate := players.get(peer_id) as NetworkPlayer
+            if mate == null or not mate.downed:
+                continue
+            var distance := player_position.distance_to(mate.position)
+            if distance <= nearest_distance:
+                nearest_distance = distance
+                nearest_id = peer_id
+        if nearest_id >= 0:
+            return {"kind": INTERACT_REVIVE, "id": nearest_id}
+    elif action == "pickup":
+        var nearest_id := -1
+        var nearest_distance := CRATE_PICKUP_RANGE
+        for crate_id in resource_crates:
+            if taken_crate_ids.has(crate_id):
+                continue
+            var distance := player_position.distance_to(resource_crates[crate_id].position)
+            if distance <= nearest_distance:
+                nearest_distance = distance
+                nearest_id = crate_id
+        if nearest_id >= 0:
+            return {"kind": INTERACT_CRATE, "id": nearest_id}
+    elif action == "deposit" and player_position.distance_to(EXTRACTION_POSITION) <= EXTRACTION_RADIUS:
         return {"kind": INTERACT_DEPOSIT, "id": 0}
     return {}
 
@@ -604,7 +803,7 @@ func get_nearest_demo_beacon_id(player_position: Vector2) -> int:
     if current_stage != "demo":
         return -1
     var nearest_id := -1
-    var nearest_distance := 96.0
+    var nearest_distance := _beacon_scan_range()
     for beacon_id in demo_beacons:
         if activated_demo_beacon_ids.has(beacon_id):
             continue
@@ -620,6 +819,28 @@ func _build_ui() -> void:
     layer.name = "Interface"
     _interface_layer = layer
     add_child(layer)
+
+    # 玻璃质感 HUD 底板与偏移阴影，让固定界面拥有轻量 2.5D 深度。
+    var title_shadow := Panel.new()
+    title_shadow.position = Vector2(40, 31)
+    title_shadow.size = Vector2(620, 106)
+    title_shadow.mouse_filter = Control.MOUSE_FILTER_IGNORE
+    var title_shadow_style := StyleBoxFlat.new()
+    title_shadow_style.bg_color = Color(0.0, 0.01, 0.03, 0.62)
+    title_shadow_style.set_corner_radius_all(12)
+    title_shadow.add_theme_stylebox_override("panel", title_shadow_style)
+    layer.add_child(title_shadow)
+    var title_plate := Panel.new()
+    title_plate.position = Vector2(34, 25)
+    title_plate.size = Vector2(620, 106)
+    title_plate.mouse_filter = Control.MOUSE_FILTER_IGNORE
+    var title_plate_style := StyleBoxFlat.new()
+    title_plate_style.bg_color = Color(0.04, 0.11, 0.18, 0.88)
+    title_plate_style.border_color = Color(0.30, 0.70, 0.78, 0.36)
+    title_plate_style.set_border_width_all(1)
+    title_plate_style.set_corner_radius_all(12)
+    title_plate.add_theme_stylebox_override("panel", title_plate_style)
+    layer.add_child(title_plate)
 
     stage_title = Label.new()
     stage_title.position = Vector2(52, 38)
@@ -654,6 +875,19 @@ func _build_ui() -> void:
     progress_label.add_theme_font_size_override("font_size", 13)
     layer.add_child(progress_label)
 
+    var progress_plate := Panel.new()
+    progress_plate.z_index = -1
+    progress_plate.position = Vector2(678, 66)
+    progress_plate.size = Vector2(294, 92)
+    progress_plate.mouse_filter = Control.MOUSE_FILTER_IGNORE
+    var progress_style := StyleBoxFlat.new()
+    progress_style.bg_color = Color(0.03, 0.09, 0.15, 0.82)
+    progress_style.border_color = Color(0.36, 0.72, 0.79, 0.28)
+    progress_style.set_border_width_all(1)
+    progress_style.set_corner_radius_all(10)
+    progress_plate.add_theme_stylebox_override("panel", progress_style)
+    layer.add_child(progress_plate)
+
     vitals_label = Label.new()
     vitals_label.position = Vector2(690, 122)
     vitals_label.size = Vector2(280, 22)
@@ -661,6 +895,36 @@ func _build_ui() -> void:
     vitals_label.add_theme_color_override("font_color", Color("#61dafb"))
     vitals_label.add_theme_font_size_override("font_size", 14)
     layer.add_child(vitals_label)
+
+    storm_overlay = ColorRect.new()
+    storm_overlay.position = Vector2(0, 120)
+    storm_overlay.size = Vector2(990, 600)
+    storm_overlay.z_index = -1
+    var weather_material := ShaderMaterial.new()
+    weather_material.shader = preload("res://shaders/frost_visibility.gdshader")
+    storm_overlay.material = weather_material
+    storm_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
+    storm_overlay.visible = false
+    layer.add_child(storm_overlay)
+    storm_banner = Label.new()
+    storm_banner.position = Vector2(52, 164)
+    storm_banner.size = Vector2(500, 28)
+    storm_banner.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+    storm_banner.add_theme_font_size_override("font_size", 15)
+    storm_banner.add_theme_color_override("font_color", Color("#d8f0ff"))
+    storm_banner.mouse_filter = Control.MOUSE_FILTER_IGNORE
+    storm_banner.visible = false
+    layer.add_child(storm_banner)
+
+    var lobby_shadow := Panel.new()
+    lobby_shadow.position = Vector2(998, 42)
+    lobby_shadow.size = Vector2(266, 650)
+    lobby_shadow.mouse_filter = Control.MOUSE_FILTER_IGNORE
+    var lobby_shadow_style := StyleBoxFlat.new()
+    lobby_shadow_style.bg_color = Color(0.0, 0.01, 0.03, 0.72)
+    lobby_shadow_style.set_corner_radius_all(12)
+    lobby_shadow.add_theme_stylebox_override("panel", lobby_shadow_style)
+    layer.add_child(lobby_shadow)
 
     lobby_panel = PanelContainer.new()
     lobby_panel.position = Vector2(990, 34)
@@ -822,9 +1086,10 @@ func _on_peer_connected(peer_id: int) -> void:
         sync_demo_layout.rpc_id(peer_id, _demo_layout_payload())
     sync_shared_state.rpc_id(peer_id, current_stage, active_state, alive_enemy_ids(), taken_crates, deposited_resources)
     if current_stage == "demo" or transition_destination == "demo":
-        sync_enemy_wave.rpc_id(peer_id, _enemy_snapshot())
+        sync_enemy_wave.rpc_id(peer_id, _enemy_snapshot(), enemy_wave_index, enemy_wave_timer)
     sync_session_snapshot.rpc_id(peer_id, _player_snapshot(), _enemy_snapshot())
     sync_extraction_state.rpc_id(peer_id, extraction_enabled, extraction_progress, mission_completed)
+    sync_storm_state.rpc_id(peer_id, storm_active, storm_remaining)
     if transition_active:
         begin_stage_transition.rpc_id(peer_id, transition_destination, transition_reason, transition_token, maxf(transition_remaining, 0.1))
     _set_status("玩家 %d 已加入。" % peer_id, Color("#8be28b"))
@@ -981,8 +1246,8 @@ func activate_demo_beacon_from_peer(peer_id: int, beacon_id: int) -> void:
     if peer_id != 1 and not players.has(peer_id):
         return
     var player := players.get(peer_id) as NetworkPlayer
-    if player == null or player.position.distance_to(demo_beacons[beacon_id].position) > 104.0:
-        _set_status("玩家 %d 需要靠近示范信标才能扫描。" % peer_id, Color("#ffcf5c"))
+    if player == null or player.downed or player.position.distance_to(demo_beacons[beacon_id].position) > _beacon_scan_range() + 8.0:
+        _set_status("玩家 %d 需要靠近气象信标才能修复。" % peer_id, Color("#ffcf5c"))
         return
     set_demo_beacon_state.rpc(beacon_id, true, peer_id)
 
@@ -998,9 +1263,9 @@ func set_demo_beacon_state(beacon_id: int, active: bool, scanning_peer: int) -> 
         activated_demo_beacon_ids.erase(beacon_id)
     _update_progress_text()
     if activated_demo_beacon_ids.size() >= demo_beacons.size():
-        _set_status("示范星球目标完成：三个信标已扫描，可以接入资源和撤离系统。", Color("#8be28b"))
+        _set_status("三个气象信标已修复，求救信号已发送；继续投送热能电池并清除敌人。", Color("#8be28b"))
     elif active:
-        _set_status("玩家 %d 已扫描示范信标 %d。" % [scanning_peer, beacon_id], Color("#8be28b"))
+        _set_status("玩家 %d 已修复气象信标 %d。" % [scanning_peer, beacon_id], Color("#8be28b"))
 
 func _reset_demo_progress_local() -> void:
     activated_demo_beacon_ids.clear()
@@ -1011,6 +1276,16 @@ func _reset_demo_progress_local() -> void:
     mission_completed = false
     mission_failed = false
     mission_return_timer = 0.0
+    storm_active = false
+    storm_elapsed = 0.0
+    storm_remaining = 0.0
+    enemy_wave_timer = 0.0
+    scan_remaining = 0.0
+    scan_cooldown = 0.0
+    scan_origin = Vector2.ZERO
+    for player in players.values():
+        player.scan_lock_remaining = 0.0
+        player.scan_cooldown_remaining = 0.0
     enemy_spawned = false
     reviving.clear()
     revive_progress.clear()
@@ -1035,12 +1310,12 @@ func pickup_crate_from_peer(peer_id: int, crate_id: int) -> void:
     if player == null or player.downed or player.carrying > 0:
         return
     if player.position.distance_to(resource_crates[crate_id].position) > CRATE_PICKUP_RANGE:
-        _set_status("玩家 %d 需要靠近资源箱才能拾取。" % peer_id, Color("#ffcf5c"))
+        _set_status("玩家 %d 需要靠近热能电池才能拾取。" % peer_id, Color("#ffcf5c"))
         return
     var collected_count := taken_crate_ids.size() + 1
     set_crate_taken.rpc(crate_id, true)
     set_player_carrying.rpc(peer_id, 1, crate_id)
-    _set_status("玩家 %d 已拾取资源，已收集 %d / %d。" % [peer_id, collected_count, resource_crates.size()], Color("#8be28b"))
+    _set_status("玩家 %d 已拾取热能电池，已收集 %d / %d。" % [peer_id, collected_count, resource_crates.size()], Color("#8be28b"))
 
 @rpc("authority", "call_local", "reliable")
 func set_crate_taken(crate_id: int, value: bool) -> void:
@@ -1078,12 +1353,12 @@ func deposit_resources_from_peer(peer_id: int) -> void:
     if player == null or player.downed or player.carrying <= 0:
         return
     if player.position.distance_to(EXTRACTION_POSITION) > EXTRACTION_RADIUS:
-        _set_status("玩家 %d 需要把资源带到投送撤离点。" % peer_id, Color("#ffcf5c"))
+        _set_status("玩家 %d 需要把热能电池带到投送撤离点。" % peer_id, Color("#ffcf5c"))
         return
     var amount := player.carrying
     set_player_carrying.rpc(peer_id, 0, -1)
     set_deposited_resources.rpc(deposited_resources + amount)
-    _set_status("玩家 %d 已投送 %d 份资源，合计 %d / %d。" % [peer_id, amount, deposited_resources + amount, resource_crates.size()], Color("#8be28b"))
+    _set_status("玩家 %d 已投送 %d 枚热能电池，合计 %d / %d。" % [peer_id, amount, deposited_resources, resource_crates.size()], Color("#8be28b"))
 
 @rpc("authority", "call_local", "reliable")
 func set_deposited_resources(total: int) -> void:
@@ -1165,7 +1440,7 @@ func complete_demo_mission() -> void:
     extraction_enabled = true
     extraction_progress = EXTRACTION_HOLD_TIME
     mission_return_timer = 2.5
-    _set_status("示范星球任务完成：全体队员已成功撤离！", Color("#8be28b"))
+    _set_status("霜烬星任务完成：全体队员已成功撤离！", Color("#8be28b"))
     _update_progress_text()
 
 @rpc("authority", "call_local", "reliable")
@@ -1267,7 +1542,7 @@ func _player_snapshot() -> Array:
     var snapshot: Array = []
     for id in players:
         var player := players[id] as NetworkPlayer
-        snapshot.append([id, player.position, player.health, player.oxygen, player.warmth, player.carrying, player.carrying_crate_id, player.downed])
+        snapshot.append([id, player.position, player.health, player.oxygen, player.warmth, player.carrying, player.carrying_crate_id, player.downed, player.scan_lock_remaining, player.scan_cooldown_remaining, player.scan_origin, player.scan_pulse_radius])
     return snapshot
 
 func _enemy_snapshot() -> Array:
@@ -1290,6 +1565,9 @@ func sync_session_snapshot(player_state: Array, enemy_state: Array) -> void:
         player.carrying = int(entry[5])
         player.carrying_crate_id = int(entry[6])
         player.downed = bool(entry[7])
+        if entry.size() >= 12:
+            player.begin_scan(float(entry[8]), float(entry[9]), entry[10])
+            player.scan_pulse_radius = float(entry[11])
     for entry in enemy_state:
         if enemies.has(int(entry[0])):
             var enemy := enemies[int(entry[0])] as DungeonEnemy
@@ -1346,7 +1624,7 @@ func change_stage(next_stage: String) -> void:
         player.queue_redraw()
     _update_stage_text()
     _update_vitals_text()
-    var stage_name := "示范星球" if current_stage == "demo" else ("电磁星球测试区" if current_stage == "electromagnetic" else "飞船准备区")
+    var stage_name := "霜烬星" if current_stage == "demo" else ("电磁星球测试区" if current_stage == "electromagnetic" else "飞船准备区")
     _set_status("已同步切换到%s。" % stage_name, Color("#8be28b"))
 
 func _reset_power_nodes_local() -> void:
@@ -1360,12 +1638,15 @@ func _set_stage_visuals() -> void:
         _ship_stage.visible = current_stage == "ship"
     if _demo_stage:
         _demo_stage.visible = current_stage == "demo"
+        if _demo_stage.has_method("set_obstacles_active"):
+            _demo_stage.set_obstacles_active(current_stage == "demo")
     if _demo_beacons_root:
         _demo_beacons_root.visible = current_stage == "demo"
     if _resource_crates_root:
         _resource_crates_root.visible = current_stage == "demo"
     if _power_nodes_root:
         _power_nodes_root.visible = current_stage == "electromagnetic"
+    _update_storm_overlay()
     queue_redraw()
     _update_progress_text()
 
@@ -1376,11 +1657,13 @@ func _update_progress_text() -> void:
         var extraction_text := "撤离 -"
         if extraction_enabled:
             extraction_text = "撤离 %.1f/%.1f" % [extraction_progress, EXTRACTION_HOLD_TIME]
-        progress_label.text = "信标 %d/%d · 资源 %d/%d · 投送 %d/%d\n%s" % [
+        elif _demo_objectives_ready():
+            extraction_text = "增援停止 · 清场"
+        progress_label.text = "气象 %d/%d · 电池 %d/%d · 投送 %d/%d\n第 %d 波 · %s" % [
             activated_demo_beacon_ids.size(), demo_beacons.size(),
             taken_crate_ids.size(), resource_crates.size(),
             deposited_resources, resource_crates.size(),
-            extraction_text,
+            enemy_wave_index, extraction_text,
         ]
     elif current_stage == "electromagnetic":
         progress_label.text = "电力节点：%d / %d" % [activated_node_ids.size(), power_nodes.size()]
@@ -1396,7 +1679,7 @@ func _update_vitals_text() -> void:
         vitals_label.text = ""
         return
     var state := "倒地" if player.downed else "正常"
-    vitals_label.text = "氧气 %d%%　体温 %d%%　资源 %d　%s" % [
+    vitals_label.text = "氧气 %d%%　体温 %d%%　电池 %d　%s" % [
         int(player.oxygen), int(player.warmth * 100.0), player.carrying, state,
     ]
 
@@ -1554,8 +1837,8 @@ func _update_stage_text() -> void:
         stage_hint.text = "WASD / 方向键移动 · 打开航线图选择目的地 · 主机确认后全队登陆"
         stage_button.text = "打开星际航线图"
     elif current_stage == "demo":
-        stage_badge.text = "当前阶段：示范星球"
-        stage_hint.text = "空格攻击 · E 扫描/搬运/救援 · 热源补氧回温 · 撤离点停留 3 秒"
+        stage_badge.text = "当前阶段：霜烬星"
+        stage_hint.text = "空格攻击 · Q 扫描(定身) · E 修复 · F 拾取 · G 投送 · R 救援"
         stage_button.text = "返回飞船准备区"
     else:
         stage_badge.text = "当前阶段：电磁星球测试区"
