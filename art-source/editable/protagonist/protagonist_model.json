@@ -1,0 +1,35 @@
+{
+  "source": "art-source/ai-generated/protagonist/current/protagonist-faceted-simple-c-teal-turnaround.png",
+  "front": "-Z",
+  "palette": {
+    "suit": "#35c5c4",
+    "suit_dark": "#239c9d",
+    "visor": "#202735",
+    "visor_glint": "#596274",
+    "chest": "#eee5cc",
+    "yellow": "#ffb928",
+    "glove": "#252b39",
+    "boot": "#292e3b",
+    "pack": "#31b4b3"
+  },
+  "parts": [
+    {"name":"Torso","shape":"ico","position":[0,0.90,0],"size":[0.51,0.48,0.32],"color":"suit"},
+    {"name":"Hips","shape":"ico","position":[0,0.56,0],"size":[0.40,0.23,0.29],"color":"suit_dark"},
+    {"name":"ChestPanel","shape":"ico","position":[0,0.96,-0.305],"size":[0.35,0.34,0.075],"color":"chest"},
+    {"name":"Helmet","shape":"ico","position":[0,1.57,-0.01],"size":[0.62,0.57,0.51],"color":"suit"},
+    {"name":"Visor","shape":"ico","position":[0,1.57,-0.435],"size":[0.48,0.38,0.17],"color":"visor"},
+    {"name":"VisorGlint","shape":"ico","position":[-0.18,1.72,-0.563],"size":[0.13,0.09,0.025],"color":"visor_glint"},
+    {"name":"LeftEar","shape":"ico","position":[-0.61,1.56,-0.01],"size":[0.13,0.19,0.17],"color":"suit_dark"},
+    {"name":"RightEar","shape":"ico","position":[0.61,1.56,-0.01],"size":[0.13,0.19,0.17],"color":"suit_dark"},
+    {"name":"Backpack","shape":"box","position":[0,0.99,0.40],"size":[0.58,0.66,0.24],"color":"pack"},
+    {"name":"LeftArm","parent":"LeftArmPivot","shape":"ico","position":[-0.10,-0.25,0],"size":[0.18,0.37,0.20],"color":"suit"},
+    {"name":"RightArm","parent":"RightArmPivot","shape":"ico","position":[0.10,-0.25,0],"size":[0.18,0.37,0.20],"color":"suit"},
+    {"name":"YellowShoulder","parent":"LeftArmPivot","shape":"ico","position":[-0.08,-0.06,-0.035],"size":[0.19,0.14,0.20],"color":"yellow"},
+    {"name":"LeftGlove","parent":"LeftArmPivot","shape":"ico","position":[-0.13,-0.57,-0.015],"size":[0.18,0.19,0.19],"color":"glove"},
+    {"name":"RightGlove","parent":"RightArmPivot","shape":"ico","position":[0.13,-0.57,-0.015],"size":[0.18,0.19,0.19],"color":"glove"},
+    {"name":"LeftLeg","parent":"LeftLegPivot","shape":"ico","position":[0,-0.25,0],"size":[0.21,0.32,0.24],"color":"suit"},
+    {"name":"RightLeg","parent":"RightLegPivot","shape":"ico","position":[0,-0.25,0],"size":[0.21,0.32,0.24],"color":"suit"},
+    {"name":"LeftBoot","parent":"LeftLegPivot","shape":"ico","position":[0,-0.52,-0.07],"size":[0.24,0.18,0.33],"color":"boot"},
+    {"name":"RightBoot","parent":"RightLegPivot","shape":"ico","position":[0,-0.52,-0.07],"size":[0.24,0.18,0.33],"color":"boot"}
+  ]
+}

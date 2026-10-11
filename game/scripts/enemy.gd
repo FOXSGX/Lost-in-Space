@@ -28,9 +28,10 @@ func _ready() -> void:
     _target_position = position
 
 func _process(delta: float) -> void:
+    z_index = int(position.y)
     _damage_flash_timer = maxf(_damage_flash_timer - delta, 0.0)
     _damage_text_timer = maxf(_damage_text_timer - delta, 0.0)
-    if not multiplayer.is_server() and _has_target_position:
+    if multiplayer.multiplayer_peer != null and not multiplayer.is_server() and _has_target_position:
         position = position.lerp(_target_position, 1.0 - exp(-18.0 * delta))
     if _damage_flash_timer > 0.0 or _damage_text_timer > 0.0:
         queue_redraw()
@@ -86,10 +87,15 @@ func take_damage(amount: int) -> bool:
     return health <= 0
 
 func _draw() -> void:
+    draw_set_transform(Vector2(0, 14), 0.0, Vector2(1.3, 0.42))
+    draw_circle(Vector2.ZERO, 18.0, Color(0.0, 0.01, 0.03, 0.58))
+    draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
     if _damage_flash_timer > 0.0:
         draw_circle(Vector2.ZERO, 24.0, Color(1.0, 0.22, 0.30, 0.34))
     draw_circle(Vector2.ZERO, 18.0, Color("#351b2b"))
     draw_circle(Vector2.ZERO, 14.0, Color("#e05b67"))
+    draw_arc(Vector2.ZERO, 14.0, PI * 0.1, PI * 0.9, 20, Color("#ffb6a7"), 2.0)
+    draw_colored_polygon(PackedVector2Array([Vector2(-11, -9), Vector2(0, -23), Vector2(11, -9)]), Color("#842f48"))
     draw_circle(Vector2(-5, -3), 3.0, Color("#fff1b8"))
     draw_circle(Vector2(5, -3), 3.0, Color("#fff1b8"))
     draw_rect(Rect2(-18, -28, 36, 4), Color("#1b1018"))
