@@ -21,7 +21,9 @@ func run() -> void:
     main._show_route()
     check(main._route_group.visible and not main._room_group.visible, "星际航线选择页面未恢复")
     main._show_home()
+    main._ship_session.persistence_enabled = false
     main._create_host()
+    main._start_planet()
     await process_frame
     check(main.game_started, "3D 星球未启动")
     check(main._world_root is Node3D, "世界根节点不是 Node3D")

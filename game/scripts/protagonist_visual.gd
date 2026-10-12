@@ -3,6 +3,7 @@ class_name ProtagonistVisual
 
 const MODEL_PATH := "res://assets/characters/protagonist_model.json"
 const WALK_RATE := 11.0
+const GROUND_CLEARANCE := 0.035
 
 var _left_arm: Node3D
 var _right_arm: Node3D
@@ -13,6 +14,7 @@ var _battery: MeshInstance3D
 var _meshes: Array[MeshInstance3D] = []
 var _palette: Dictionary = {}
 var _parts_cache: Array = []
+var _geometry_points: Dictionary = {}
 var _time := 0.0
 var _hit_time := 0.0
 var _attack_time := 0.0
@@ -43,16 +45,19 @@ func _ready() -> void:
         "LeftLegPivot": _left_leg,
         "RightLegPivot": _right_leg
     }
-    var facet_mesh := _make_faceted_icosphere()
+    var facet_mesh := _make_smooth_icosphere()
     for part in data.get("parts", []):
         var instance := MeshInstance3D.new()
         instance.name = str(part["name"])
         instance.mesh = facet_mesh if part["shape"] == "ico" else BoxMesh.new()
         if part["shape"] == "box":
             instance.mesh.size = Vector3.ONE
+        _cache_geometry(instance.mesh)
         instance.position = _vec3(part["position"])
         instance.scale = _vec3(part["size"])
-        instance.material_override = _material(Color(_palette[part["color"]]))
+        var material := _material(Color(_palette[part["color"]]))
+        material.vertex_color_use_as_albedo = part["shape"] == "ico"
+        instance.material_override = material
         instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
         var parent: Node3D = parents.get(part.get("parent", ""), _body)
         parent.add_child(instance)
@@ -73,6 +78,7 @@ func _ready() -> void:
     identifier.position = Vector3(0.0, 1.19, 0.535)
     identifier.material_override = _material(_team_color, true)
     _body.add_child(identifier)
+    _keep_above_ground()
 
 func set_team_color(color: Color) -> void:
     _team_color = color
@@ -90,14 +96,16 @@ func _vec3(values: Array) -> Vector3:
 func _material(color: Color, glow := false) -> StandardMaterial3D:
     var material := StandardMaterial3D.new()
     material.albedo_color = color
-    material.roughness = 0.87
+    material.albedo_color.a = 1.0
+    material.transparency = BaseMaterial3D.TRANSPARENCY_DISABLED
+    material.roughness = 1.0
     if glow:
         material.emission_enabled = true
         material.emission = color
-        material.emission_energy_multiplier = 1.2
+        material.emission_energy_multiplier = 0.65
     return material
 
-func _make_faceted_icosphere() -> ArrayMesh:
+func _make_smooth_icosphere() -> ArrayMesh:
     var gold := (1.0 + sqrt(5.0)) / 2.0
     var points: Array[Vector3] = [
         Vector3(-1,gold,0), Vector3(1,gold,0), Vector3(-1,-gold,0), Vector3(1,-gold,0),
@@ -112,6 +120,7 @@ func _make_faceted_icosphere() -> ArrayMesh:
     ]
     var verts := PackedVector3Array()
     var normals := PackedVector3Array()
+    var colors := PackedColorArray()
     for face in faces:
         var a := points[face[0]].normalized()
         var b := points[face[1]].normalized()
@@ -124,13 +133,18 @@ func _make_faceted_icosphere() -> ArrayMesh:
             if normal.dot(triangle[0]) < 0.0:
                 triangle.reverse()
                 normal = -normal
+            # ArrayMesh 的正面采用顺时针顶点顺序，光照法线仍然朝外。
+            triangle.reverse()
+            var shade := clampf(0.80 + 0.18 * normal.dot(Vector3(-0.45, 0.78, -0.38).normalized()), 0.62, 0.98)
             for vertex in triangle:
                 verts.append(vertex)
-                normals.append(normal)
+                normals.append(vertex.normalized())
+                colors.append(Color(shade, shade, shade, 1.0))
     var arrays := []
     arrays.resize(Mesh.ARRAY_MAX)
     arrays[Mesh.ARRAY_VERTEX] = verts
     arrays[Mesh.ARRAY_NORMAL] = normals
+    arrays[Mesh.ARRAY_COLOR] = colors
     var mesh := ArrayMesh.new()
     mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
     return mesh
@@ -179,6 +193,33 @@ func update_state(delta: float, direction: Vector2, is_downed: bool, scanning: b
     else:
         _body.scale.x = lerpf(_body.scale.x, 1.0, minf(delta * 8.0, 1.0))
         _body.scale.z = _body.scale.x
+    _keep_above_ground()
+
+func _cache_geometry(mesh: Mesh) -> void:
+    if _geometry_points.has(mesh):
+        return
+    var unique: Dictionary = {}
+    for surface in mesh.get_surface_count():
+        var arrays := mesh.surface_get_arrays(surface)
+        for vertex in arrays[Mesh.ARRAY_VERTEX]:
+            unique[vertex] = true
+    _geometry_points[mesh] = PackedVector3Array(unique.keys())
+
+func lowest_vertex_y() -> float:
+    var lowest := INF
+    var root_inverse := global_transform.affine_inverse()
+    for instance in _meshes:
+        var to_root := root_inverse * instance.global_transform
+        var points: PackedVector3Array = _geometry_points[instance.mesh]
+        for vertex in points:
+            lowest = minf(lowest, (to_root * vertex).y)
+    return lowest
+
+func _keep_above_ground() -> void:
+    # 同时处理摆腿、身体起伏、倒地压缩与救起动画；相机和碰撞体不被抬高。
+    var lowest := lowest_vertex_y()
+    if lowest < GROUND_CLEARANCE:
+        _body.position.y += GROUND_CLEARANCE - lowest
 
 func _part_color(part_name: String) -> String:
     for part in _parts_cache:

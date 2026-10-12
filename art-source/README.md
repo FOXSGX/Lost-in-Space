@@ -9,6 +9,12 @@
 
 - `ai-generated/protagonist/archive/`：此前的角色探索图，保留供回看，不与当前方案混放。
 
+## 飞船舱探索
+
+- `ai-generated/spaceship-cabin/concepts/ship-hub-v2.png`：当前主枢纽舱概念图；过小的早期舱室图放在 `archive/`。
+- `ai-generated/spaceship-cabin/README.md`：需求、布局建议与待讨论事项。
+- `editable/spaceship-cabin/`：对应的可编辑 3D 源脚本、GLB 模型、预览和交互位置建议。
+
 ## 参考图
 
 - `references/characters/`：人物低多边形切面风格参考。

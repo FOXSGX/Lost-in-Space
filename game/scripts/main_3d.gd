@@ -2,6 +2,7 @@ extends Node3D
 class_name Main3D
 
 const PORT := 24567
+var network_port := PORT
 const MAX_PLAYERS := 4
 const PLAYER_SCENE := preload("res://scenes/player_3d.tscn")
 const ENEMY_SCENE := preload("res://scenes/enemy_3d.tscn")
@@ -73,6 +74,11 @@ var next_marker_id := 1
 var journal_entries: Array[String] = []
 var discovered_regions: Array[String] = []
 var route_seed := 0
+
+var _ship_session: ShipSession3D
+var ship_active: bool:
+    get:
+        return _ship_session != null and _ship_session.active
 
 var is_host := false
 var game_started := false
@@ -201,8 +207,12 @@ func _ready() -> void:
     multiplayer.peer_disconnected.connect(_on_peer_disconnected)
     multiplayer.connected_to_server.connect(_on_connected_to_server)
     multiplayer.connection_failed.connect(_on_connection_failed)
+    multiplayer.server_disconnected.connect(_on_server_disconnected)
     _build_menu_world()
     _build_ui()
+    _ship_session = ShipSession3D.new()
+    _ship_session.name = "ShipSession"
+    add_child(_ship_session)
 
 func _input(event: InputEvent) -> void:
     if not event is InputEventKey:
@@ -210,6 +220,16 @@ func _input(event: InputEvent) -> void:
     var key_event := event as InputEventKey
     if not key_event.pressed or key_event.echo:
         return
+    if key_event.keycode == KEY_ESCAPE or key_event.physical_keycode == KEY_ESCAPE:
+        if ship_active and _ship_session.has_panel():
+            _ship_session.close_panel()
+            get_viewport().set_input_as_handled()
+        return
+    if game_started and not minigame_active and not is_journal_visible():
+        if key_event.physical_keycode == KEY_3 or key_event.keycode == KEY_3:
+            _ship_session.request("use_medical")
+        elif key_event.physical_keycode == KEY_4 or key_event.keycode == KEY_4:
+            _ship_session.request("use_oxygen")
     if key_event.keycode == KEY_TAB or key_event.physical_keycode == KEY_TAB:
         if game_started:
             _toggle_journal()
@@ -220,6 +240,10 @@ func _input(event: InputEvent) -> void:
         get_viewport().set_input_as_handled()
 
 func _process(delta: float) -> void:
+    if _ship_session != null:
+        _ship_session.tick(delta)
+    if ship_active:
+        return
     if not game_started:
         _menu_time += delta
         _animate_menu_world()
@@ -245,7 +269,7 @@ func _process(delta: float) -> void:
         mission_return_timer += delta
         if mission_return_timer >= MISSION_RETURN_DELAY:
             var result_text := mission_summary if not mission_summary.is_empty() else ("任务完成，已返回飞船准备区。" if mission_completed else "登陆失败，已返回飞船准备区。")
-            return_to_ship.rpc(result_text)
+            return_to_ship.rpc(result_text, _vitals_snapshot())
         return
     _tick_story(delta)
     _tick_storm(delta)
@@ -518,10 +542,10 @@ func _build_route_ui() -> void:
     _ui_label(planet_card, "01  /  可登陆", Vector2(22, 18), Vector2(470, 25), 14, Color("#66e9df"))
     _ui_label(planet_card, "霜烬星", Vector2(22, 52), Vector2(280, 42), 30, Color("#e9fbff"))
     _ui_label(planet_card, "FROST ASH\n环境调查 · 气象信标 · 暴风雪撤离", Vector2(22, 100), Vector2(420, 52), 15, Color("#9ebdca"))
-    _land_button = _ui_button(planet_card, "确认航程  →", Vector2(334, 116), Vector2(176, 48), _start_planet, true)
+    _land_button = _ui_button(planet_card, "确认航程  →", Vector2(334, 116), Vector2(176, 48), _confirm_land, true)
     _route_status = _ui_label(_route_group, "", Vector2(91, 424), Vector2(520, 24), 14, Color("#8fb4c4"))
     _ui_label(_route_group, "02  /  尚未开放     电磁星球", Vector2(91, 454), Vector2(500, 28), 16, Color("#668392"))
-    _ui_button(_route_group, "← 返回飞船准备区", Vector2(91, 516), Vector2(240, 46), _show_room)
+    _ui_button(_route_group, "← 返回主舱", Vector2(91, 516), Vector2(240, 46), _show_room)
 
 func _set_screen(view: String) -> void:
     _screen_view = view
@@ -530,15 +554,29 @@ func _set_screen(view: String) -> void:
     _route_group.visible = view == "route"
 
 func _show_home() -> void:
+    if multiplayer.multiplayer_peer is ENetMultiplayerPeer:
+        multiplayer.multiplayer_peer.close()
+    is_host = false
+    multiplayer.multiplayer_peer = OfflineMultiplayerPeer.new()
+    _clear_players()
+    connected_ids.clear()
+    if _ship_session != null:
+        _ship_session.show_home()
+    _menu_layer.visible = true
+    _game_layer.visible = false
     _set_screen("home")
 
 func _show_room() -> void:
+    if ship_active:
+        _ship_session.show_gameplay()
+        return
     _set_screen("room")
     if _room_status != null:
         _room_status.text = "主机已创建，准备选择航线。"
 
 func _show_route() -> void:
     _set_screen("route")
+    _menu_layer.visible = true
     if _land_button != null:
         _land_button.disabled = not is_host
     if _route_status != null:
@@ -718,21 +756,20 @@ func _animate_menu_world() -> void:
 
 func _create_host() -> void:
     var peer := ENetMultiplayerPeer.new()
-    var result := peer.create_server(PORT, MAX_PLAYERS)
+    var result := peer.create_server(network_port, MAX_PLAYERS)
     if result != OK:
         _set_status("创建主机失败：%s" % error_string(result))
         return
     multiplayer.multiplayer_peer = peer
     is_host = true
     connected_ids = [1]
-    _show_room()
-    _set_status("主机已创建，已进入飞船准备区。")
-    if DisplayServer.get_name() == "headless":
-        _start_planet()
+    _ship_session.load_state()
+    _ship_session.enter_ship(true, connected_ids, _ship_session.snapshot())
+    _set_status("主机已创建，已进入归航号主舱。")
 
 func _join_host() -> void:
     var peer := ENetMultiplayerPeer.new()
-    var result := peer.create_client(_address_edit.text.strip_edges(), PORT)
+    var result := peer.create_client(_address_edit.text.strip_edges(), network_port)
     if result != OK:
         _set_status("加入主机失败：%s" % error_string(result))
         return
@@ -742,9 +779,10 @@ func _join_host() -> void:
 
 func _on_connected_to_server() -> void:
     connected_ids = [1, multiplayer.get_unique_id()]
-    _show_room()
+    if not ship_active and not game_started:
+        _show_room()
     if _room_status != null:
-        _room_status.text = "已连接归航号，等待主机选择航线。"
+        _room_status.text = "已连接归航号，等待同步船舱。"
     _set_status("已连接主机，等待主机选择航线……")
 
 func _on_connection_failed() -> void:
@@ -755,19 +793,42 @@ func _on_peer_connected(peer_id: int) -> void:
         return
     if not connected_ids.has(peer_id):
         connected_ids.append(peer_id)
+    if ship_active:
+        _ship_session.add_peer(peer_id)
+        return
     spawn_player_for_peer.rpc(peer_id)
     sync_full_state.rpc_id(peer_id, _world_snapshot())
     _set_status("玩家 %d 已加入 3D 霜烬星。" % peer_id)
 
 func _on_peer_disconnected(peer_id: int) -> void:
     connected_ids.erase(peer_id)
+    _ship_session.remove_peer(peer_id)
     if players.has(peer_id):
         players[peer_id].queue_free()
         players.erase(peer_id)
 
+func _on_server_disconnected() -> void:
+    if game_started:
+        return_to_ship("主机已断开连接。")
+    _show_home()
+    _set_status("主机已断开连接，请重新创建或加入房间。")
+
+func _confirm_land() -> void:
+    _ship_session.confirm_land()
+
+func _clear_players() -> void:
+    for player in players.values():
+        remove_child(player)
+        (player as Node).queue_free()
+    players.clear()
+
 func _start_planet() -> void:
     if game_started:
         return
+    var departure := _vitals_snapshot() if ship_active else []
+    _ship_session.leave()
+    _ship_session.disable_menu_environment()
+    _clear_players()
     game_started = true
     mission_completed = false
     mission_failed = false
@@ -827,6 +888,7 @@ func _start_planet() -> void:
             spawn_player_for_peer.rpc(peer_id)
         else:
             spawn_player_for_peer(peer_id)
+    sync_vitals(departure)
     if is_host:
         enemy_spawned = false
         enemy_wave_index = 0
@@ -1878,11 +1940,13 @@ func _enemy_spawn_center_away_from_players(preferred: Vector2) -> Vector2:
 
 @rpc("authority", "call_local", "reliable")
 func spawn_player_for_peer(peer_id: int) -> void:
+    if not connected_ids.has(peer_id):
+        connected_ids.append(peer_id)
     if players.has(peer_id):
         return
     var player := PLAYER_SCENE.instantiate() as SpacePlayer3D
     player.setup(peer_id, PLAYER_COLORS[(peer_id - 1) % PLAYER_COLORS.size()])
-    player.position = _spawn_position(peer_id)
+    player.position = _ship_session.spawn_position(peer_id) if ship_active else _spawn_position(peer_id)
     add_child(player)
     players[peer_id] = player
 
@@ -2736,6 +2800,7 @@ func attack_feedback(peer_id: int, target: Vector3, hit: bool) -> void:
     var player := players.get(peer_id) as SpacePlayer3D
     if player == null:
         return
+    player.show_attack_animation()
     _spawn_attack_effect(player.global_position, target)
     if peer_id == multiplayer.get_unique_id():
         _set_status("命中！按住空格连续攻击范围圈内的异形。" if hit else "已开火 · 圈内没有敌人，请靠近红色异形。")
@@ -2859,7 +2924,10 @@ func _tick_extraction(delta: float) -> void:
         _set_status(mission_summary)
 
 @rpc("authority", "call_local", "reliable")
-func return_to_ship(reason: String) -> void:
+func return_to_ship(reason: String, final_vitals: Array = []) -> void:
+    var returning_vitals := final_vitals if not final_vitals.is_empty() else _vitals_snapshot()
+    if is_host:
+        _ship_session.settle(mission_completed, salvage_value, reason)
     game_started = false
     mission_completed = false
     mission_failed = false
@@ -2891,11 +2959,13 @@ func return_to_ship(reason: String) -> void:
     reviving.clear()
     revive_progress.clear()
     if _world_root != null:
+        remove_child(_world_root)
         _world_root.queue_free()
         _world_root = null
-    for player in players.values():
-        (player as Node).queue_free()
-    players.clear()
+    _clear_players()
+    for enemy in enemies.values():
+        remove_child(enemy)
+        (enemy as Node).queue_free()
     enemies.clear()
     obstacles.clear()
     beacons.clear()
@@ -2933,9 +3003,10 @@ func return_to_ship(reason: String) -> void:
         _game_layer.visible = false
     if _menu_layer != null:
         _menu_layer.visible = true
-    _show_room()
-    if _room_status != null:
-        _room_status.text = reason
+    _ship_session.enter_ship(true, connected_ids, _ship_session.snapshot(), returning_vitals)
+    _ship_session.show_notice(reason)
+    if is_host:
+        _ship_session.broadcast()
 
 func _objectives_ready() -> bool:
     return activated_beacons.size() >= beacon_positions.size() and anomaly_resolved and _missing_required_knowledge().is_empty()
@@ -2951,7 +3022,7 @@ func _enemy_snapshot() -> Array:
     return snapshot
 
 func _world_snapshot() -> Dictionary:
-    return {"wave": enemy_wave_index, "timer": enemy_wave_timer, "enemies": _enemy_snapshot(), "beacons": activated_beacons, "crates": taken_crates, "samples": taken_samples, "deposited": deposited_resources, "salvage": salvage_value, "mission_elapsed": mission_elapsed, "knowledge": knowledge_flags.keys(), "anomaly_resolved": anomaly_resolved, "ending_choice": ending_choice, "story_flags": story_flags, "rift_valve_open": rift_valve_open, "signal_mode": signal_mode, "signal_lure_until": signal_lure_until, "signal_lure_position": signal_lure_position, "signal_cooldown_until": signal_cooldown_until, "map_markers": map_markers, "vitals": _vitals_snapshot(), "beacon_positions": beacon_positions, "crate_positions": crate_positions, "sample_positions": sample_positions, "journal": journal_entries, "regions": discovered_regions, "clues": discovered_clues, "scan_clues": scan_revealed_clues}
+    return {"ship_state": _ship_session.snapshot(), "wave": enemy_wave_index, "timer": enemy_wave_timer, "enemies": _enemy_snapshot(), "beacons": activated_beacons, "crates": taken_crates, "samples": taken_samples, "deposited": deposited_resources, "salvage": salvage_value, "mission_elapsed": mission_elapsed, "knowledge": knowledge_flags.keys(), "anomaly_resolved": anomaly_resolved, "ending_choice": ending_choice, "story_flags": story_flags, "rift_valve_open": rift_valve_open, "signal_mode": signal_mode, "signal_lure_until": signal_lure_until, "signal_lure_position": signal_lure_position, "signal_cooldown_until": signal_cooldown_until, "map_markers": map_markers, "vitals": _vitals_snapshot(), "beacon_positions": beacon_positions, "crate_positions": crate_positions, "sample_positions": sample_positions, "journal": journal_entries, "regions": discovered_regions, "clues": discovered_clues, "scan_clues": scan_revealed_clues}
 
 func _vitals_snapshot() -> Array:
     var snapshot: Array = []
@@ -2962,7 +3033,10 @@ func _vitals_snapshot() -> Array:
     return snapshot
 
 @rpc("authority", "call_local", "unreliable")
-func sync_vitals(snapshot: Array) -> void:
+func sync_vitals(snapshot: Array, in_ship := false) -> void:
+    # 地表的延迟数据不能覆盖返航后已恢复的舱内状态。
+    if in_ship != ship_active:
+        return
     for entry in snapshot:
         var p := players.get(int(entry[0])) as SpacePlayer3D
         if p == null:
@@ -2975,6 +3049,7 @@ func sync_vitals(snapshot: Array) -> void:
 
 @rpc("authority", "call_local", "reliable")
 func sync_full_state(snapshot: Dictionary) -> void:
+    _ship_session.apply_state(snapshot.get("ship_state", {}))
     if not game_started:
         _start_planet()
     enemy_wave_index = int(snapshot.get("wave", 0))
@@ -3671,3 +3746,15 @@ func _spawn_particle_burst(position: Vector3, color: Color, count: int = 12) -> 
         tween.tween_property(particle, "global_position", particle.global_position + direction * speed, lifetime)
         tween.tween_property(particle, "scale", Vector3.ZERO, lifetime)
         tween.finished.connect(func(): particle.queue_free())
+
+@rpc("authority", "call_local", "reliable")
+func show_attack_visual(peer_id: int) -> void:
+    var player := players.get(peer_id) as SpacePlayer3D
+    if player != null:
+        player.show_attack_animation()
+
+@rpc("authority", "call_local", "reliable")
+func set_revive_visual(peer_id: int, enabled: bool) -> void:
+    var player := players.get(peer_id) as SpacePlayer3D
+    if player != null:
+        player.show_rescue_animation(enabled)

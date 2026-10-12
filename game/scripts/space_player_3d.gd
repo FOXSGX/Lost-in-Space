@@ -1,6 +1,7 @@
 extends CharacterBody3D
 class_name SpacePlayer3D
 
+const VISUAL_SCENE := preload("res://scenes/protagonist_visual.tscn")
 const SPEED := 5.8
 const ATTACK_RANGE := 3.75
 const ATTACK_INTERVAL := 0.35
@@ -18,6 +19,8 @@ var _target_position := Vector3.ZERO
 var _has_target_position := false
 var _attack_cooldown := 0.0
 var attack_range_visual: MeshInstance3D
+var _visual: ProtagonistVisual
+var _last_visual_position := Vector3.ZERO
 
 func setup(id: int, color: Color) -> void:
     peer_id = id
@@ -41,67 +44,52 @@ func _ready() -> void:
         _build_camera()
 
 func _build_visual(color: Color) -> void:
-    var root := Node3D.new()
-    root.name = "AstronautVisual"
-    add_child(root)
-    var body := MeshInstance3D.new()
-    var body_mesh := CapsuleMesh.new()
-    body_mesh.radius = 0.36
-    body_mesh.height = 1.05
-    body.position.y = 0.76
-    body.mesh = body_mesh
-    body.material_override = _material(color)
-    body.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
-    root.add_child(body)
-    var helmet := MeshInstance3D.new()
-    var helmet_mesh := SphereMesh.new()
-    helmet_mesh.radius = 0.29
-    helmet_mesh.height = 0.58
-    helmet.position.y = 1.43
-    helmet.mesh = helmet_mesh
-    helmet.material_override = _material(Color("#e8f7ff"))
-    helmet.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
-    root.add_child(helmet)
-    var visor := MeshInstance3D.new()
-    var visor_mesh := BoxMesh.new()
-    visor_mesh.size = Vector3(0.36, 0.16, 0.06)
-    visor.position = Vector3(0.0, 1.45, -0.27)
-    visor.mesh = visor_mesh
-    visor.material_override = _material(Color("#1a4d62"))
-    root.add_child(visor)
-    var backpack := MeshInstance3D.new()
-    var backpack_mesh := BoxMesh.new()
-    backpack_mesh.size = Vector3(0.48, 0.55, 0.20)
-    backpack.position = Vector3(0.0, 0.78, 0.28)
-    backpack.mesh = backpack_mesh
-    backpack.material_override = _material(Color("#254d62"))
-    backpack.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
-    root.add_child(backpack)
-    var shoulder := MeshInstance3D.new()
-    var shoulder_mesh := SphereMesh.new()
-    shoulder_mesh.radius = 0.11
-    shoulder_mesh.height = 0.22
-    shoulder.position = Vector3(0.36, 1.02, -0.02)
-    shoulder.mesh = shoulder_mesh
-    shoulder.material_override = _glow_material(color)
-    root.add_child(shoulder)
-    var ring := MeshInstance3D.new()
-    var ring_mesh := TorusMesh.new()
-    ring_mesh.inner_radius = 0.48
-    ring_mesh.outer_radius = 0.51
-    ring_mesh.rings = 24
-    ring_mesh.ring_segments = 8
-    ring.position.y = 0.08
-    ring.mesh = ring_mesh
-    ring.material_override = _glow_material(color)
-    root.add_child(ring)
-    var weapon := MeshInstance3D.new()
-    var weapon_mesh := BoxMesh.new()
-    weapon_mesh.size = Vector3(0.17, 0.18, 0.55)
-    weapon.mesh = weapon_mesh
-    weapon.position = Vector3(0.36, 0.82, -0.3)
-    weapon.material_override = _material(Color("#d5f3ff"))
-    root.add_child(weapon)
+    _visual = VISUAL_SCENE.instantiate() as ProtagonistVisual
+    _visual.set_team_color(color)
+    add_child(_visual)
+
+func _process(delta: float) -> void:
+    var motion := velocity if is_multiplayer_authority() else (global_position - _last_visual_position) / maxf(delta, 0.001)
+    _last_visual_position = global_position
+    if _visual != null:
+        _visual.update_state(delta, Vector2(motion.x, motion.z), downed, scan_lock_remaining > 0.0, carrying > 0, health)
+    var controller := get_parent() as Main3D
+    if controller != null and controller.ship_active and _camera != null:
+        if controller._ship_session.in_hub:
+            # Keep the character near the centre while revealing the next cabin section.
+            _camera.global_position = _camera.global_position.lerp(global_position + ShipHub3D.CAMERA_OFFSET, 1.0 - exp(-8.0 * delta))
+            _camera.rotation_degrees = Vector3(-42, 0, 0)
+        else:
+            _camera.global_position = Vector3(0, 16, 15)
+            _camera.look_at(Vector3(0, 0.6, 0), Vector3.UP)
+
+func show_attack_animation() -> void:
+    if _visual != null:
+        _visual.trigger_attack()
+
+func show_rescue_animation(enabled: bool) -> void:
+    if _visual != null:
+        _visual.set_rescuing(enabled)
+
+func teleport_to(point: Vector3) -> void:
+    position = point
+    _target_position = point
+    _has_target_position = false
+    velocity = Vector3.ZERO
+    _last_visual_position = point
+
+func configure_ship_camera() -> void:
+    var controller := get_parent() as Main3D
+    if _camera != null and controller != null and controller.ship_active:
+        _camera.size = ShipHub3D.CAMERA_SIZE if controller._ship_session.in_hub else 21.0
+        _camera.global_position = global_position + ShipHub3D.CAMERA_OFFSET if controller._ship_session.in_hub else Vector3(0, 16, 15)
+        _camera.rotation_degrees = Vector3(-42, 0, 0) if controller._ship_session.in_hub else Vector3(-46, 0, 0)
+        var sensor := get_node_or_null("PlayerSensorLight") as OmniLight3D
+        if sensor != null:
+            sensor.light_energy = 0.18
+            sensor.omni_range = 5.0
+    if attack_range_visual != null:
+        attack_range_visual.visible = controller != null and not controller.ship_active
 
 func _build_camera() -> void:
     _camera = Camera3D.new()
@@ -134,6 +122,7 @@ func _build_camera() -> void:
     material.emission_energy_multiplier = 0.85
     attack_range_visual.material_override = material
     add_child(attack_range_visual)
+    configure_ship_camera()
 
 func _material(color: Color) -> StandardMaterial3D:
     var material := StandardMaterial3D.new()
@@ -170,7 +159,10 @@ func _physics_process(delta: float) -> void:
         return
     _attack_cooldown = maxf(_attack_cooldown - delta, 0.0)
     var controller := get_parent() as Main3D
-    if controller == null or not controller.game_started or controller.mission_completed or controller.mission_failed:
+    if controller == null or (not controller.game_started and not controller.ship_active) or controller.mission_completed or controller.mission_failed:
+        return
+    if controller.ship_active:
+        _tick_ship(controller)
         return
     if controller.minigame_active and controller.minigame_peer_id == peer_id:
         velocity = Vector3.ZERO
@@ -223,9 +215,9 @@ func _spawn_footstep_particle() -> void:
     mat.emission = Color(0.4, 0.7, 0.9)
     mat.emission_energy_multiplier = 0.8
     particle.material_override = mat
-    particle.global_position = global_position + Vector3(randf_range(-0.15, 0.15), 0.05, randf_range(-0.15, 0.15))
     get_parent().add_child(particle)
-    var tween := create_tween()
+    particle.global_position = global_position + Vector3(randf_range(-0.15, 0.15), 0.05, randf_range(-0.15, 0.15))
+    var tween := particle.create_tween()
     tween.set_parallel(true)
     tween.tween_property(particle, "global_position:y", -0.2, 0.3)
     tween.tween_property(particle, "scale", Vector3.ZERO, 0.3)
@@ -240,3 +232,23 @@ func sync_transform(next_position: Vector3) -> void:
         return
     _target_position = next_position
     _has_target_position = true
+
+func _tick_ship(controller: Main3D) -> void:
+    var ship := controller._ship_session
+    if ship.has_panel():
+        velocity = Vector3.ZERO
+        return
+    var movement := Input.get_vector("move_left", "move_right", "move_up", "move_down")
+    velocity = Vector3(movement.x * SPEED, 0, movement.y * SPEED)
+    move_and_slide()
+    var bounds := ShipHub3D.WALK_BOUNDS if ship.in_hub else Vector2(9.9, 6.2)
+    global_position.x = clampf(global_position.x, -bounds.x, bounds.x)
+    global_position.z = clampf(global_position.z, -bounds.y, bounds.y)
+    if Input.is_action_just_pressed("repair"):
+        ship.request("interact")
+    if not ship.in_hub:
+        for action in ["scan", "repair", "pickup", "deposit", "attack", "revive"]:
+            if Input.is_action_just_pressed(action):
+                ship.request("train_" + action)
+    if Engine.get_physics_frames() % 2 == 0:
+        sync_transform.rpc(global_position)

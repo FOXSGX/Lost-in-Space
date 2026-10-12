@@ -17,7 +17,9 @@ func run() -> void:
     root.add_child(main)
     await process_frame
     main._show_home()
+    main._ship_session.persistence_enabled = false
     main._create_host()
+    main._start_planet()
     await process_frame
     check(main.game_started, "合同测试未能登陆霜烬星")
     check(main.sample_positions.size() == 2 and main.samples.size() == 2, "异常冰样没有完整生成")

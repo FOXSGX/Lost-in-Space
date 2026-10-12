@@ -7,7 +7,9 @@ func run() -> void:
     var main := load("res://scenes/main_3d.tscn").instantiate() as Main3D
     root.add_child(main)
     await process_frame
+    main._ship_session.persistence_enabled = false
     main._create_host()
+    main._start_planet()
     await process_frame
     main._start_planet()
     await process_frame

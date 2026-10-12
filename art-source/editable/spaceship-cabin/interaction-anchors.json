@@ -1,0 +1,108 @@
+{
+  "asset": "ship_hub.glb",
+  "coordinate_system": "Y up, cockpit toward -Z, metres",
+  "character_reference_height": 2.14,
+  "note": "Implemented prototype floor interaction points; gameplay and collision are maintained in game/scripts/ship_hub_3d.gd and ship_session_3d.gd.",
+  "anchors": [
+    {
+      "id": "planet_selection",
+      "status": "prototype_implemented",
+      "mesh_prefix": "Bridge/console_",
+      "player_position": [
+        6.2,
+        0,
+        -12.32
+      ],
+      "facing": [
+        0.0,
+        0.0,
+        -1.0
+      ],
+      "suggested_action": "Open the next-planet selection interface"
+    },
+    {
+      "id": "storage",
+      "status": "prototype_implemented",
+      "mesh_prefix": "Cargo/",
+      "player_position": [
+        -16.0,
+        0,
+        4.45
+      ],
+      "facing": [
+        -1.0,
+        0.0,
+        0.0
+      ],
+      "suggested_action": "Open ship storage"
+    },
+    {
+      "id": "airlock",
+      "status": "prototype_implemented",
+      "mesh_prefix": "Airlock/",
+      "player_position": [
+        0,
+        0,
+        14.15
+      ],
+      "facing": [
+        0.0,
+        0.0,
+        1.0
+      ],
+      "suggested_action": "Enter or leave the ship"
+    },
+    {
+      "id": "repair_bench",
+      "status": "prototype_implemented",
+      "mesh_prefix": "Repair/",
+      "player_position": [
+        16.6,
+        0,
+        -2.98
+      ],
+      "facing": [
+        1.0,
+        0.0,
+        0.0
+      ],
+      "suggested_action": "Inspect or repair equipment"
+    },
+    {
+      "id": "recharge",
+      "status": "prototype_implemented",
+      "mesh_prefix": "Recharge/",
+      "player_position": [
+        16.75,
+        0,
+        10.18
+      ],
+      "facing": [
+        1.0,
+        0.0,
+        0.0
+      ],
+      "suggested_action": "Replenish oxygen or energy if used by the game rules"
+    },
+    {
+      "id": "mission_terminal",
+      "status": "prototype_implemented",
+      "mesh_prefix": "Mission/",
+      "player_position": [
+        -16.7,
+        0,
+        -9.5
+      ],
+      "facing": [
+        -1.0,
+        0.0,
+        -1.0
+      ],
+      "suggested_action": "Show mission notes"
+    }
+  ],
+  "hull_size": [
+    42,
+    33
+  ]
+}

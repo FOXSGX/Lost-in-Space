@@ -23,7 +23,9 @@ func run() -> void:
     root.add_child(main)
     await process_frame
     main._show_home()
+    main._ship_session.persistence_enabled = false
     main._create_host()
+    main._start_planet()
     await process_frame
     var player := main.players[1] as SpacePlayer3D
     check(main.game_started, "功能测试未能登陆星球")

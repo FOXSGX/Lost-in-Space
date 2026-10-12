@@ -2,15 +2,15 @@
   "source": "art-source/ai-generated/protagonist/current/protagonist-faceted-simple-c-teal-turnaround.png",
   "front": "-Z",
   "palette": {
-    "suit": "#35c5c4",
-    "suit_dark": "#239c9d",
-    "visor": "#202735",
-    "visor_glint": "#596274",
-    "chest": "#eee5cc",
-    "yellow": "#ffb928",
-    "glove": "#252b39",
-    "boot": "#292e3b",
-    "pack": "#31b4b3"
+    "suit": "#188f96",
+    "suit_dark": "#12676f",
+    "visor": "#141a27",
+    "visor_glint": "#687488",
+    "chest": "#d9cbb1",
+    "yellow": "#e9a51d",
+    "glove": "#202633",
+    "boot": "#222936",
+    "pack": "#19767d"
   },
   "parts": [
     {"name":"Torso","shape":"ico","position":[0,0.90,0],"size":[0.51,0.48,0.32],"color":"suit"},
