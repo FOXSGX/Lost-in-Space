@@ -1,0 +1,91 @@
+Godot Engine v4.7.2.stable.official.ed1daf0bf - https://godotengine.org
+
+ERROR: 暴风雪扫描应采用有限且缩小的最大范围
+   at: push_error (core/variant/variant_utility.cpp:1023)
+   GDScript backtrace (most recent call first):
+       [0] check (res://tests/frost_controls.gd:10)
+       [1] run (res://tests/frost_controls.gd:71)
+ERROR: No multiplayer peer is assigned. Unable to get unique ID.
+   at: get_unique_id (modules/multiplayer/scene_multiplayer.cpp:531)
+   GDScript backtrace (most recent call first):
+       [0] _update_storm_overlay (res://scripts/main.gd:188)
+       [1] _set_stage_visuals (res://scripts/main.gd:1574)
+       [2] _leave_network (res://scripts/main.gd:1623)
+       [3] run (res://tests/frost_controls.gd:123)
+ERROR: No multiplayer peer is assigned. Unable to get unique ID.
+   at: get_unique_id (modules/multiplayer/scene_multiplayer.cpp:531)
+   GDScript backtrace (most recent call first):
+       [0] _draw (res://scripts/player.gd:168)
+ERROR: No multiplayer peer is assigned. Unable to get unique ID.
+   at: get_unique_id (modules/multiplayer/scene_multiplayer.cpp:531)
+   GDScript backtrace (most recent call first):
+       [0] _draw (res://scripts/player.gd:168)
+ERROR: No multiplayer peer is assigned. Unable to get unique ID.
+   at: get_unique_id (modules/multiplayer/scene_multiplayer.cpp:531)
+   GDScript backtrace (most recent call first):
+       [0] _process (res://scripts/player.gd:70)
+ERROR: No multiplayer peer is assigned. Unable to get unique ID.
+   at: get_unique_id (modules/multiplayer/scene_multiplayer.cpp:531)
+   GDScript backtrace (most recent call first):
+       [0] _process (res://scripts/player.gd:70)
+ERROR: No multiplayer peer is assigned. Unable to get unique ID.
+   at: get_unique_id (modules/multiplayer/scene_multiplayer.cpp:531)
+   GDScript backtrace (most recent call first):
+       [0] _process (res://scripts/enemy.gd:34)
+ERROR: No multiplayer peer is assigned. Unable to get unique ID.
+   at: get_unique_id (modules/multiplayer/scene_multiplayer.cpp:531)
+   GDScript backtrace (most recent call first):
+       [0] _process (res://scripts/enemy.gd:34)
+ERROR: No multiplayer peer is assigned. Unable to get unique ID.
+   at: get_unique_id (modules/multiplayer/scene_multiplayer.cpp:531)
+   GDScript backtrace (most recent call first):
+       [0] _process (res://scripts/enemy.gd:34)
+ERROR: No multiplayer peer is assigned. Unable to get unique ID.
+   at: get_unique_id (modules/multiplayer/scene_multiplayer.cpp:531)
+   GDScript backtrace (most recent call first):
+       [0] _process (res://scripts/enemy.gd:34)
+ERROR: No multiplayer peer is assigned. Unable to get unique ID.
+   at: get_unique_id (modules/multiplayer/scene_multiplayer.cpp:531)
+   GDScript backtrace (most recent call first):
+       [0] _process (res://scripts/enemy.gd:34)
+ERROR: No multiplayer peer is assigned. Unable to get unique ID.
+   at: get_unique_id (modules/multiplayer/scene_multiplayer.cpp:531)
+   GDScript backtrace (most recent call first):
+       [0] _process (res://scripts/enemy.gd:34)
+ERROR: No multiplayer peer is assigned. Unable to get unique ID.
+   at: get_unique_id (modules/multiplayer/scene_multiplayer.cpp:531)
+   GDScript backtrace (most recent call first):
+       [0] _process (res://scripts/enemy.gd:34)
+ERROR: No multiplayer peer is assigned. Unable to get unique ID.
+   at: get_unique_id (modules/multiplayer/scene_multiplayer.cpp:531)
+   GDScript backtrace (most recent call first):
+       [0] _process (res://scripts/enemy.gd:34)
+ERROR: No multiplayer peer is assigned. Unable to get unique ID.
+   at: get_unique_id (modules/multiplayer/scene_multiplayer.cpp:531)
+   GDScript backtrace (most recent call first):
+       [0] _process (res://scripts/enemy.gd:34)
+ERROR: No multiplayer peer is assigned. Unable to get unique ID.
+   at: get_unique_id (modules/multiplayer/scene_multiplayer.cpp:531)
+   GDScript backtrace (most recent call first):
+       [0] _process (res://scripts/enemy.gd:34)
+ERROR: No multiplayer peer is assigned. Unable to get unique ID.
+   at: get_unique_id (modules/multiplayer/scene_multiplayer.cpp:531)
+   GDScript backtrace (most recent call first):
+       [0] _process (res://scripts/enemy.gd:34)
+ERROR: No multiplayer peer is assigned. Unable to get unique ID.
+   at: get_unique_id (modules/multiplayer/scene_multiplayer.cpp:531)
+   GDScript backtrace (most recent call first):
+       [0] _process (res://scripts/enemy.gd:34)
+ERROR: No multiplayer peer is assigned. Unable to get unique ID.
+   at: get_unique_id (modules/multiplayer/scene_multiplayer.cpp:531)
+   GDScript backtrace (most recent call first):
+       [0] _process (res://scripts/enemy.gd:34)
+ERROR: No multiplayer peer is assigned. Unable to get unique ID.
+   at: get_unique_id (modules/multiplayer/scene_multiplayer.cpp:531)
+   GDScript backtrace (most recent call first):
+       [0] _process (res://scripts/player.gd:70)
+ERROR: No multiplayer peer is assigned. Unable to get unique ID.
+   at: get_unique_id (modules/multiplayer/scene_multiplayer.cpp:531)
+   GDScript backtrace (most recent call first):
+       [0] _process (res://scripts/player.gd:70)
+霜烬星行为测试：32 项检查，1 项失败

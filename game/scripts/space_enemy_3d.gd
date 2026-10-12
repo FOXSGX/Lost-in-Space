@@ -13,9 +13,9 @@ var _has_target_position := false
 func setup(id: int, player_count: int = 1) -> void:
     enemy_id = id
     name = "Enemy3D_%d" % id
-    max_health = 3 + maxi((player_count - 1) / 2, 0)
+    max_health = 4 + maxi((player_count - 1) / 2, 0)
     health = max_health
-    move_speed = 1.8 + maxi(player_count - 1, 0) * 0.12
+    move_speed = 3.05 + maxi(player_count - 1, 0) * 0.15
     attack_damage = 2 if player_count >= 4 else 1
     _build_visual()
 
@@ -81,7 +81,7 @@ func _build_visual() -> void:
     danger_light.position.y = 0.8
     add_child(danger_light)
     var label := Label3D.new()
-    label.text = "【敌人】\n空格攻击"
+    label.text = "【霜噬生物】\n追踪热量 · 空格攻击"
     label.position = Vector3(0.0, 1.85, 0.0)
     label.font_size = 46
     label.pixel_size = 0.011
@@ -107,8 +107,20 @@ func _glow_material(color: Color) -> StandardMaterial3D:
     material.roughness = 0.38
     return material
 
-func server_tick(delta: float, players: Dictionary) -> Dictionary:
+func server_tick(delta: float, players: Dictionary, lure_position := Vector3.ZERO, lure_active := false, storm_active := false) -> Dictionary:
     if players.is_empty():
+        return {"sync": false}
+    if lure_active:
+        var lure_direction := lure_position - global_position
+        lure_direction.y = 0.0
+        if lure_direction.length() > 1.0:
+            velocity = lure_direction.normalized() * move_speed * (1.30 if storm_active else 1.15)
+            move_and_slide()
+        else:
+            velocity = Vector3.ZERO
+        if Engine.get_physics_frames() % 2 == 0:
+            sync_transform.rpc(global_position)
+            return {"sync": true}
         return {"sync": false}
     var nearest: SpacePlayer3D
     var nearest_distance := INF
@@ -117,25 +129,31 @@ func server_tick(delta: float, players: Dictionary) -> Dictionary:
         if player == null or player.downed:
             continue
         var distance := global_position.distance_to(player.global_position)
-        if distance < nearest_distance:
-            nearest_distance = distance
+        # 霜噬生物会优先追踪携带热能电池、体温较高的目标，
+        # 让搬运路线成为需要队友掩护和临场判断的风险选择。
+        var heat_bias := float(player.carrying) * 3.0 + player.warmth * 1.2
+        var weighted_distance := distance - heat_bias
+        if weighted_distance < nearest_distance:
+            nearest_distance = weighted_distance
             nearest = player
     if nearest == null:
         velocity = Vector3.ZERO
         return {"sync": false}
     var direction := nearest.global_position - global_position
     direction.y = 0.0
-    if nearest_distance > 1.15:
-        velocity = direction.normalized() * move_speed
+    var actual_distance := global_position.distance_to(nearest.global_position)
+    var storm_speed_scale := 1.32 if storm_active else 1.0
+    if actual_distance > 1.35:
+        velocity = direction.normalized() * move_speed * storm_speed_scale
         move_and_slide()
     else:
         velocity = Vector3.ZERO
         attack_timer -= delta
         if attack_timer <= 0.0:
-            attack_timer = 1.0
+            attack_timer = 0.72 if storm_active else 1.0
             var controller := get_parent() as Main3D
             if controller != null:
-                controller.damage_player(nearest.peer_id, attack_damage)
+                controller.damage_player(nearest.peer_id, attack_damage + (1 if storm_active else 0))
     if Engine.get_physics_frames() % 2 == 0:
         sync_transform.rpc(global_position)
         return {"sync": true}

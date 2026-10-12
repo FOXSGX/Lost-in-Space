@@ -1,7 +1,6 @@
 extends CharacterBody3D
 class_name SpacePlayer3D
 
-const VISUAL_SCENE := preload("res://scenes/protagonist_visual.tscn")
 const SPEED := 5.8
 const ATTACK_RANGE := 3.75
 const ATTACK_INTERVAL := 0.35
@@ -19,8 +18,6 @@ var _target_position := Vector3.ZERO
 var _has_target_position := false
 var _attack_cooldown := 0.0
 var attack_range_visual: MeshInstance3D
-var _visual: ProtagonistVisual
-var _last_visual_position := Vector3.ZERO
 
 func setup(id: int, color: Color) -> void:
     peer_id = id
@@ -44,38 +41,74 @@ func _ready() -> void:
         _build_camera()
 
 func _build_visual(color: Color) -> void:
-    _visual = VISUAL_SCENE.instantiate() as ProtagonistVisual
-    _visual.set_team_color(color)
-    add_child(_visual)
-
-func _process(delta: float) -> void:
-    if _visual == null:
-        return
-    var motion := global_position - _last_visual_position
-    if is_multiplayer_authority():
-        motion = velocity
-    elif delta > 0.0:
-        motion /= delta
-    _last_visual_position = global_position
-    _visual.update_state(delta, Vector2(motion.x, motion.z), downed, scan_lock_remaining > 0.0, carrying > 0, health)
-
-func show_attack_animation() -> void:
-    if _visual != null:
-        _visual.trigger_attack()
-
-func show_rescue_animation(active: bool) -> void:
-    if _visual != null:
-        _visual.set_rescuing(active)
+    var root := Node3D.new()
+    root.name = "AstronautVisual"
+    add_child(root)
+    var body := MeshInstance3D.new()
+    var body_mesh := CapsuleMesh.new()
+    body_mesh.radius = 0.36
+    body_mesh.height = 1.05
+    body.position.y = 0.76
+    body.mesh = body_mesh
+    body.material_override = _material(color)
+    body.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
+    root.add_child(body)
+    var helmet := MeshInstance3D.new()
+    var helmet_mesh := SphereMesh.new()
+    helmet_mesh.radius = 0.29
+    helmet_mesh.height = 0.58
+    helmet.position.y = 1.43
+    helmet.mesh = helmet_mesh
+    helmet.material_override = _material(Color("#e8f7ff"))
+    helmet.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
+    root.add_child(helmet)
+    var visor := MeshInstance3D.new()
+    var visor_mesh := BoxMesh.new()
+    visor_mesh.size = Vector3(0.36, 0.16, 0.06)
+    visor.position = Vector3(0.0, 1.45, -0.27)
+    visor.mesh = visor_mesh
+    visor.material_override = _material(Color("#1a4d62"))
+    root.add_child(visor)
+    var backpack := MeshInstance3D.new()
+    var backpack_mesh := BoxMesh.new()
+    backpack_mesh.size = Vector3(0.48, 0.55, 0.20)
+    backpack.position = Vector3(0.0, 0.78, 0.28)
+    backpack.mesh = backpack_mesh
+    backpack.material_override = _material(Color("#254d62"))
+    backpack.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
+    root.add_child(backpack)
+    var shoulder := MeshInstance3D.new()
+    var shoulder_mesh := SphereMesh.new()
+    shoulder_mesh.radius = 0.11
+    shoulder_mesh.height = 0.22
+    shoulder.position = Vector3(0.36, 1.02, -0.02)
+    shoulder.mesh = shoulder_mesh
+    shoulder.material_override = _glow_material(color)
+    root.add_child(shoulder)
+    var ring := MeshInstance3D.new()
+    var ring_mesh := TorusMesh.new()
+    ring_mesh.inner_radius = 0.48
+    ring_mesh.outer_radius = 0.51
+    ring_mesh.rings = 24
+    ring_mesh.ring_segments = 8
+    ring.position.y = 0.08
+    ring.mesh = ring_mesh
+    ring.material_override = _glow_material(color)
+    root.add_child(ring)
+    var weapon := MeshInstance3D.new()
+    var weapon_mesh := BoxMesh.new()
+    weapon_mesh.size = Vector3(0.17, 0.18, 0.55)
+    weapon.mesh = weapon_mesh
+    weapon.position = Vector3(0.36, 0.82, -0.3)
+    weapon.material_override = _material(Color("#d5f3ff"))
+    root.add_child(weapon)
 
 func _build_camera() -> void:
     _camera = Camera3D.new()
     _camera.name = "OrthographicCamera3D"
     _camera.projection = Camera3D.PROJECTION_ORTHOGONAL
-    _camera.size = 19.0
+    _camera.size = 28.0
     _camera.position = Vector3(0.0, 16.0, 15.0)
-    var controller := get_parent() as Main3D
-    if controller != null and controller.ship_active:
-        _camera.position.x = -position.x
     _camera.rotation_degrees = Vector3(-46.0, 0.0, 0.0)
     _camera.current = true
     add_child(_camera)
@@ -118,8 +151,8 @@ func _glow_material(color: Color) -> StandardMaterial3D:
     material.metallic = 0.15
     return material
 
-func begin_scan(duration: float, cooldown: float, origin: Vector3) -> void:
-    scan_lock_remaining = duration
+func begin_scan(startup: float, cooldown: float, origin: Vector3) -> void:
+    scan_lock_remaining = startup
     scan_cooldown_remaining = cooldown
     scan_origin = origin
     global_position = origin
@@ -137,16 +170,25 @@ func _physics_process(delta: float) -> void:
         return
     _attack_cooldown = maxf(_attack_cooldown - delta, 0.0)
     var controller := get_parent() as Main3D
-    if controller == null or (not controller.game_started and not controller.ship_active) or controller.mission_completed or controller.mission_failed:
+    if controller == null or not controller.game_started or controller.mission_completed or controller.mission_failed:
         return
-    if controller.ship_active and controller._screen_view == "route":
+    if controller.minigame_active and controller.minigame_peer_id == peer_id:
         velocity = Vector3.ZERO
         return
-    if controller.game_started and Input.is_action_just_pressed("scan"):
+    if controller.is_journal_visible():
+        velocity = Vector3.ZERO
+        return
+    if Input.is_action_just_pressed("scan"):
         controller.start_scan_for_peer(peer_id)
         return
     var input_vector := Input.get_vector("move_left", "move_right", "move_up", "move_down")
-    var move_speed := SPEED * 0.72 if carrying > 0 else SPEED
+    var move_speed := SPEED
+    if carrying == 1:
+        move_speed = SPEED * 0.72
+    elif carrying == 2:
+        move_speed = SPEED * 0.58
+    if controller.storm_active:
+        move_speed *= 0.68
     var was_moving := velocity.length() > 0.1
     if scan_lock_remaining <= 0.0:
         velocity = Vector3(input_vector.x * move_speed, 0.0, input_vector.y * move_speed)
@@ -154,16 +196,13 @@ func _physics_process(delta: float) -> void:
         # 移动反馈 - 每隔一段时间生成脚步粒子
         if velocity.length() > 0.1 and Engine.get_physics_frames() % 15 == 0:
             _spawn_footstep_particle()
-    global_position.x = clampf(global_position.x, -9.9, 9.9) if controller.ship_active else clampf(global_position.x, -18.0, 18.0)
-    global_position.z = clampf(global_position.z, -6.2, 6.2) if controller.ship_active else clampf(global_position.z, -11.0, 11.0)
-    if controller.ship_active:
-        for ship_action in ["scan", "repair", "pickup", "deposit", "attack", "revive"]:
-            if Input.is_action_just_pressed(ship_action):
-                controller.handle_ship_action(peer_id, ship_action)
-        if Engine.get_physics_frames() % 2 == 0:
-            sync_transform.rpc(global_position)
-        return
+    var map_half := controller.MAP_SIZE * 0.5 - Vector2(1.0, 1.0)
+    global_position.x = clampf(global_position.x, -map_half.x, map_half.x)
+    global_position.z = clampf(global_position.z, -map_half.y, map_half.y)
     for action in ["repair", "pickup", "deposit", "revive"]:
+        if Input.is_action_just_pressed(action):
+            controller.handle_action(peer_id, action)
+    for action in ["signal_high", "signal_low"]:
         if Input.is_action_just_pressed(action):
             controller.handle_action(peer_id, action)
     if Input.is_action_pressed("attack") and _attack_cooldown <= 0.0 and scan_lock_remaining <= 0.0:
@@ -186,14 +225,11 @@ func _spawn_footstep_particle() -> void:
     particle.material_override = mat
     particle.global_position = global_position + Vector3(randf_range(-0.15, 0.15), 0.05, randf_range(-0.15, 0.15))
     get_parent().add_child(particle)
-    var tween := particle.create_tween()
+    var tween := create_tween()
     tween.set_parallel(true)
     tween.tween_property(particle, "global_position:y", -0.2, 0.3)
     tween.tween_property(particle, "scale", Vector3.ZERO, 0.3)
-    tween.finished.connect(func():
-        if is_instance_valid(particle):
-            particle.queue_free()
-    )
+    tween.finished.connect(func(): particle.queue_free())
 
 @rpc("authority", "unreliable_ordered", "call_remote")
 func sync_transform(next_position: Vector3) -> void:
@@ -204,4 +240,3 @@ func sync_transform(next_position: Vector3) -> void:
         return
     _target_position = next_position
     _has_target_position = true
-

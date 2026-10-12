@@ -8,9 +8,7 @@ GitHub 仓库：[FOXSGX/Lost-in-Space](https://github.com/FOXSGX/Lost-in-Space)�
 
 当前 `game/` 已切换为 Godot 4 的真实 3D 运行架构：使用 `Node3D`、正交 `Camera3D`、`CharacterBody3D` 和 `StaticBody3D`，以低模 3D + 正交视角呈现《弓箭手大作战》风格的 2.5D 体验。原 2D/伪 2.5D 版本已备份到 `backups/霜烬星-2.5d-20261009/`。
 
-当前可试玩流程为“主界面 → 可移动的飞船教学区 → 星际航线图 → 霜烬星”。创建主机后在飞船内用 WASD 或方向键移动，依次到发光操作台练习 `Q` 扫描、`E` 修复、`F` 拾取、`G` 投送、空格攻击和 `R` 救援。全员完成后，到航线终端按 `E`，由主机确认登陆。飞船和星球都使用正交视角的低模 3D 场景；目前飞船是玩法原型，美术风格仍可继续调整。
-
-主角现使用按青绿色概念三视图制作的低模 3D 宇航员；可编辑模型数据、预览图和 Godot 接入说明见 [`art-source/README.md`](art-source/README.md) 与 [`game/docs/protagonist-3d.md`](game/docs/protagonist-3d.md)。
+前端流程为“主界面 → 飞船准备区 → 星际航线图 → 霜烬星”，中间页面使用 3D 舰桥背景和 CanvasLayer 面板，主机在航线图确认登陆后才开始星球关卡。
 
 ## 从这里开始
 

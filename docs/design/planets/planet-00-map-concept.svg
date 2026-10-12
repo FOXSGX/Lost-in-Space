@@ -1,0 +1,180 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1290" height="790" viewBox="0 0 1290 790" font-family="Microsoft YaHei, PingFang SC, Noto Sans CJK SC, sans-serif">
+<defs>
+<style>
+.w{fill:none;stroke:#0d2533;stroke-linecap:round;stroke-linejoin:round}
+.r{fill:none;stroke-linecap:round;stroke-linejoin:round}
+.t{font-size:12px;fill:#e2f4f9}
+.ts{font-size:11px;fill:#a9cbd6}
+.rg{font-size:19px;font-weight:700;fill:#f4fcff;letter-spacing:2px}
+.rs{font-size:11px;fill:#cdeaf2}
+.lg{font-size:12px;fill:#cfe6ee}
+.lh{font-size:13px;font-weight:700;fill:#65e1e0}
+.ic{font-size:11px;font-weight:700;text-anchor:middle;dominant-baseline:central}
+</style>
+<radialGradient id="lake" cx="50%" cy="45%" r="60%"><stop offset="0" stop-color="#9ad9e8"/><stop offset="1" stop-color="#4f97ad"/></radialGradient>
+<radialGradient id="heat"><stop offset="0" stop-color="#ffb35c" stop-opacity=".5"/><stop offset="1" stop-color="#ffb35c" stop-opacity="0"/></radialGradient>
+<pattern id="cliff" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(35)"><rect width="14" height="14" fill="#0a1a24"/><line x1="0" y1="0" x2="0" y2="14" stroke="#10283a" stroke-width="5"/></pattern>
+<filter id="glow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="2.5" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+<clipPath id="mapclip"><rect width="960" height="640"/></clipPath>
+</defs>
+<rect width="1290" height="790" fill="#050d14"/>
+<text x="40" y="38" font-size="24" font-weight="700" fill="#eaf8fc">霜烬星 · 地图概念草图（灰盒 v0）</text>
+<text x="40" y="58" class="ts">俯视示意 · 96×64 世界单位 · 网格 1 格 = 10 世界单位 · 只表达空间结构，不代表最终美术</text>
+<g transform="translate(40,70)">
+<rect width="960" height="640" fill="url(#cliff)"/>
+<g stroke="#ffffff" stroke-opacity=".05">
+<path d="M100,0V640M200,0V640M300,0V640M400,0V640M500,0V640M600,0V640M700,0V640M800,0V640M900,0V640M0,100H960M0,200H960M0,300H960M0,400H960M0,500H960M0,600H960"/>
+</g>
+<!-- 通路底层（冰崖边缘） -->
+<g class="w">
+<path stroke-width="54" d="M140,520 C200,495 150,470 195,440 C240,410 170,360 215,310 C255,265 205,215 170,180"/>
+<path stroke-width="52" d="M180,550 C270,520 340,450 410,395"/>
+<path stroke-width="46" d="M290,175 C335,205 360,235 385,270"/>
+<path stroke-width="26" d="M300,62 C350,62 400,70 435,88"/>
+<path stroke-width="28" d="M530,92 C560,85 585,80 610,78"/>
+<path stroke-width="48" d="M600,375 C650,405 680,425 715,445"/>
+<path stroke-width="36" d="M915,180 C925,250 905,320 885,385"/>
+<path stroke-width="40" d="M880,540 L880,565"/>
+<path stroke-width="30" d="M850,605 C700,620 520,620 330,612 C250,608 190,600 150,590"/>
+<path stroke-width="28" d="M165,385 L100,375"/>
+<path stroke-width="22" d="M940,390 C945,360 935,330 928,318"/>
+</g>
+<!-- 区域地面 -->
+<path d="M30,500 C60,468 150,468 188,505 C208,542 182,612 110,622 C48,624 18,560 30,500Z" fill="#3f7186"/>
+<path d="M45,35 L305,25 L335,110 L290,195 L150,205 L50,160Z" fill="#6497aa"/>
+<path d="M80,55 L280,48 L302,110 L265,170 L155,178 L80,140Z" fill="none" stroke="#8cbdcc" stroke-width="1.5" opacity=".6"/>
+<path d="M120,75 L245,70 L262,112 L235,150 L160,155 L118,128Z" fill="none" stroke="#a6d0dc" stroke-width="1.2" opacity=".5"/>
+<ellipse cx="490" cy="330" rx="152" ry="110" fill="#3f7186"/>
+<ellipse cx="490" cy="330" rx="138" ry="96" fill="url(#lake)"/>
+<ellipse cx="480" cy="98" rx="52" ry="38" fill="#2b5467"/>
+<path d="M600,45 L760,28 L945,65 L948,175 L885,205 L770,170 L645,120Z" fill="#64554f"/>
+<path d="M716,30 L748,32 L742,178 L722,176Z" fill="#03080d"/>
+<path d="M700,385 L950,368 L952,540 L840,548 L700,522Z" fill="#3a6072"/>
+<circle cx="880" cy="592" r="36" fill="#3f7186"/>
+<ellipse cx="925" cy="300" rx="25" ry="21" fill="#3a6072"/>
+<ellipse cx="75" cy="372" rx="33" ry="27" fill="#35647a"/>
+<ellipse cx="200" cy="445" rx="46" ry="34" fill="#35647a"/>
+<!-- 通路地面 -->
+<g class="r" stroke="#3f7186">
+<path stroke-width="38" d="M140,520 C200,495 150,470 195,440 C240,410 170,360 215,310 C255,265 205,215 170,180"/>
+<path stroke-width="36" d="M180,550 C270,520 340,450 410,395"/>
+<path stroke-width="30" d="M290,175 C335,205 360,235 385,270"/>
+<path stroke-width="12" d="M300,62 C350,62 400,70 435,88"/>
+<path stroke-width="32" d="M600,375 C650,405 680,425 715,445"/>
+<path stroke-width="22" d="M915,180 C925,250 905,320 885,385"/>
+<path stroke-width="24" d="M880,540 L880,565"/>
+<path stroke-width="16" d="M850,605 C700,620 520,620 330,612 C250,608 190,600 150,590"/>
+<path stroke-width="14" d="M165,385 L100,375"/>
+<path stroke-width="10" d="M940,390 C945,360 935,330 928,318"/>
+</g>
+<!-- 薄冰桥（暴风雪中封闭） -->
+<path d="M530,92 C560,85 585,80 610,78" class="r" stroke="#bfe9f5" stroke-width="14" stroke-dasharray="10 5"/>
+<!-- 中央冰湖薄冰裂纹 -->
+<g class="r" stroke="#e8fbff" stroke-width="1.6" opacity=".8">
+<path d="M430,300 L470,318 L455,350 L500,372"/><path d="M470,318 L520,300 L560,322"/><path d="M455,350 L420,365"/>
+</g>
+<!-- 热泉走廊：暖色热脉 -->
+<g fill="url(#heat)"><circle cx="680" cy="95" r="34"/><circle cx="800" cy="120" r="30"/><circle cx="900" cy="105" r="30"/></g>
+<!-- 残骸湾：运输舱残骸组成的迷宫 -->
+<g fill="#16232c" stroke="#5f7d88" stroke-width="1.5">
+<rect x="730" y="400" width="80" height="22" transform="rotate(-18 770 411)"/>
+<rect x="830" y="420" width="22" height="70"/>
+<rect x="760" y="455" width="50" height="18" transform="rotate(25 785 464)"/>
+<rect x="870" y="470" width="60" height="18"/>
+<rect x="890" y="390" width="20" height="50" transform="rotate(12 900 415)"/>
+</g>
+<!-- 运输舱舱体（室内小空间） -->
+<rect x="842" y="497" width="58" height="34" rx="6" fill="#26343d" stroke="#8ff1a0" stroke-width="2" transform="rotate(-8 871 514)"/>
+<!-- 回声峡谷：通信阵列 -->
+<g fill="#f2b86b"><rect x="183" y="300" width="5" height="16"/><rect x="200" y="290" width="5" height="16"/><rect x="217" y="282" width="5" height="16"/><rect x="234" y="276" width="5" height="16"/></g>
+<!-- 可破冰墙 -->
+<path d="M155,368 L165,402" class="r" stroke="#9fe7ff" stroke-width="7" stroke-dasharray="4 3"/>
+<!-- 单向滑坡 -->
+<g fill="#9ad9e8"><path d="M880,560 l-9,-12 h18z"/><path d="M880,575 l-9,-12 h18z" opacity=".6"/></g>
+<!-- 捷径门 -->
+<rect x="140" y="582" width="10" height="18" fill="#ffd25a"/>
+<!-- 未探索迷雾示意（右上角区域压暗） -->
+<path d="M600,45 L760,28 L945,65 L948,175 L885,205 L770,170 L645,120Z" fill="#050d14" opacity=".35"/>
+<!-- 区域名称 -->
+<g text-anchor="middle">
+<text x="190" y="128" class="rg">静默台地</text><text x="190" y="146" class="rs">高处 · 可俯瞰全图</text>
+<text x="490" y="250" class="rg">中央冰湖</text><text x="490" y="268" class="rs">开阔 · 薄冰会裂</text>
+<text x="800" y="62" class="rg">热脉裂谷</text><text x="800" y="80" class="rs">温暖 · 敌人巢穴</text>
+<text x="830" y="378" class="rg">残骸湾</text><text x="760" y="510" class="rs">残骸迷宫</text>
+<text x="105" y="250" class="rg">回声峡谷</text><text x="105" y="268" class="rs">弯曲窄谷</text>
+<text x="110" y="650" class="rg" opacity="0">.</text>
+<text x="480" y="62" class="rs">冰洞</text>
+</g>
+<!-- 兴趣点图标 -->
+<g filter="url(#glow)">
+<circle cx="100" cy="545" r="13" fill="#ffb35c"/><text x="100" y="545" class="ic" fill="#2d1a06">安</text>
+<circle cx="190" cy="92" r="11" fill="#79d8ff"/><text x="190" y="92" class="ic" fill="#061521">★</text>
+<circle cx="250" cy="70" r="11" fill="#eaf8fc"/><text x="250" y="70" class="ic" fill="#061521">眼</text>
+<circle cx="210" cy="292" r="11" fill="#f2b86b"/><text x="210" y="292" class="ic" fill="#2d1a06">★</text>
+<circle cx="730" cy="105" r="11" fill="#a78bfa"/><text x="730" y="105" class="ic" fill="#140a2e">★</text>
+<circle cx="871" cy="514" r="11" fill="#8ff1a0"/><text x="871" y="514" class="ic" fill="#06210c">★</text>
+<circle cx="880" cy="600" r="13" fill="#8ff1a0"/><text x="880" y="600" class="ic" fill="#06210c">撤</text>
+<circle cx="120" cy="170" r="10" fill="#55dfff"/><text x="120" y="170" class="ic" fill="#061521">信</text>
+<circle cx="440" cy="355" r="10" fill="#55dfff"/><text x="440" y="355" class="ic" fill="#061521">信</text>
+<circle cx="900" cy="150" r="10" fill="#55dfff"/><text x="900" y="150" class="ic" fill="#061521">信</text>
+<circle cx="480" cy="105" r="9" fill="#ffd25a"/><text x="480" y="105" class="ic" fill="#2d1a06">电</text>
+<circle cx="780" cy="440" r="9" fill="#ffd25a"/><text x="780" y="440" class="ic" fill="#2d1a06">电</text>
+<circle cx="200" cy="445" r="9" fill="#ffd25a"/><text x="200" y="445" class="ic" fill="#2d1a06">电</text>
+<circle cx="925" cy="300" r="9" fill="#ffd25a"/><text x="925" y="300" class="ic" fill="#2d1a06">电</text>
+<circle cx="75" cy="372" r="9" fill="#c9a7ff"/><text x="75" y="372" class="ic" fill="#140a2e">?</text>
+<circle cx="560" cy="345" r="9" fill="#c9a7ff"/><text x="560" y="345" class="ic" fill="#140a2e">?</text>
+<circle cx="660" cy="150" r="9" fill="#ff6d78"/><text x="660" y="150" class="ic" fill="#2b0508">!</text>
+<circle cx="820" cy="185" r="9" fill="#ff6d78"/><text x="820" y="185" class="ic" fill="#2b0508">!</text>
+</g>
+<!-- 视线提示：看得到但走不到 -->
+<path d="M905,295 C870,280 830,250 800,215" class="r" stroke="#ffd25a" stroke-width="1.3" stroke-dasharray="3 4" opacity=".8"/>
+<text x="805" y="258" class="ts" fill="#ffe08a">隔崖可见</text>
+<!-- 路线注释 -->
+<g class="ts">
+<text x="245" y="235">窄道</text>
+<text x="330" y="490">主路</text>
+<text x="545" y="74" fill="#d9f6ff">薄冰桥</text>
+<text x="640" y="430">冰脊坡</text>
+<text x="905" y="560">单向滑坡</text>
+<text x="420" y="632">外环捷径（从撤离点侧打开）</text>
+<text x="160" y="578" fill="#ffe08a">捷径门</text>
+<text x="105" y="410" fill="#bdefff">可破冰墙</text>
+<text x="335" y="58">冰檐小径</text>
+</g>
+<!-- 出生方向 -->
+<path d="M60,600 l20,-14" stroke="#ffb35c" stroke-width="2" class="r"/>
+<text x="20" y="628" class="ts" fill="#ffdb91">坠落点</text>
+</g>
+<!-- 图例与说明 -->
+<g transform="translate(1025,70)">
+<rect width="235" height="640" rx="12" fill="#0b1922" stroke="#1d3c4b"/>
+<text x="16" y="30" class="lh">图例</text>
+<g class="lg">
+<circle cx="26" cy="54" r="9" fill="#ffb35c"/><text x="44" y="58">安全屋 / 热源</text>
+<circle cx="26" cy="80" r="9" fill="#55dfff"/><text x="44" y="84">气象信标（修复后成热源）</text>
+<circle cx="26" cy="106" r="9" fill="#ffd25a"/><text x="44" y="110">热能电池</text>
+<circle cx="26" cy="132" r="9" fill="#79d8ff"/><text x="44" y="136">★ 地标（各区一个）</text>
+<circle cx="26" cy="158" r="9" fill="#c9a7ff"/><text x="44" y="162">? 隐藏补给 / 异常样本</text>
+<circle cx="26" cy="184" r="9" fill="#ff6d78"/><text x="44" y="188">! 敌人巢穴</text>
+<circle cx="26" cy="210" r="9" fill="#eaf8fc"/><text x="44" y="214">眼 高处观景点</text>
+<circle cx="26" cy="236" r="9" fill="#8ff1a0"/><text x="44" y="240">撤 投送 / 撤离点</text>
+<rect x="14" y="254" width="24" height="14" fill="url(#cliff)" stroke="#2a4b5c"/><text x="44" y="266">冰崖（不可通行）</text>
+<path d="M14,288 h24" stroke="#bfe9f5" stroke-width="8" stroke-dasharray="6 3"/><text x="44" y="292">薄冰桥（风暴封闭）</text>
+<path d="M14,312 h24" stroke="#9fe7ff" stroke-width="5" stroke-dasharray="4 3"/><text x="44" y="316">可破冰墙</text>
+<rect x="14" y="328" width="24" height="14" fill="#64554f"/><rect x="14" y="328" width="24" height="14" fill="#050d14" opacity=".35"/><text x="44" y="340">压暗 = 未探索迷雾</text>
+</g>
+<text x="16" y="380" class="lh">设计意图</text>
+<g class="lg">
+<text x="16" y="404">· 五个区域空间形状各不相同</text>
+<text x="16" y="426">· 区域间只靠窄道、桥、坡相连</text>
+<text x="16" y="448">· 台地观景点先看清全图结构</text>
+<text x="16" y="470">· 东侧电池隔崖可见，需绕路</text>
+<text x="16" y="492">· 滑坡单向，回程只能另找路</text>
+<text x="16" y="514">· 捷径门打开后回家路程减半</text>
+<text x="16" y="536">· 热脉裂谷暖和但敌人密集</text>
+<text x="16" y="558">· 薄冰桥是近路，风暴时断开</text>
+<text x="16" y="580">· 目标只在固定角落之间随机</text>
+<text x="16" y="612" class="ts">所有位置均为草案，可调整</text>
+</g>
+</g>
+</svg>
