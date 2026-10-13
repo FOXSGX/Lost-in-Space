@@ -40,6 +40,7 @@ var _hint: Label
 var _hint_panel: Panel
 var _ready_button: Button
 var _exit_button: Button
+var _market_button: Button
 var _panel: Panel
 var _title: Label
 var _body: Label
@@ -75,6 +76,7 @@ func _build_ui() -> void:
     _crew_label = controller._ui_label(_ship_panel, "", Vector2(16, 46), Vector2(386, 26), 14, Color("#c8e1d6"))
     _ready_button = controller._ui_button(controls, "准备出发", Vector2(1090, 22), Vector2(164, 46), func(): request("ready"), true)
     _exit_button = controller._ui_button(controls, "退出房间", Vector2(1090, 78), Vector2(164, 36), controller._show_home)
+    _market_button = controller._ui_button(controls, "星际集市", Vector2(900, 22), Vector2(164, 46), controller._show_trade, true)
     _hint_panel = controller._panel(_layer, Vector2(225, 634), Vector2(830, 62), Color(0.12, 0.24, 0.29, 0.94), Color("#93c1be"), 18)
     _hint = controller._ui_label(_hint_panel, "", Vector2(16, 8), Vector2(800, 48), 17, Color("#e6f9ff"))
     _hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -96,10 +98,11 @@ func tick(delta: float) -> void:
     _notice_remaining = maxf(_notice_remaining - delta, 0.0)
     _layer.visible = active or controller.game_started
     _pack_label.visible = controller.game_started
-    _ship_panel.visible = active and controller._screen_view != "route"
+    _ship_panel.visible = active and controller._screen_view == "ship"
     _ship_title.text = "归航号 · 船员主舱" if in_hub else "归航号 · 操作训练舱"
     _ready_button.visible = active and not _panel.visible and controller._screen_view == "ship"
     _exit_button.visible = _ready_button.visible
+    _market_button.visible = active and in_hub and controller._screen_view == "ship"
     _hint_panel.visible = active and not _panel.visible and controller._screen_view == "ship"
     var peer_id := multiplayer.get_unique_id()
     var bag: Dictionary = packs.get(peer_id, {})
@@ -221,7 +224,10 @@ func close_panel(resume := true) -> void:
         show_gameplay()
 
 func has_panel() -> bool:
-    return _panel.visible or (active and controller._screen_view == "route")
+    return _panel.visible or (active and controller._screen_view in ["route", "trade"])
+
+func notice_text() -> String:
+    return _notice if _notice_remaining > 0.0 else ""
 
 func request(action: String, item := "") -> void:
     if controller.is_host:
@@ -433,6 +439,8 @@ func show_notice(message: String) -> void:
     _notice = message
     _notice_remaining = 4.0
     _message.text = message
+    if controller._screen_view == "trade":
+        controller._refresh_trade_buttons()
 
 @rpc("authority", "call_local", "reliable")
 func switch_area(to_hub: bool) -> void:

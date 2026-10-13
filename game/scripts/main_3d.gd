@@ -67,6 +67,25 @@ const SIDE_QUEST_DATA := {
     "ice_garden": {"title": "冰下花园", "kind": "星球见闻", "clue": "异常冰样的脉动组成了地下生态的节拍。带回一枚样本，记录这座星球的另一面。", "reward": 20},
     "lost_observer": {"title": "失联观测员", "kind": "独立故事", "clue": "废弃通信阵列里有一段没有发出的留言。调查旧阵列，听完它的结尾。", "reward": 25}
 }
+# 支线使用独立的“线索 → 目标 → 收尾”三段结构。坐标是霜烬星世界坐标，
+# 初始线索都放在安全屋出发后能看见的路线上，目标只在接受支线后显现。
+const SIDE_QUEST_STEPS := {
+    "echo_route": [
+        {"stage": 0, "position": Vector2(-157.0, 98.0), "name": "撕裂的路线纸", "prompt": "调查撕裂的路线纸"},
+        {"stage": 1, "position": Vector2(-140.0, 77.0), "name": "辅助中继器", "prompt": "校准辅助中继器"},
+        {"stage": 2, "position": Vector2(-135.0, -82.0), "name": "气象站录音柱", "prompt": "读取气象站录音"}
+    ],
+    "ice_garden": [
+        {"stage": 0, "position": Vector2(-147.0, 82.0), "name": "紫色苔痕", "prompt": "观察紫色苔痕"},
+        {"stage": 1, "position": Vector2(-116.0, 32.0), "name": "冰下花芽", "prompt": "采集冰下花芽"},
+        {"stage": 2, "position": Vector2(28.0, 62.0), "name": "生态记录器", "prompt": "上传生态记录"}
+    ],
+    "lost_observer": [
+        {"stage": 0, "position": Vector2(-136.0, 61.0), "name": "旧观测旗", "prompt": "检查旧观测旗"},
+        {"stage": 1, "position": Vector2(-110.0, 62.0), "name": "观测员工具箱", "prompt": "打开观测员工具箱"},
+        {"stage": 2, "position": Vector2(-102.0, 18.0), "name": "埋藏的时间胶囊", "prompt": "听完时间胶囊"}
+    ]
+}
 const THERMAL_CYCLE := 18.0
 const THERMAL_COOLING_START := 12.0
 const THERMAL_COOLING_END := 16.5
@@ -200,6 +219,8 @@ var _compass_target := ""
 var _compass_direction := ""
 var _compass_distance := 0.0
 var _objective_panel: Panel
+var _side_quest_panel: Panel
+var _side_quest_label: Label
 var _vitals_panel: Panel
 var _interaction_panel: Panel
 var _subtitle_panel: Panel
@@ -209,6 +230,7 @@ var _narrative_queue: Array[Dictionary] = []
 var _world_labels: Array[Label3D] = []
 var _interaction_label: Label
 var _object_tags: Array[Dictionary] = []
+var _side_quest_sites: Array[Dictionary] = []
 var _attack_ready_at: Dictionary = {}
 var _menu_layer: CanvasLayer
 var _game_layer: CanvasLayer
@@ -341,6 +363,8 @@ func _process(delta: float) -> void:
         _update_story(delta)
     elif _ruin_planet != null:
         _ruin_planet.tick(delta)
+    if _on_frost_planet():
+        _refresh_side_quest_sites()
     _update_hud()
     _update_feedback(delta)
     if not is_host:
@@ -425,6 +449,8 @@ func _build_ui() -> void:
     _game_layer.add_child(_vision_overlay)
     _objective_panel = _panel(_game_layer, Vector2(24, 22), Vector2(410, 126), Color(0.025, 0.08, 0.13, 0.82), Color("#254d62"), 12)
     _progress_label = _ui_label(_objective_panel, "", Vector2(16, 12), Vector2(378, 102), 16, Color("#d9eef4"))
+    _side_quest_panel = _panel(_game_layer, Vector2(24, 158), Vector2(410, 76), Color(0.08, 0.055, 0.14, 0.88), Color("#9b79d6"), 12)
+    _side_quest_label = _ui_label(_side_quest_panel, "", Vector2(14, 9), Vector2(382, 58), 15, Color("#eadfff"))
     _compass_panel = _panel(_game_layer, Vector2.ZERO, Vector2(390, 54), Color(0.025, 0.08, 0.13, 0.86), Color("#62e8dc"), 12)
     _place_hud(_compass_panel, Control.PRESET_CENTER_TOP, Vector2(-195, 22), Vector2(390, 54))
     _compass_label = _ui_label(_compass_panel, "", Vector2(12, 8), Vector2(366, 38), 16, Color("#d9eef4"))
@@ -812,6 +838,11 @@ func _build_route_ui() -> void:
     _ui_label(_route_group, "02  /  可登陆         腐墟星", Vector2(91, 446), Vector2(300, 26), 16, Color("#a8c26a"))
     _ui_button(_route_group, "登陆腐墟星  →", Vector2(400, 440), Vector2(200, 36), _land_ruin, true)
     _ui_label(_route_group, "03  /  尚未开放     电磁星球", Vector2(91, 484), Vector2(500, 28), 16, Color("#668392"))
+    var market_card := _panel(_route_group, Vector2(690, 236), Vector2(500, 188), Color(0.08, 0.07, 0.17, 0.94), Color("#9b79d6"), 13)
+    _ui_label(market_card, "星际集市 · 交易星球", Vector2(22, 18), Vector2(440, 30), 24, Color("#eadfff"))
+    _ui_label(market_card, "共享回收点数兑换装备与欢乐道具\n买到后回到主舱自由分配。", Vector2(22, 58), Vector2(420, 58), 16, Color("#c4b9d8"))
+    _ui_button(market_card, "打开交易入口  →", Vector2(22, 122), Vector2(250, 42), _show_trade, true)
+    _ui_label(market_card, "入口也可在主舱右上角随时打开", Vector2(282, 132), Vector2(195, 28), 13, Color("#9f90be"))
     _ui_button(_route_group, "← 返回主舱", Vector2(91, 516), Vector2(240, 46), _show_room)
 
 func _build_trade_ui() -> void:
@@ -839,11 +870,9 @@ func _trade_request(item_id: String, action := "trade") -> void:
     if _ship_session == null:
         return
     _ship_session.request(action, item_id)
-    if _trade_status != null:
-        _trade_status.text = "已提交交易请求：" + item_id + "（共享仓将在同步后更新）"
 
 func _show_trade() -> void:
-    if not ship_active:
+    if not ship_active or not _ship_session.in_hub:
         return
     _set_screen("trade")
     _menu_layer.visible = true
@@ -852,7 +881,8 @@ func _show_trade() -> void:
 func _refresh_trade_buttons() -> void:
     if _trade_status == null or _ship_session == null:
         return
-    _trade_status.text = "团队回收点数：%d · 共享装备：%s" % [_ship_session.credits, _ship_session.gear_inventory_text()]
+    var notice := _ship_session.notice_text()
+    _trade_status.text = notice if not notice.is_empty() else "团队回收点数：%d · 共享装备：%s" % [_ship_session.credits, _ship_session.gear_inventory_text()]
 
 func _set_screen(view: String) -> void:
     _screen_view = view
@@ -1402,6 +1432,7 @@ func _build_world() -> void:
     _world_root = Node3D.new()
     _world_root.name = "FrostAsh3DWorld"
     add_child(_world_root)
+    _side_quest_sites.clear()
     _object_tags.clear()
     _world_labels.clear()
     _attack_ready_at.clear()
@@ -1417,6 +1448,7 @@ func _build_world() -> void:
     _build_crates()
     _build_samples()
     _build_exploration_clues()
+    _build_side_quest_sites()
     _build_extraction()
     _build_scan_visual()
     if _field_interactions == null:
@@ -2615,7 +2647,19 @@ func _story_progress_count() -> int:
 
 func _ensure_side_quest_state(quest_id: String) -> Dictionary:
     if not side_quest_states.has(quest_id):
-        side_quest_states[quest_id] = {"discovered": false, "completed": false}
+        side_quest_states[quest_id] = {"discovered": false, "completed": false, "stage": 0}
+    else:
+        var existing: Dictionary = side_quest_states[quest_id]
+        # 早期原型会在拾取样本或调查地标时直接完成支线。遇到没有 stage 的旧存档，
+        # 把它迁移回真正的线索流程，避免玩家看不到支线内容却显示“已完成”。
+        if bool(existing.get("completed", false)) and not existing.has("stage"):
+            existing["completed"] = false
+            existing["discovered"] = false
+            existing["stage"] = 0
+            side_quest_states[quest_id] = existing
+        elif not existing.has("stage"):
+            existing["stage"] = 1 if bool(existing.get("discovered", false)) else 0
+            side_quest_states[quest_id] = existing
     return side_quest_states[quest_id]
 
 func _discover_side_quest(quest_id: String) -> void:
@@ -2625,10 +2669,110 @@ func _discover_side_quest(quest_id: String) -> void:
     if bool(state.get("discovered", false)):
         return
     state["discovered"] = true
+    state["stage"] = maxi(int(state.get("stage", 0)), 1)
     side_quest_states[quest_id] = state
     var data: Dictionary = SIDE_QUEST_DATA[quest_id]
     _record_journal("支线线索 · " + String(data.get("title", quest_id)), String(data.get("clue", "新的线索已加入日志。")))
     show_feedback_rpc.rpc("发现支线：%s" % String(data.get("title", quest_id)), Color("#f3c77b"), 2.0)
+    _refresh_side_quest_sites()
+    _refresh_journal()
+    if is_host:
+        sync_progress_state.rpc(side_quest_states, achievement_flags, lost_cargo)
+
+func _build_side_quest_sites() -> void:
+    _side_quest_sites.clear()
+    for quest_id in SIDE_QUEST_STEPS:
+        var steps: Array = SIDE_QUEST_STEPS[quest_id]
+        for raw_step in steps:
+            var step: Dictionary = raw_step
+            var site := Node3D.new()
+            site.name = "SideQuest_%s_%d" % [quest_id, int(step.get("stage", 0))]
+            site.position = Vector3(float(step.position.x), 0.08, float(step.position.y))
+            var mesh := MeshInstance3D.new()
+            var marker_mesh := CylinderMesh.new()
+            marker_mesh.top_radius = 0.38 if int(step.stage) == 0 else 0.28
+            marker_mesh.bottom_radius = marker_mesh.top_radius
+            marker_mesh.height = 0.18
+            mesh.mesh = marker_mesh
+            var material := StandardMaterial3D.new()
+            material.albedo_color = Color("#f2c46b") if int(step.stage) == 0 else Color("#d2a8ff")
+            material.emission_enabled = true
+            material.emission = material.albedo_color
+            material.emission_energy_multiplier = 1.8
+            mesh.material_override = material
+            site.add_child(mesh)
+            var label := Label3D.new()
+            label.text = "线索" if int(step.stage) == 0 else "支线目标"
+            label.position = Vector3(0, 1.45, 0)
+            label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+            label.font_size = 24
+            label.pixel_size = 0.012
+            label.modulate = material.albedo_color
+            label.outline_size = 4
+            site.add_child(label)
+            _world_root.add_child(site)
+            _side_quest_sites.append({"quest_id": String(quest_id), "stage": int(step.stage), "point": Vector2(step.position), "node": site, "name": String(step.name), "prompt": String(step.prompt)})
+    _refresh_side_quest_sites()
+
+func _refresh_side_quest_sites() -> void:
+    for site_info in _side_quest_sites:
+        var node := site_info.get("node") as Node3D
+        if not is_instance_valid(node):
+            continue
+        var quest_id := String(site_info.get("quest_id", ""))
+        var state := _ensure_side_quest_state(quest_id)
+        var stage := int(site_info.get("stage", 0))
+        var visible := stage == 0 and not bool(state.get("discovered", false))
+        if stage > 0:
+            visible = bool(state.get("discovered", false)) and not bool(state.get("completed", false)) and int(state.get("stage", 0)) == stage
+        node.visible = visible
+
+func _side_quest_prompt(local: SpacePlayer3D) -> Dictionary:
+    for site_info in _side_quest_sites:
+        var node := site_info.get("node") as Node3D
+        if not is_instance_valid(node) or not node.visible:
+            continue
+        var distance := _flat_distance(local.global_position, node.global_position)
+        if distance <= 2.8:
+            return {"distance": distance, "priority": 98, "text": "[E]  " + String(site_info.get("prompt", "调查支线线索")), "site": site_info}
+    return {}
+
+func _handle_side_quest_interaction(peer_id: int, player: SpacePlayer3D) -> bool:
+    for site_info in _side_quest_sites:
+        var node := site_info.get("node") as Node3D
+        if not is_instance_valid(node) or not node.visible:
+            continue
+        if _flat_distance(player.global_position, node.global_position) > 2.8:
+            continue
+        var quest_id := String(site_info.get("quest_id", ""))
+        var site_stage := int(site_info.get("stage", 0))
+        var state := _ensure_side_quest_state(quest_id)
+        if site_stage == 0:
+            _discover_side_quest(quest_id)
+            _record_journal("支线已接取", "沿着地图上新出现的金色目标继续探索；按 Tab 查看当前目标。")
+            show_feedback_rpc.rpc("支线已接取：%s" % String(SIDE_QUEST_DATA[quest_id].get("title", quest_id)), Color("#f3c77b"), 2.5)
+            _sync_state.rpc(_enemy_snapshot(), enemy_wave_index, enemy_wave_timer, activated_beacons, taken_crates, deposited_resources, _vitals_snapshot(), journal_entries, discovered_regions)
+            return true
+        if not bool(state.get("discovered", false)) or bool(state.get("completed", false)):
+            return true
+        if int(state.get("stage", 0)) != site_stage:
+            show_feedback_rpc.rpc("先沿当前线索继续调查", Color("#ffbd75"), 1.2)
+            return true
+        var steps: Array = SIDE_QUEST_STEPS[quest_id]
+        var next_stage := site_stage + 1
+        state["stage"] = next_stage
+        if next_stage >= steps.size():
+            _complete_side_quest(quest_id)
+        else:
+            side_quest_states[quest_id] = state
+            var next_step: Dictionary = steps[next_stage]
+            _record_journal("支线推进 · " + String(SIDE_QUEST_DATA[quest_id].get("title", quest_id)), "下一步：" + String(next_step.get("prompt", "继续调查")) + "。")
+            show_feedback_rpc.rpc("支线推进：%s" % String(SIDE_QUEST_DATA[quest_id].get("title", quest_id)), Color("#d2a8ff"), 2.0)
+            if is_host:
+                sync_progress_state.rpc(side_quest_states, achievement_flags, lost_cargo)
+        _refresh_side_quest_sites()
+        return true
+    return false
 
 func _complete_side_quest(quest_id: String) -> void:
     if not SIDE_QUEST_DATA.has(quest_id):
@@ -2638,6 +2782,7 @@ func _complete_side_quest(quest_id: String) -> void:
         return
     state["discovered"] = true
     state["completed"] = true
+    state["stage"] = SIDE_QUEST_STEPS[quest_id].size()
     side_quest_states[quest_id] = state
     var achievement_id := "achievement_" + quest_id
     achievement_flags[achievement_id] = true
@@ -2646,6 +2791,7 @@ func _complete_side_quest(quest_id: String) -> void:
     show_story_rpc.rpc("成就解锁：%s\n%s" % [String(data.get("title", quest_id)), String(data.get("kind", "支线"))], 4.5)
     if is_host:
         sync_progress_state.rpc(side_quest_states, achievement_flags, lost_cargo)
+    _refresh_side_quest_sites()
 
 func _show_story(text: String, duration: float = 6.0) -> void:
     if _story_label == null:
@@ -3311,6 +3457,8 @@ func handle_action(peer_id: int, action: String) -> void:
     if action == "signal_low":
         _set_signal_mode(peer_id, "low")
         return
+    if action == "repair" and _handle_side_quest_interaction(peer_id, player):
+        return
     if _field_interactions != null and _field_interactions.handle_action(peer_id, action):
         return
     if _ruin_planet != null and _ruin_planet.handle_action(peer_id, action):
@@ -3383,8 +3531,6 @@ func handle_action(peer_id: int, action: String) -> void:
                 player.carrying_id = id
                 samples[id].visible = false
                 _set_status("玩家 %d 拾取了异常冰样。" % peer_id)
-                _discover_side_quest("ice_garden")
-                _complete_side_quest("ice_garden")
                 _record_journal("异常冰样", "样本内部仍在脉动：可选回收并带回 +20 价值，携带时会提前引来敌袭。")
                 _spawn_particle_burst(samples[id].global_position + Vector3(0, 0.8, 0), Color("#b8a1ff"), 8)
                 floating_feedback_rpc.rpc(samples[id].global_position + Vector3(0, 1.35, 0), "样本 +1", Color("#d5c8ff"))
@@ -3456,27 +3602,17 @@ func request_clue_discovery(clue_id: int) -> void:
             discovered_regions.append(region)
         _record_journal(String(found.get("name", "未知地标")) + " · " + region, "远景地标已登记。靠近它并按 E 调查，才能读懂留下的信号。")
     elif kind == "beacon":
-        _discover_side_quest("echo_route")
         _record_journal("现场痕迹", "拖痕指向一座尚未修复的气象信标。")
     elif kind == "crate":
         _record_journal("现场痕迹", "热融痕迹指向一枚热能电池，附近可能有人先来过。")
     elif kind == "sample":
-        _discover_side_quest("ice_garden")
         _record_journal("现场痕迹", "紫色反光藏在冰层边缘，像一枚被遗忘的异常冰样。")
-    elif kind == "landmark" and String(found.get("landmark_id", "")) == "relay":
-        _discover_side_quest("lost_observer")
     _sync_state.rpc(_enemy_snapshot(), enemy_wave_index, enemy_wave_timer, activated_beacons, taken_crates, deposited_resources, _vitals_snapshot(), journal_entries, discovered_regions)
 
 func _apply_landmark_knowledge(landmark_id: String) -> void:
     if landmark_id.is_empty() or knowledge_flags.has(landmark_id):
         return
     knowledge_flags[landmark_id] = true
-    if landmark_id == "weather_station":
-        _discover_side_quest("echo_route")
-        _complete_side_quest("echo_route")
-    elif landmark_id == "relay":
-        _discover_side_quest("lost_observer")
-        _complete_side_quest("lost_observer")
     match landmark_id:
         "weather_station":
             _record_journal("知识解锁", "旧气象站的观测台能标出异常冰样的频段；部署扫描器后会优先显示异常样本回波。")
@@ -3914,6 +4050,7 @@ func sync_full_state(snapshot: Dictionary) -> void:
     discovered_regions.assign(snapshot.get("regions", []))
     discovered_clues.assign(snapshot.get("clues", []))
     scan_revealed_clues.assign(snapshot.get("scan_clues", []))
+    _refresh_side_quest_sites()
     map_markers.assign(snapshot.get("map_markers", []))
     next_marker_id = 1
     for marker in map_markers:
@@ -3954,6 +4091,7 @@ func sync_progress_state(next_side_quests: Dictionary, next_achievements: Dictio
     for raw in next_lost_cargo:
         if raw is Dictionary:
             lost_cargo.append(raw.duplicate(true))
+    _refresh_side_quest_sites()
     _refresh_journal()
 
 @rpc("authority", "call_local", "reliable")
@@ -4073,6 +4211,7 @@ func _update_hud() -> void:
     if not game_started:
         return
     _objective_panel.visible = not _journal_visible
+    _side_quest_panel.visible = not _journal_visible
     _vitals_panel.visible = not _journal_visible
     _hint_label.visible = not _journal_visible
     _compass_panel.visible = not _journal_visible
@@ -4102,6 +4241,7 @@ func _update_hud() -> void:
             signal_text = "低频 · 诱导"
         if _on_frost_planet():
             _progress_label.text = "%s · %s\n调查 %d/%d   信标 %d/%d\n%s   信号：%s   %.0fs\n下一步：%s" % [phase, _region_hint(local.global_position), knowledge_count, REQUIRED_KNOWLEDGE.size(), activated_beacons.size(), beacon_positions.size(), anomaly_text, signal_text, mission_elapsed, _next_objective_text()]
+            _update_side_quest_tracker(local)
         else:
             # 腐墟星没有信标和信号频段，这里换成它自己的进度：噪音、回收点数、
             # 建筑与物资的发现数量。
@@ -4131,6 +4271,7 @@ func _update_hud() -> void:
                 _journal_map_view.update_objectives(_known_map_positions("beacon", beacon_positions, activated_beacons), _known_map_positions("crate", crate_positions, taken_crates), activated_beacons, taken_crates)
                 _journal_map_view.update_heat_sources(_known_heat_sources())
                 _journal_map_view.update_field_sites(_field_interactions.map_sites() if _field_interactions != null else [])
+                _journal_map_view.update_side_quests(_visible_side_quest_map_sites())
             else:
                 # 腐墟星没有信标、热源和地表设备，地图改为标出建筑与物资点。
                 _journal_map_view.update_objectives([], [], [], [])
@@ -4161,6 +4302,28 @@ func _update_hud() -> void:
         _alert_label.text = warning
         _alert_label.visible = not warning.is_empty()
         _alert_label.add_theme_color_override("font_color", Color("#ffad9f") if local.downed or local.oxygen <= 25.0 else Color("#ffd089"))
+
+func _update_side_quest_tracker(local: SpacePlayer3D) -> void:
+    if _side_quest_label == null:
+        return
+    var selected_id := ""
+    var selected_stage := 0
+    for quest_id in SIDE_QUEST_DATA:
+        var state := _ensure_side_quest_state(String(quest_id))
+        if bool(state.get("discovered", false)) and not bool(state.get("completed", false)):
+            selected_id = String(quest_id)
+            selected_stage = int(state.get("stage", 1))
+            break
+    if selected_id.is_empty():
+        _side_quest_label.text = "支线探索\n靠近地图上的金色‘线索’并按 E 接取 · Tab 查看日志"
+        return
+    var steps: Array = SIDE_QUEST_STEPS[selected_id]
+    selected_stage = clampi(selected_stage, 1, steps.size() - 1)
+    var target: Dictionary = steps[selected_stage]
+    var from := Vector2(local.global_position.x, local.global_position.z)
+    var point := Vector2(target.get("position", Vector2.ZERO))
+    var title := String(SIDE_QUEST_DATA[selected_id].get("title", selected_id))
+    _side_quest_label.text = "支线 · %s\n%s   ◈ %s   %.0f m" % [title, String(target.get("prompt", "继续调查")), _direction_hint(from, point), from.distance_to(point)]
 
 func _update_compass(local: SpacePlayer3D) -> void:
     if _compass_label == null:
@@ -4310,6 +4473,9 @@ func _update_interaction_hint() -> void:
         _interaction_panel.visible = false
         return
     var prompts: Array[Dictionary] = []
+    var quest_prompt := _side_quest_prompt(local)
+    if not quest_prompt.is_empty():
+        prompts.append(quest_prompt)
     if _field_interactions != null:
         var field_prompt := _field_interactions.prompt(local)
         if not field_prompt.is_empty():
@@ -4466,7 +4632,11 @@ func _refresh_journal() -> void:
         var quest_data: Dictionary = SIDE_QUEST_DATA[quest_id]
         var status := "已完成" if bool(quest_state.get("completed", false)) else ("已发现" if bool(quest_state.get("discovered", false)) else "未发现")
         quest_lines.append("%s：%s" % [String(quest_data.get("title", quest_id)), status])
-    lines.append("支线任务：" + " · ".join(quest_lines))
+        if bool(quest_state.get("discovered", false)) and not bool(quest_state.get("completed", false)):
+            var steps: Array = SIDE_QUEST_STEPS[String(quest_id)]
+            var current_stage := clampi(int(quest_state.get("stage", 1)), 1, steps.size() - 1)
+            lines.append("  当前目标 · %s：%s" % [String(quest_data.get("title", quest_id)), String(steps[current_stage].get("prompt", "继续调查"))])
+    lines.append("支线任务（靠近地图上的金色线索按 E 接取）：" + " · ".join(quest_lines))
     lines.append("成就：%d / %d    资源刷新轮次：%d    失败散落资源：%d" % [achievement_flags.size(), SIDE_QUEST_DATA.size(), _planet_resource_epoch, lost_cargo.size()])
     lines.append("探索时间：%.0f 秒    热脉周期：%.1f 秒" % [mission_elapsed, THERMAL_CYCLE])
     lines.append("")
@@ -4524,6 +4694,15 @@ func _known_heat_sources() -> Array:
     if _field_interactions != null:
         sources.append_array(_field_interactions.heat_sources())
     return sources
+
+func _visible_side_quest_map_sites() -> Array:
+    var sites: Array = []
+    for site_info in _side_quest_sites:
+        var node := site_info.get("node") as Node3D
+        if not is_instance_valid(node) or not node.visible:
+            continue
+        sites.append({"position": site_info.get("point", Vector2.ZERO), "label": site_info.get("name", "支线目标"), "stage": int(site_info.get("stage", 0))})
+    return sites
 
 func _clue_position(clue: Dictionary) -> Vector2:
     var kind := String(clue.get("kind", ""))

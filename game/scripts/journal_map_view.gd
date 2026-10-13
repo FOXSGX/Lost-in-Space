@@ -15,6 +15,7 @@ var activated_beacons: Array[int] = []
 var taken_crates: Array[int] = []
 var heat_sources: Array = []
 var field_sites: Array = []
+var side_quest_sites: Array = []
 var map_markers: Array = []
 var show_player := false
 
@@ -45,6 +46,10 @@ func update_heat_sources(next_sources: Array) -> void:
 
 func update_field_sites(next_sites: Array) -> void:
     field_sites = next_sites
+    queue_redraw()
+
+func update_side_quests(next_sites: Array) -> void:
+    side_quest_sites = next_sites
     queue_redraw()
 
 func update_markers(next_markers: Array) -> void:
@@ -92,6 +97,14 @@ func _draw() -> void:
         draw_rect(Rect2(projected - Vector2(3.0, 3.0), Vector2(6.0, 6.0)), color, false, 1.5)
         if point.distance_to(player_position) <= 32.0:
             draw_string(ThemeDB.fallback_font, projected + Vector2(7.0, -7.0), String(site.get("label", "现场设备")), HORIZONTAL_ALIGNMENT_LEFT, -1, 11, color)
+    for site in side_quest_sites:
+        var point := Vector2(site.get("position", Vector2.ZERO))
+        var projected := _project(point, origin, scale)
+        var color := Color("#f2c46b") if int(site.get("stage", 0)) == 0 else Color("#d2a8ff")
+        draw_circle(projected, 5.0, color)
+        draw_arc(projected, 8.0, 0.0, TAU, 18, color, 1.5)
+        if point.distance_to(player_position) <= 48.0:
+            draw_string(ThemeDB.fallback_font, projected + Vector2(9.0, -5.0), String(site.get("label", "支线目标")), HORIZONTAL_ALIGNMENT_LEFT, -1, 11, color)
     for source in heat_sources:
         var heat_point := Vector2(source.get("position", Vector2.ZERO))
         var projected := _project(heat_point, origin, scale)
