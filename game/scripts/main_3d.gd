@@ -4211,7 +4211,7 @@ func _update_hud() -> void:
     if not game_started:
         return
     _objective_panel.visible = not _journal_visible
-    _side_quest_panel.visible = not _journal_visible
+    _side_quest_panel.visible = not _journal_visible and _on_frost_planet()
     _vitals_panel.visible = not _journal_visible
     _hint_label.visible = not _journal_visible
     _compass_panel.visible = not _journal_visible
