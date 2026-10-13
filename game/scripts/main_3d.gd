@@ -54,6 +54,12 @@ const THOUGHT_DURATION := 4.0
 const JOURNAL_MAX_ENTRIES := 18
 const LANDMARK_INTERACTION_RADIUS := 4.2
 const REQUIRED_KNOWLEDGE := ["weather_station", "ice_rift", "relay"]
+const STORY_ARC_FLAGS := [
+    "arc_arrival", "arc_terminal", "arc_first_contact", "arc_first_beacon",
+    "arc_broken_voice", "arc_radio", "arc_weather_station", "arc_ice_rift", "arc_transport",
+    "arc_helmet", "arc_relay", "arc_second_beacon", "arc_storm_front",
+    "arc_reply", "arc_ending", "arc_return"
+]
 const THERMAL_CYCLE := 18.0
 const THERMAL_COOLING_START := 12.0
 const THERMAL_COOLING_END := 16.5
@@ -2349,7 +2355,7 @@ func _spawn_enemy_wave(initial := false) -> void:
     _set_status("第 %d 波敌人已在远处出现，正在高速接近；后续威胁将由信标和暴风雪触发。" % enemy_wave_index)
     if initial and not story_flags.has("first_contact"):
         story_flags["first_contact"] = true
-        show_story_rpc.rpc("冰层下传来回声。它们不是被你们发现的，是被热量叫醒的。", 7.0)
+        _story_beat("arc_first_contact", "回声档案 · 第一次回应", "第一座信标的热量唤醒了冰层下的生物。它们追着热源来，说明这颗星球一直在听。", "冰层下传来回声。它们不是被你们发现的，是被热量叫醒的。", 7.0)
     _sync_state.rpc(_enemy_snapshot(), enemy_wave_index, enemy_wave_timer, activated_beacons, taken_crates, deposited_resources, _vitals_snapshot(), journal_entries, discovered_regions)
 
 func _check_enemy_triggers() -> void:
@@ -2376,7 +2382,7 @@ func _check_enemy_triggers() -> void:
         enemy_spawn_center = Vector2(beacon_positions[1])
         if knowledge_flags.has("relay"):
             enemy_spawn_center = Vector2(150.0, 46.0)
-        show_story_rpc.rpc("第二座信标亮起时，冰层深处的回声变得清晰了。它们正在沿着热源靠近。", 6.0)
+        _story_beat("arc_second_beacon", "回声档案 · 第二次回应", "第二座信标把回声推向地表。敌人沿热源靠近，失联队伍留下的选择开始影响我们的路线。", "第二座信标亮起时，冰层深处的回声变得清晰了。它们正在沿着热源靠近。", 6.0)
         _spawn_enemy_wave()
         return
     if enemy_spawned and enemies.is_empty() and storm_active and not enemy_trigger_flags.has("storm_front"):
@@ -2384,7 +2390,7 @@ func _check_enemy_triggers() -> void:
         enemy_spawn_center = Vector2(12.0, 0.0)
         if knowledge_flags.has("relay"):
             enemy_spawn_center = Vector2(120.0, -116.0)
-        show_story_rpc.rpc("暴风雪遮住了天空，地下的热量却变得异常集中。有什么东西正在追踪它。", 6.0)
+        _story_beat("arc_storm_front", "回声档案 · 风暴前", "暴风雪把地表变成盲区，地下热量却聚成一条追踪线。继续前进或躲进热源，都会留下代价。", "暴风雪遮住了天空，地下的热量却变得异常集中。有什么东西正在追踪它。", 6.0)
         _spawn_enemy_wave()
 
 func _tick_storm(delta: float) -> void:
@@ -2409,10 +2415,24 @@ func _tick_story(delta: float) -> void:
     story_elapsed += delta
     if story_elapsed >= 3.0 and not story_flags.has("arrival_log"):
         story_flags["arrival_log"] = true
-        show_story_rpc.rpc("飞船日志：霜烬星的三座气象信标在十七小时前同时失联。没有撤离舱，只有一条反复指向冰层下方的回波。", 7.0)
+        _story_beat("arc_arrival", "回声档案 · 登陆", "霜烬星的三座气象信标在十七小时前同时失联。岑夏和陆衡没有发出正式求救，只留下反复指向冰层下方的坐标。", "岑夏，陆衡，这里是归航号。你们的最后一次回波没有请求救援，只重复了一组坐标。我们会沿着它找你们。", 7.0)
     elif story_elapsed >= 10.0 and not story_flags.has("broken_voice"):
         story_flags["broken_voice"] = true
-        show_story_rpc.rpc("无线电里传来一段断续的声音：‘如果你们还在天上……别相信亮着的灯。先读懂它们为何亮起。’", 7.0)
+        _story_beat("arc_broken_voice", "回声档案 · 断续呼叫", "无线电里的声音确认有人提前知道信标会亮起。它提醒后来者先理解信标，再决定要不要修复。", "无线电里传来一段断续的声音：‘如果你们还在天上……别相信亮着的灯。先读懂它们为何亮起。’", 7.0)
+
+func _story_beat(flag: String, title: String, journal_text: String, subtitle: String, duration: float = 7.0) -> void:
+    if story_flags.has(flag):
+        return
+    story_flags[flag] = true
+    _record_journal(title, journal_text)
+    show_story_rpc.rpc("【%s】\n%s" % [title, subtitle], duration)
+
+func _story_progress_count() -> int:
+    var count := 0
+    for flag in STORY_ARC_FLAGS:
+        if story_flags.has(flag):
+            count += 1
+    return count
 
 func _show_story(text: String, duration: float = 6.0) -> void:
     if _story_label == null:
@@ -2984,10 +3004,10 @@ func _resolve_anomaly(choice: String) -> void:
     sync_storm_state.rpc(false, 0.0)
     if choice == "shutdown":
         _record_journal("中继站决定", "关闭信标网络，地下回声正在衰减。星球暂时恢复安静，但真相仍被留在冰层深处。")
-        show_story_rpc.rpc("你切断了信标。冰层下的回声逐渐远去，撤离航道重新变得安静。", 7.0)
+        _story_beat("arc_ending", "回声档案 · 静音", "你替他们按下了静音。岑夏留下的名字被送回飞船，冰层下没有再回答。", "你切断了信标。冰层下的回声逐渐远去，撤离航道重新变得安静。", 7.0)
     else:
         _record_journal("中继站决定", "稳定信标网络，地下回声被压回深层。气象数据开始恢复，但仍有一条信号没有停止。")
-        show_story_rpc.rpc("你稳定了信标网络。暴风雪正在退去，但冰层深处仍有东西在回应。", 7.0)
+        _story_beat("arc_ending", "回声档案 · 留声", "你替他们保留了回声。归航号收到最后一条气象数据，也收到两个名字。", "你稳定了信标网络。暴风雪正在退去，但冰层深处仍有东西在回应。", 7.0)
     _set_status("异常状态已处理，确认撤离路线。")
     _broadcast_exploration_state()
 
@@ -3087,7 +3107,7 @@ func handle_action(peer_id: int, action: String) -> void:
                 if activated_beacons.size() == 1 and not story_flags.has("first_beacon"):
                     story_flags["first_beacon"] = true
                     _reveal_landmark_signal("weather_station")
-                    show_story_rpc.rpc("信标重新亮起。旧频道自动接通：‘……你们终于来了。’ 回波把坐标指向旧气象站。", 7.0)
+                    _story_beat("arc_first_beacon", "回声档案 · 留路的灯", "第一座信标没有发出求救，而是在替失联队伍守住一条能被后来者读懂的路。旧频道把坐标指向气象站。", "信标重新亮起。旧频道自动接通：‘……你们终于来了。’ 回波把坐标指向旧气象站。", 7.0)
                     _record_journal("路线解锁", "第一座信标的回波指向旧气象站。先读取天气记录，才能校准后续信标。")
                 elif activated_beacons.size() >= beacon_positions.size() and not story_flags.has("all_beacons"):
                     story_flags["all_beacons"] = true
@@ -3209,13 +3229,13 @@ func _apply_landmark_knowledge(landmark_id: String) -> void:
             _reveal_sample_clues()
             _reveal_landmark_signal("ice_rift")
             _reveal_next_beacon_signal()
-            show_story_rpc.rpc("气象记录显示：暴风雪不是天气，而是信标启动后从冰层里升起的回应。", 7.0)
+            _story_beat("arc_weather_station", "回声档案 · 岑夏的记录", "岑夏把风暴写成天气，陆衡把它写成回应。他们争论的最后一句是：先救人，还是先关灯。", "气象记录显示：暴风雪不是天气，而是信标启动后从冰层里升起的回应。", 7.0)
             _knowledge_feedback("知识解锁：异常冰样回波已加入扫描", Color("#c8b6ff"))
         "ice_rift":
             _record_journal("知识解锁", "天气记录与裂谷脉冲完全同频。等热脉回落时按 E 开阀，稳定热流会成为穿越冰原的安全节点。")
             _reveal_landmark_signal("relay")
             _reveal_next_beacon_signal()
-            show_story_rpc.rpc("裂谷的热脉与信标同频。地下回声不是从远处传来，而是在等待下一次启动；先在回落期开阀，再去通信阵列。", 7.0)
+            _story_beat("arc_ice_rift", "回声档案 · 裂谷节拍", "裂谷的热脉每 18 秒回落一次。陆衡用这段节拍把队伍送到阵列，却没等到下一次回落。", "裂谷的热脉与信标同频。地下回声不是从远处传来，而是在等待下一次启动；先在回落期开阀，再去通信阵列。", 7.0)
             _knowledge_feedback("知识解锁：裂谷热脉可供回温", Color("#ffb36b"))
         "transport":
             _record_journal("知识解锁", "运输舱的货单确认：样本价值很高，但带回样本会让移动和撤离更危险。")
@@ -3223,7 +3243,7 @@ func _apply_landmark_knowledge(landmark_id: String) -> void:
             _knowledge_feedback("知识解锁：异常冰样价值 +20", Color("#b8a1ff"))
         "relay":
             _record_journal("知识解锁", "通信阵列回放了失踪队伍的最后决定：第三座信标不是单纯维修，而是决定地下回声的去留。")
-            show_story_rpc.rpc("通信阵列回放了失踪队伍的最后决定：第三座信标不是修复问题，而是选择。三座信标齐亮后，回到这里处理地下异常。", 7.0)
+            _story_beat("arc_relay", "回声档案 · 留声处", "三座灯同时亮起，原来不是在呼唤救援，而是在问：你们愿意让这颗星继续说话吗？", "通信阵列回放了失踪队伍的最后决定：第三座信标不是修复问题，而是选择。三座信标齐亮后，回到这里处理地下异常。", 7.0)
             _reveal_next_beacon_signal()
             _knowledge_feedback("知识解锁：暴风雪预报已接入日志", Color("#75dff5"))
     if is_host:
@@ -3462,6 +3482,7 @@ func _tick_extraction(delta: float) -> void:
         mission_summary = "撤离成功：%s；回收价值 %d，发现区域 %d，样本 %d。" % [ending_name, salvage_value, discovered_regions.size(), taken_samples.size()]
         if story_flags.has("crew_message_returned"):
             mission_summary += " 岑夏与陆衡的留言已送回归航号。"
+        _story_beat("arc_return", "回声档案 · 返航", "返航记录：我们没有找到他们，但带回了他们留下的选择。" if ending_choice == "shutdown" else "返航记录：我们没有找到他们，但让他们留下的回声继续指引后来者。", "归航号：确认撤离。我们没有带回失联队员，却带回了他们留下的选择。", 8.0)
         _set_status(mission_summary)
 
 @rpc("authority", "call_local", "reliable")
@@ -4150,6 +4171,7 @@ func _refresh_journal() -> void:
     if _journal_label == null:
         return
     var lines := PackedStringArray()
+    lines.append("故事档案：回声档案 %d / %d    失联队员：岑夏 · 陆衡" % [_story_progress_count(), STORY_ARC_FLAGS.size()])
     lines.append("已发现区域：%d / %d" % [discovered_regions.size(), LANDMARK_DATA.size()])
     var knowledge_count := 0
     for flag in REQUIRED_KNOWLEDGE:

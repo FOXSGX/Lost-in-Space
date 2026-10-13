@@ -165,7 +165,7 @@ func handle_action(peer_id: int, action: String) -> bool:
         "terminal":
             controller._reveal_next_beacon_signal()
             controller._record_journal("归航号联络", "第一座信标是我们恢复地表航线的起点。修复后读旧气象站记录，再追踪裂谷与阵列。电池和冰样可以自选回收，先把人带回来。")
-            _story("归航号：听得见你。先找到第一座信标；供暖点和地表设备会帮你走完这段路。")
+            controller._story_beat("arc_terminal", "回声档案 · 归航号", "终端重新接通归航号。飞船确认失联队伍没有撤离舱，只有一条不断指向冰层下方的回波。", "归航号：听得见你。先找到第一座信标；供暖点和地表设备会帮你走完这段路。", 8.0)
             _route_feedback(player)
         "locker":
             if not bool(state.opened):
@@ -176,7 +176,7 @@ func handle_action(peer_id: int, action: String) -> bool:
             state["heard"] = true
             controller._reveal_landmark_signal("weather_station")
             controller._record_journal("科考队录音 · 岑夏", "岑夏留在台地记录天气，陆衡去了东北裂谷。信标一亮，风暴就从冰层里升起；他们把观测资料留在旧气象站，盼后来者先读记录。")
-            _story("岑夏的录音：陆衡去了裂谷。我把记录留在旧气象站。灯会叫醒冰层里的东西，别只顾着修它。")
+            controller._story_beat("arc_radio", "回声档案 · 岑夏的声音", "岑夏把观测资料留在旧气象站，陆衡带着队伍去了裂谷。他们没有约定谁回来，只约定让后来者听见。", "岑夏的录音：陆衡去了裂谷。我把记录留在旧气象站。灯会叫醒冰层里的东西，别只顾着修它。", 8.0)
         "heater":
             if not bool(state.repaired):
                 _begin_job(peer_id, site, 3.0, "接回供暖炉线路")
@@ -195,11 +195,11 @@ func handle_action(peer_id: int, action: String) -> bool:
             if not bool(state.opened):
                 _begin_job(peer_id, site, 3.0, "卷起运输舱钢索")
             else:
-                _story("货单旁写着：陆衡，把药和氧气留给回来的人。研究可以等，人不能。——岑夏")
+                controller._story_beat("arc_transport", "回声档案 · 留给后来者", "货单最后一行不是货物，是名单：药品和氧气给下一队，样本必须封存。有人早就把自己写成了下一队。", "货单旁写着：陆衡，把药和氧气留给回来的人。研究可以等，人不能。——岑夏", 8.0)
         "helmet":
             state["heard"] = true
             controller._record_journal("陆衡的头盔", "陆衡的最后留言：我把岑夏的呼号录进了阵列，它仍在重复，并不代表她还活着。回去时，请替我们回应一次。")
-            _story("头盔里是陆衡的声音：阵列重复的是我们留下的录音。如果有人听见，请把我们的名字带回去。")
+            controller._story_beat("arc_helmet", "回声档案 · 陆衡的头盔", "陆衡没有留下求救坐标。他把岑夏的呼号录进阵列，只希望下一支队伍知道他们曾经来过。", "头盔里是陆衡的声音：阵列重复的是我们留下的录音。如果有人听见，请把我们的名字带回去。", 8.0)
         "sign":
             if not bool(state.repaired):
                 _begin_job(peer_id, site, 1.2, "扶正反光路标")
@@ -221,7 +221,7 @@ func _secondary_action(site: Dictionary, player: SpacePlayer3D) -> void:
             state["answered"] = true
             controller.story_flags["crew_message_returned"] = true
             controller._record_journal("回应失联科考队", "我们回应了岑夏和陆衡留下的声音，将姓名与现场记录传回归航号。地底仍有回声，但飞船已确认收到他们的故事。")
-            _story("你：岑夏、陆衡，我们听见了。归航号：姓名与记录已接收。谢谢你没有把他们留在雪里。")
+            controller._story_beat("arc_reply", "回声档案 · 回应", "我们回应了岑夏和陆衡，将姓名与现场记录传回归航号。失联队伍终于从一段噪声变成了可被记住的人。", "你：岑夏、陆衡，我们听见了。归航号：姓名与记录已接收。谢谢你没有把他们留在雪里。", 8.0)
         "heater":
             if not bool(state.repaired):
                 _feedback("先修好供暖炉线路，才能安装电池。")
