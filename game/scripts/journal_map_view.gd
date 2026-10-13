@@ -14,6 +14,7 @@ var crate_positions: Array = []
 var activated_beacons: Array[int] = []
 var taken_crates: Array[int] = []
 var heat_sources: Array = []
+var field_sites: Array = []
 var map_markers: Array = []
 var show_player := false
 
@@ -40,6 +41,10 @@ func update_objectives(next_beacons: Array, next_crates: Array, next_activated: 
 
 func update_heat_sources(next_sources: Array) -> void:
     heat_sources = next_sources
+    queue_redraw()
+
+func update_field_sites(next_sites: Array) -> void:
+    field_sites = next_sites
     queue_redraw()
 
 func update_markers(next_markers: Array) -> void:
@@ -80,6 +85,13 @@ func _draw() -> void:
         draw_circle(_project(Vector2(beacon_positions[index]), origin, scale), 3.0, Color("#ffd36b"))
     for index in crate_positions.size():
         draw_circle(_project(Vector2(crate_positions[index]), origin, scale), 2.5, Color("#5ce8be"))
+    for site in field_sites:
+        var point := Vector2(site.get("position", Vector2.ZERO))
+        var projected := _project(point, origin, scale)
+        var color := Color("#b2e3cc") if bool(site.get("used", false)) else Color("#8ce7e1")
+        draw_rect(Rect2(projected - Vector2(3.0, 3.0), Vector2(6.0, 6.0)), color, false, 1.5)
+        if point.distance_to(player_position) <= 32.0:
+            draw_string(ThemeDB.fallback_font, projected + Vector2(7.0, -7.0), String(site.get("label", "现场设备")), HORIZONTAL_ALIGNMENT_LEFT, -1, 11, color)
     for source in heat_sources:
         var heat_point := Vector2(source.get("position", Vector2.ZERO))
         var projected := _project(heat_point, origin, scale)
@@ -94,7 +106,7 @@ func _draw() -> void:
         draw_line(projected - Vector2(8.0, 8.0), projected + Vector2(8.0, 8.0), marker_color, 2.0, true)
         draw_line(projected + Vector2(8.0, -8.0), projected - Vector2(8.0, -8.0), marker_color, 2.0, true)
         draw_string(ThemeDB.fallback_font, projected + Vector2(10.0, -5.0), String(marker.get("label", "标记")), HORIZONTAL_ALIGNMENT_LEFT, -1, 11, marker_color)
-    draw_string(ThemeDB.fallback_font, rect.position + Vector2(18.0, rect.size.y - 10.0), "橙：信标回波   绿：电池回波   金：已登记地标   橙圈：热源   黄叉/粉叉：我的标记   青：当前位置", HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color("#8fb4c4"))
+    draw_string(ThemeDB.fallback_font, rect.position + Vector2(18.0, rect.size.y - 10.0), "黄：信标   绿：电池   金：地标   橙圈：热源   青方框：现场设备   叉：我的标记   白：你", HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color("#8fb4c4"))
     if show_player:
         draw_circle(_project(player_position, origin, scale), 4.5, Color("#e9fbff"))
         draw_arc(_project(player_position, origin, scale), 8.0, 0.0, TAU, 24, Color("#62e8dc"), 1.5)

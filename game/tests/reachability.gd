@@ -64,5 +64,7 @@ func run() -> void:
     for name in FrostMapLayout.POINTS_OF_INTEREST:
         var point: Dictionary = FrostMapLayout.POINTS_OF_INTEREST[name]
         _check(start, Vector2(point.get("position", Vector2.ZERO)), "安全屋到%s" % name)
+    for site in FrostFieldInteractions.SITES:
+        _check(start, Vector2(site.position), "安全屋到" + String(site.name))
     print("霜烬星可达性：%d 项失败" % failures)
     quit(0 if failures == 0 else 1)

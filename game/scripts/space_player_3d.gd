@@ -3,6 +3,7 @@ class_name SpacePlayer3D
 
 const VISUAL_SCENE := preload("res://scenes/protagonist_visual.tscn")
 const SPEED := 5.8
+const SPRINT_MULTIPLIER := 1.65
 const ATTACK_RANGE := 3.75
 const ATTACK_INTERVAL := 0.35
 var peer_id := 1
@@ -10,6 +11,8 @@ var health := 5
 var oxygen := 100.0
 var warmth := 1.0
 var carrying := 0
+var carrying_id := 0
+var sprinting := false
 var downed := false
 var scan_lock_remaining := 0.0
 var scan_cooldown_remaining := 0.0
@@ -21,6 +24,12 @@ var _attack_cooldown := 0.0
 var attack_range_visual: MeshInstance3D
 var _visual: ProtagonistVisual
 var _last_visual_position := Vector3.ZERO
+var _camera_shake_remaining := 0.0
+var _camera_shake_duration := 0.0
+var _camera_shake_strength := 0.0
+var _camera_shake_clock := 0.0
+var _camera_shake_offset := Vector3.ZERO
+var _camera_shake_rotation := 0.0
 
 func setup(id: int, color: Color) -> void:
     peer_id = id
@@ -49,6 +58,7 @@ func _build_visual(color: Color) -> void:
     add_child(_visual)
 
 func _process(delta: float) -> void:
+    _remove_camera_shake_offset()
     var motion := velocity if is_multiplayer_authority() else (global_position - _last_visual_position) / maxf(delta, 0.001)
     _last_visual_position = global_position
     if _visual != null:
@@ -62,6 +72,38 @@ func _process(delta: float) -> void:
         else:
             _camera.global_position = Vector3(0, 16, 15)
             _camera.look_at(Vector3(0, 0.6, 0), Vector3.UP)
+    _apply_camera_shake(delta)
+
+func trigger_camera_shake(strength: float = 0.08, duration: float = 0.12) -> void:
+    if _camera == null:
+        return
+    _camera_shake_strength = maxf(_camera_shake_strength, strength)
+    _camera_shake_duration = maxf(_camera_shake_duration, duration)
+    _camera_shake_remaining = maxf(_camera_shake_remaining, duration)
+
+func _apply_camera_shake(delta: float) -> void:
+    if _camera == null:
+        return
+    if _camera_shake_remaining <= 0.0:
+        return
+    _camera_shake_clock += delta
+    _camera_shake_remaining = maxf(_camera_shake_remaining - delta, 0.0)
+    var fade := clampf(_camera_shake_remaining / maxf(_camera_shake_duration, 0.001), 0.0, 1.0)
+    var wave := _camera_shake_clock * 52.0
+    var offset := Vector3(sin(wave) * _camera_shake_strength, cos(wave * 1.37) * _camera_shake_strength * 0.55, 0.0) * fade
+    var rotation_offset := sin(wave * 0.72) * _camera_shake_strength * 3.0 * fade
+    _camera.global_position += offset
+    _camera.rotation_degrees.z += rotation_offset
+    _camera_shake_offset = offset
+    _camera_shake_rotation = rotation_offset
+
+func _remove_camera_shake_offset() -> void:
+    if _camera == null:
+        return
+    _camera.global_position -= _camera_shake_offset
+    _camera.rotation_degrees.z -= _camera_shake_rotation
+    _camera_shake_offset = Vector3.ZERO
+    _camera_shake_rotation = 0.0
 
 func show_attack_animation() -> void:
     if _visual != null:
@@ -72,14 +114,20 @@ func show_rescue_animation(enabled: bool) -> void:
         _visual.set_rescuing(enabled)
 
 func teleport_to(point: Vector3) -> void:
+    _remove_camera_shake_offset()
     position = point
     _target_position = point
     _has_target_position = false
     velocity = Vector3.ZERO
     _last_visual_position = point
+    _camera_shake_remaining = 0.0
+    _camera_shake_duration = 0.0
+    _camera_shake_strength = 0.0
+    _camera_shake_clock = 0.0
 
 func configure_ship_camera() -> void:
     var controller := get_parent() as Main3D
+    _remove_camera_shake_offset()
     if _camera != null and controller != null and controller.ship_active:
         _camera.size = ShipHub3D.CAMERA_SIZE if controller._ship_session.in_hub else 21.0
         _camera.global_position = global_position + ShipHub3D.CAMERA_OFFSET if controller._ship_session.in_hub else Vector3(0, 16, 15)
@@ -165,20 +213,23 @@ func _physics_process(delta: float) -> void:
         _tick_ship(controller)
         return
     if controller.minigame_active and controller.minigame_peer_id == peer_id:
+        sprinting = false
         velocity = Vector3.ZERO
         return
     if controller.is_journal_visible():
+        sprinting = false
         velocity = Vector3.ZERO
         return
     if Input.is_action_just_pressed("scan"):
         controller.start_scan_for_peer(peer_id)
         return
     var input_vector := Input.get_vector("move_left", "move_right", "move_up", "move_down")
-    var move_speed := SPEED
+    sprinting = Input.is_action_pressed("sprint")
+    var move_speed := SPEED * (SPRINT_MULTIPLIER if sprinting else 1.0)
     if carrying == 1:
-        move_speed = SPEED * 0.72
+        move_speed *= 0.72
     elif carrying == 2:
-        move_speed = SPEED * 0.58
+        move_speed *= 0.58
     if controller.storm_active:
         move_speed *= 0.68
     var was_moving := velocity.length() > 0.1
@@ -191,7 +242,7 @@ func _physics_process(delta: float) -> void:
     var map_half := controller.MAP_SIZE * 0.5 - Vector2(1.0, 1.0)
     global_position.x = clampf(global_position.x, -map_half.x, map_half.x)
     global_position.z = clampf(global_position.z, -map_half.y, map_half.y)
-    for action in ["repair", "pickup", "deposit", "revive"]:
+    for action in ["repair", "pickup", "drop", "deposit", "revive"]:
         if Input.is_action_just_pressed(action):
             controller.handle_action(peer_id, action)
     for action in ["signal_high", "signal_low"]:
@@ -201,7 +252,7 @@ func _physics_process(delta: float) -> void:
         _attack_cooldown = ATTACK_INTERVAL
         controller.attack_from_peer(peer_id)
     if Engine.get_physics_frames() % 2 == 0:
-        sync_transform.rpc(global_position)
+        sync_transform.rpc(global_position, sprinting)
 
 func _spawn_footstep_particle() -> void:
     var particle := MeshInstance3D.new()
@@ -224,7 +275,8 @@ func _spawn_footstep_particle() -> void:
     tween.finished.connect(func(): particle.queue_free())
 
 @rpc("authority", "unreliable_ordered", "call_remote")
-func sync_transform(next_position: Vector3) -> void:
+func sync_transform(next_position: Vector3, next_sprinting: bool = false) -> void:
+    sprinting = next_sprinting
     if is_multiplayer_authority() or downed or scan_lock_remaining > 0.0:
         return
     if multiplayer.is_server():
@@ -239,7 +291,9 @@ func _tick_ship(controller: Main3D) -> void:
         velocity = Vector3.ZERO
         return
     var movement := Input.get_vector("move_left", "move_right", "move_up", "move_down")
-    velocity = Vector3(movement.x * SPEED, 0, movement.y * SPEED)
+    sprinting = Input.is_action_pressed("sprint")
+    var move_speed := SPEED * (SPRINT_MULTIPLIER if sprinting else 1.0)
+    velocity = Vector3(movement.x * move_speed, 0, movement.y * move_speed)
     move_and_slide()
     var bounds := ShipHub3D.WALK_BOUNDS if ship.in_hub else Vector2(9.9, 6.2)
     global_position.x = clampf(global_position.x, -bounds.x, bounds.x)
@@ -247,8 +301,8 @@ func _tick_ship(controller: Main3D) -> void:
     if Input.is_action_just_pressed("repair"):
         ship.request("interact")
     if not ship.in_hub:
-        for action in ["scan", "repair", "pickup", "deposit", "attack", "revive"]:
+        for action in ["scan", "repair", "pickup", "drop", "deposit", "attack", "revive"]:
             if Input.is_action_just_pressed(action):
                 ship.request("train_" + action)
     if Engine.get_physics_frames() % 2 == 0:
-        sync_transform.rpc(global_position)
+        sync_transform.rpc(global_position, sprinting)

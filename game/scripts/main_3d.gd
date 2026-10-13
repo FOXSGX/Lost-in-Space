@@ -8,6 +8,7 @@ const PLAYER_SCENE := preload("res://scenes/player_3d.tscn")
 const ENEMY_SCENE := preload("res://scenes/enemy_3d.tscn")
 const OBSTACLE_SCENE := preload("res://scenes/frost_obstacle_3d.tscn")
 const JOURNAL_MAP_SCENE := preload("res://scripts/journal_map_view.gd")
+const FROST_FIELD_INTERACTIONS := preload("res://scripts/frost_field_interactions.gd")
 const SCAN_DURATION := 4.0
 const SCAN_STARTUP := 0.8
 const SCAN_COOLDOWN := 6.0
@@ -16,8 +17,13 @@ const REVIVE_RANGE := 1.8
 const REVIVE_OXYGEN := 40.0
 const STORM_INTERVAL := 45.0
 const STORM_DURATION := 12.0
-const CLEAR_SCAN_RADIUS := 11.0
-const STORM_SCAN_RADIUS := 7.5
+const CLEAR_SCAN_RADIUS := 14.0
+const STORM_SCAN_RADIUS := 9.0
+const SCAN_DEVICE_RADIUS := 14.0
+const STORM_SCAN_DEVICE_RADIUS := 9.0
+const RESOURCE_INTERACTION_RADIUS := 2.4
+const SPRINT_OXYGEN_MULTIPLIER := 1.55
+const SPRINT_WARMTH_MULTIPLIER := 1.45
 const MISSION_RETURN_DELAY := 2.5
 const MAP_SIZE := Vector2(384.0, 256.0)
 # 地形网格比可行走范围向外多铺一圈，避免玩家在地图边缘看到黑色虚空。
@@ -41,7 +47,7 @@ const OPTIONAL_REWARD_TARGET := 30
 const BATTERY_VALUE := 10
 const SAMPLE_VALUE := 20
 const CLUE_TRIGGER_RADIUS := 2.4
-const CLUE_SCAN_RADIUS := 11.0
+const CLUE_SCAN_RADIUS := 14.0
 const THOUGHT_DURATION := 4.0
 const JOURNAL_MAX_ENTRIES := 18
 const LANDMARK_INTERACTION_RADIUS := 4.2
@@ -52,6 +58,10 @@ const THERMAL_COOLING_END := 16.5
 const SIGNAL_LURE_DURATION := 8.0
 const SIGNAL_STORM_DURATION := 8.0
 const SIGNAL_COOLDOWN := 10.0
+const KEY_BINDINGS_PATH := "user://controls.cfg"
+const KEY_BINDING_ACTIONS := ["sprint", "toggle_map", "toggle_journal"]
+const KEY_BINDING_LABELS := {"sprint": "加速", "toggle_map": "地图", "toggle_journal": "日志"}
+const KEY_BINDING_DEFAULTS := {"sprint": KEY_SHIFT, "toggle_map": KEY_M, "toggle_journal": KEY_TAB}
 const LANDMARK_DATA := [
     {"id": "weather_station", "position": Vector2(-130.0, -88.0), "name": "旧气象站", "region": "西北·静默台地", "thought": "天线还在转，但所有记录都被人为删过。有人不想让后来者知道这里发生了什么。", "entry": "旧气象站的日志被分段擦除，只留下一个反复出现的坐标：冰层下方。"},
     {"id": "ice_rift", "position": Vector2(132.0, -94.0), "name": "冰层裂谷", "region": "东北·热脉裂谷", "thought": "裂缝里有热气，温度变化却像呼吸。这里的东西可能还活着。", "entry": "冰层裂谷下方存在规律性的热脉冲，间隔与信标失联时间一致。"},
@@ -129,8 +139,12 @@ var scan_origin := Vector3.ZERO
 var scan_remaining := 0.0
 var scan_cooldown := 0.0
 var scan_visual: MeshInstance3D
+var scan_device: Node3D
+var scan_device_active := false
+var scan_device_position := Vector3.ZERO
 
 var _world_root: Node3D
+var _field_interactions: FrostFieldInteractions
 var _environment: WorldEnvironment
 var _menu_world: Node3D
 var _menu_camera: Camera3D
@@ -167,6 +181,7 @@ var _vitals_panel: Panel
 var _interaction_panel: Panel
 var _subtitle_panel: Panel
 var _alert_label: Label
+var _interaction_progress: ProgressBar
 var _narrative_queue: Array[Dictionary] = []
 var _world_labels: Array[Label3D] = []
 var _interaction_label: Label
@@ -196,6 +211,17 @@ var _home_group: Control
 var _room_group: Control
 var _feedback_label: Label
 var _feedback_timer := 0.0
+var _settings_layer: CanvasLayer
+var _settings_backdrop: ColorRect
+var _settings_panel: Panel
+var _settings_status: Label
+var _settings_buttons: Dictionary = {}
+var _key_bindings: Dictionary = {}
+var _settings_visible := false
+var _rebinding_action := ""
+var _settings_previous_paused := false
+var _settings_previous_process_mode := Node.PROCESS_MODE_INHERIT
+var _settings_child_process_modes: Dictionary = {}
 var _route_group: Control
 var _room_status: Label
 var _route_status: Label
@@ -203,6 +229,7 @@ var _land_button: Button
 var _screen_view := "home"
 
 func _ready() -> void:
+    _setup_key_bindings()
     multiplayer.peer_connected.connect(_on_peer_connected)
     multiplayer.peer_disconnected.connect(_on_peer_disconnected)
     multiplayer.connected_to_server.connect(_on_connected_to_server)
@@ -210,6 +237,7 @@ func _ready() -> void:
     multiplayer.server_disconnected.connect(_on_server_disconnected)
     _build_menu_world()
     _build_ui()
+    _field_interactions = FROST_FIELD_INTERACTIONS.new(self)
     _ship_session = ShipSession3D.new()
     _ship_session.name = "ShipSession"
     add_child(_ship_session)
@@ -220,19 +248,34 @@ func _input(event: InputEvent) -> void:
     var key_event := event as InputEventKey
     if not key_event.pressed or key_event.echo:
         return
-    if key_event.keycode == KEY_ESCAPE or key_event.physical_keycode == KEY_ESCAPE:
+    var is_escape := key_event.keycode == KEY_ESCAPE or key_event.physical_keycode == KEY_ESCAPE
+    if _settings_visible:
+        if _rebinding_action != "":
+            _handle_rebind_input(key_event)
+        elif is_escape:
+            _close_settings()
+        get_viewport().set_input_as_handled()
+        return
+    if is_escape:
         if ship_active and _ship_session.has_panel():
             _ship_session.close_panel()
-            get_viewport().set_input_as_handled()
+        elif game_started or ship_active:
+            _open_settings()
+        get_viewport().set_input_as_handled()
         return
     if game_started and not minigame_active and not is_journal_visible():
         if key_event.physical_keycode == KEY_3 or key_event.keycode == KEY_3:
             _ship_session.request("use_medical")
         elif key_event.physical_keycode == KEY_4 or key_event.keycode == KEY_4:
             _ship_session.request("use_oxygen")
-    if key_event.keycode == KEY_TAB or key_event.physical_keycode == KEY_TAB:
+    if _event_matches_action(key_event, "toggle_journal"):
         if game_started:
             _toggle_journal()
+            get_viewport().set_input_as_handled()
+        return
+    if _event_matches_action(key_event, "toggle_map"):
+        if game_started:
+            _toggle_map()
             get_viewport().set_input_as_handled()
         return
     if minigame_active:
@@ -240,6 +283,8 @@ func _input(event: InputEvent) -> void:
         get_viewport().set_input_as_handled()
 
 func _process(delta: float) -> void:
+    if _settings_visible:
+        return
     if _ship_session != null:
         _ship_session.tick(delta)
     if ship_active:
@@ -255,6 +300,8 @@ func _process(delta: float) -> void:
     if minigame_active:
         _update_clue_minigame(delta)
     _update_scan_visual(delta)
+    if _field_interactions != null:
+        _field_interactions.tick(delta)
     _update_storm_visual(delta)
     _update_vision_overlay()
     _update_hud()
@@ -335,8 +382,8 @@ func _build_ui() -> void:
     vision_material.shader = vision_shader
     _vision_overlay.material = vision_material
     _game_layer.add_child(_vision_overlay)
-    _objective_panel = _panel(_game_layer, Vector2(24, 22), Vector2(330, 82), Color(0.025, 0.08, 0.13, 0.82), Color("#254d62"), 12)
-    _progress_label = _ui_label(_objective_panel, "", Vector2(16, 12), Vector2(298, 58), 17, Color("#d9eef4"))
+    _objective_panel = _panel(_game_layer, Vector2(24, 22), Vector2(410, 126), Color(0.025, 0.08, 0.13, 0.82), Color("#254d62"), 12)
+    _progress_label = _ui_label(_objective_panel, "", Vector2(16, 12), Vector2(378, 102), 16, Color("#d9eef4"))
     _compass_panel = _panel(_game_layer, Vector2.ZERO, Vector2(390, 54), Color(0.025, 0.08, 0.13, 0.86), Color("#62e8dc"), 12)
     _place_hud(_compass_panel, Control.PRESET_CENTER_TOP, Vector2(-195, 22), Vector2(390, 54))
     _compass_label = _ui_label(_compass_panel, "", Vector2(12, 8), Vector2(366, 38), 16, Color("#d9eef4"))
@@ -345,8 +392,8 @@ func _build_ui() -> void:
     _vitals_panel = _panel(_game_layer, Vector2.ZERO, Vector2(350, 68), Color(0.025, 0.08, 0.13, 0.82), Color("#254d62"), 12)
     _place_hud(_vitals_panel, Control.PRESET_TOP_RIGHT, Vector2(-374, 22), Vector2(350, 68))
     _vitals_label = _ui_label(_vitals_panel, "", Vector2(16, 12), Vector2(318, 46), 16, Color("#d9eef4"))
-    _hint_label = _ui_label(_game_layer, "", Vector2.ZERO, Vector2(310, 24), 14, Color("#a7c4d3"))
-    _place_hud(_hint_label, Control.PRESET_BOTTOM_RIGHT, Vector2(-334, -44), Vector2(310, 24))
+    _hint_label = _ui_label(_game_layer, "", Vector2.ZERO, Vector2(570, 24), 14, Color("#a7c4d3"))
+    _place_hud(_hint_label, Control.PRESET_BOTTOM_RIGHT, Vector2(-594, -44), Vector2(570, 24))
     _hint_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
     _alert_label = _ui_label(_game_layer, "", Vector2.ZERO, Vector2(520, 56), 20, Color("#ffd089"))
     _place_hud(_alert_label, Control.PRESET_CENTER_TOP, Vector2(-260, 28), Vector2(520, 56))
@@ -357,6 +404,22 @@ func _build_ui() -> void:
     _interaction_label = _ui_label(_interaction_panel, "", Vector2(16, 8), Vector2(528, 34), 20, Color("#f1fbff"))
     _interaction_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
     _interaction_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+    _interaction_progress = ProgressBar.new()
+    _interaction_progress.show_percentage = false
+    _interaction_progress.min_value = 0.0
+    _interaction_progress.max_value = 1.0
+    _interaction_progress.mouse_filter = Control.MOUSE_FILTER_IGNORE
+    _place_hud(_interaction_progress, Control.PRESET_CENTER_BOTTOM, Vector2(-280, -84), Vector2(560, 6))
+    var progress_background := StyleBoxFlat.new()
+    progress_background.bg_color = Color(0.02, 0.08, 0.13, 0.86)
+    progress_background.set_corner_radius_all(3)
+    var progress_fill := StyleBoxFlat.new()
+    progress_fill.bg_color = Color("#72e8dd")
+    progress_fill.set_corner_radius_all(3)
+    _interaction_progress.add_theme_stylebox_override("background", progress_background)
+    _interaction_progress.add_theme_stylebox_override("fill", progress_fill)
+    _interaction_progress.visible = false
+    _game_layer.add_child(_interaction_progress)
     _subtitle_panel = _panel(_game_layer, Vector2.ZERO, Vector2(700, 92), Color(0.012, 0.035, 0.065, 0.92), Color("#254d62"), 12)
     _place_hud(_subtitle_panel, Control.PRESET_CENTER_BOTTOM, Vector2(-350, -184), Vector2(700, 92))
     _subtitle_panel.visible = false
@@ -377,7 +440,7 @@ func _build_ui() -> void:
     journal_title.add_theme_color_override("font_color", Color("#f1fbff"))
     _journal_panel.add_child(journal_title)
     var journal_hint := Label.new()
-    journal_hint.text = "Tab 关闭 · H 标记热源 · C 标记线索 · V 清除最近标记 · 阅读时世界仍在运行"
+    journal_hint.text = "Tab 关闭 · M 地图 · Shift 加速 · H 标记热源 · C 标记线索 · V 清除最近标记 · 阅读时世界仍在运行"
     journal_hint.position = Vector2(30, 62)
     journal_hint.size = Vector2(820, 28)
     journal_hint.add_theme_font_size_override("font_size", 14)
@@ -432,6 +495,166 @@ func _build_ui() -> void:
     _minigame_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
     _minigame_status.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
     _minigame_panel.visible = false
+    _build_settings_ui()
+
+func _setup_key_bindings() -> void:
+    var config := ConfigFile.new()
+    var loaded := config.load(KEY_BINDINGS_PATH) == OK
+    for action in KEY_BINDING_ACTIONS:
+        if not InputMap.has_action(action):
+            InputMap.add_action(action)
+        var code := int(KEY_BINDING_DEFAULTS[action])
+        if loaded:
+            code = int(config.get_value("keys", action, code))
+        if code <= 0:
+            code = int(KEY_BINDING_DEFAULTS[action])
+        _key_bindings[action] = code
+        _apply_key_binding(action, code)
+
+func _apply_key_binding(action: String, code: int) -> void:
+    if not InputMap.has_action(action):
+        InputMap.add_action(action)
+    InputMap.action_erase_events(action)
+    var event := InputEventKey.new()
+    event.keycode = code
+    event.physical_keycode = code
+    InputMap.action_add_event(action, event)
+
+func _save_key_bindings() -> void:
+    var config := ConfigFile.new()
+    for action in KEY_BINDING_ACTIONS:
+        config.set_value("keys", action, int(_key_bindings.get(action, KEY_BINDING_DEFAULTS[action])))
+    config.save(KEY_BINDINGS_PATH)
+
+func _event_matches_action(event: InputEventKey, action: String) -> bool:
+    for binding in InputMap.action_get_events(action):
+        if not binding is InputEventKey:
+            continue
+        var key_binding := binding as InputEventKey
+        var physical_code := int(key_binding.physical_keycode)
+        var key_code := int(key_binding.keycode)
+        if physical_code != 0 and (event.physical_keycode == physical_code or event.keycode == physical_code):
+            return true
+        if key_code != 0 and (event.keycode == key_code or event.physical_keycode == key_code):
+            return true
+    return false
+
+func _key_name(code: int) -> String:
+    var name := OS.get_keycode_string(code)
+    return name if not name.is_empty() else str(code)
+
+func _build_settings_ui() -> void:
+    _settings_layer = CanvasLayer.new()
+    _settings_layer.name = "SettingsLayer"
+    _settings_layer.layer = 100
+    _settings_layer.process_mode = Node.PROCESS_MODE_ALWAYS
+    add_child(_settings_layer)
+    _settings_backdrop = ColorRect.new()
+    _settings_backdrop.color = Color(0.005, 0.015, 0.03, 0.78)
+    _settings_backdrop.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+    _settings_backdrop.mouse_filter = Control.MOUSE_FILTER_STOP
+    _settings_backdrop.process_mode = Node.PROCESS_MODE_ALWAYS
+    _settings_backdrop.visible = false
+    _settings_layer.add_child(_settings_backdrop)
+    _settings_panel = _panel(_settings_layer, Vector2.ZERO, Vector2(640, 430), Color(0.018, 0.065, 0.105, 0.98), Color("#62e8dc"), 16)
+    _settings_panel.name = "SettingsPanel"
+    _settings_panel.process_mode = Node.PROCESS_MODE_ALWAYS
+    _place_hud(_settings_panel, Control.PRESET_CENTER, Vector2(-320, -215), Vector2(640, 430))
+    var title := _ui_label(_settings_panel, "设置  /  CONTROLS", Vector2(32, 24), Vector2(576, 38), 26, Color("#f1fbff"))
+    title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+    var intro := _ui_label(_settings_panel, "按 Esc 暂停设置；选择按键后按下新的键位即可更改。", Vector2(32, 68), Vector2(576, 28), 15, Color("#8fb4c4"))
+    intro.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+    var row_y := 122.0
+    for action in KEY_BINDING_ACTIONS:
+        var label := _ui_label(_settings_panel, String(KEY_BINDING_LABELS[action]), Vector2(58, row_y + 8.0), Vector2(160, 36), 20, Color("#d9eef4"))
+        label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+        var rebind_action: String = action
+        var button := _ui_button(_settings_panel, "", Vector2(300, row_y), Vector2(270, 44), Callable(self, "_begin_rebind").bind(rebind_action), false)
+        _settings_buttons[action] = button
+        row_y += 58.0
+    _settings_status = _ui_label(_settings_panel, "", Vector2(58, 298), Vector2(524, 34), 15, Color("#ffcf7a"))
+    _settings_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+    _settings_status.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+    _ui_button(_settings_panel, "恢复默认键位", Vector2(58, 350), Vector2(210, 44), _reset_key_bindings, false)
+    _ui_button(_settings_panel, "继续游戏（Esc）", Vector2(372, 350), Vector2(210, 44), _close_settings, true)
+    _settings_panel.visible = false
+    _refresh_settings_ui()
+
+func _refresh_settings_ui() -> void:
+    for action in KEY_BINDING_ACTIONS:
+        var button := _settings_buttons.get(action) as Button
+        if button != null:
+            button.text = "%s：%s" % [String(KEY_BINDING_LABELS[action]), _key_name(int(_key_bindings.get(action, KEY_BINDING_DEFAULTS[action])))]
+    if _settings_status != null and _rebinding_action.is_empty():
+        _settings_status.text = "地图、日志和加速键可以分别设置。"
+
+func _begin_rebind(action: String) -> void:
+    if not _settings_visible or not KEY_BINDING_ACTIONS.has(action):
+        return
+    _rebinding_action = action
+    if _settings_status != null:
+        _settings_status.text = "正在设置%s：请按下一个键（Esc 取消）" % String(KEY_BINDING_LABELS[action])
+
+func _handle_rebind_input(event: InputEventKey) -> void:
+    if event.keycode == KEY_ESCAPE or event.physical_keycode == KEY_ESCAPE:
+        _rebinding_action = ""
+        _refresh_settings_ui()
+        return
+    var code := int(event.physical_keycode) if event.physical_keycode != 0 else int(event.keycode)
+    if code <= 0:
+        return
+    for action in KEY_BINDING_ACTIONS:
+        if action != _rebinding_action and int(_key_bindings.get(action, -1)) == code:
+            if _settings_status != null:
+                _settings_status.text = "%s 已被占用，请换一个键。" % _key_name(code)
+            return
+    _key_bindings[_rebinding_action] = code
+    _apply_key_binding(_rebinding_action, code)
+    _save_key_bindings()
+    _rebinding_action = ""
+    _refresh_settings_ui()
+
+func _reset_key_bindings() -> void:
+    _rebinding_action = ""
+    for action in KEY_BINDING_ACTIONS:
+        var code := int(KEY_BINDING_DEFAULTS[action])
+        _key_bindings[action] = code
+        _apply_key_binding(action, code)
+    _save_key_bindings()
+    _refresh_settings_ui()
+
+func _open_settings() -> void:
+    if _settings_visible or not (game_started or ship_active):
+        return
+    _settings_visible = true
+    _rebinding_action = ""
+    _settings_previous_paused = get_tree().paused
+    _settings_previous_process_mode = process_mode
+    _settings_child_process_modes.clear()
+    for child in get_children():
+        _settings_child_process_modes[child] = child.process_mode
+        if child != _settings_layer:
+            child.process_mode = Node.PROCESS_MODE_PAUSABLE
+    process_mode = Node.PROCESS_MODE_ALWAYS
+    _settings_layer.process_mode = Node.PROCESS_MODE_ALWAYS
+    _settings_backdrop.visible = true
+    _settings_panel.visible = true
+    _refresh_settings_ui()
+    get_tree().paused = true
+
+func _close_settings() -> void:
+    if not _settings_visible:
+        return
+    _settings_visible = false
+    _rebinding_action = ""
+    _settings_panel.visible = false
+    _settings_backdrop.visible = false
+    get_tree().paused = _settings_previous_paused
+    for child in get_children():
+        if _settings_child_process_modes.has(child):
+            child.process_mode = int(_settings_child_process_modes[child])
+    process_mode = _settings_previous_process_mode
+    _settings_child_process_modes.clear()
 
 func _place_hud(control: Control, preset: int, offset: Vector2, dimensions: Vector2) -> void:
     control.set_anchors_and_offsets_preset(preset)
@@ -554,6 +777,8 @@ func _set_screen(view: String) -> void:
     _route_group.visible = view == "route"
 
 func _show_home() -> void:
+    if _settings_visible:
+        _close_settings()
     if multiplayer.multiplayer_peer is ENetMultiplayerPeer:
         multiplayer.multiplayer_peer.close()
     is_host = false
@@ -825,6 +1050,8 @@ func _clear_players() -> void:
 func _start_planet() -> void:
     if game_started:
         return
+    if _settings_visible:
+        _close_settings()
     var departure := _vitals_snapshot() if ship_active else []
     _ship_session.leave()
     _ship_session.disable_menu_environment()
@@ -859,6 +1086,11 @@ func _start_planet() -> void:
     _story_timer = 0.0
     discovered_clues.clear()
     scan_revealed_clues.clear()
+    scan_device_active = false
+    scan_device_position = Vector3.ZERO
+    scan_peer_id = -1
+    scan_remaining = 0.0
+    scan_cooldown = 0.0
     map_markers.clear()
     next_marker_id = 1
     journal_entries.clear()
@@ -877,7 +1109,9 @@ func _start_planet() -> void:
     if _menu_world != null:
         _menu_world.visible = false
     _build_world()
-    _record_journal("登陆记录", "霜烬星地表全亮，但无线电被雪层反射成多重回声。先寻找异常地标，再决定是否激活设备。")
+    _record_journal("登陆记录", "霜烬星的三座气象信标在十七小时前同时失联。旧气象站记录、冰层裂谷热脉和废弃通信阵列的回放，可能解释信号为何从地底返回。")
+    _record_journal("当前路线", "先部署扫描器寻找第一座信标；第一座信标恢复后，回波会指向旧气象站。调查顺序会逐步打开下一条路。")
+    _record_journal("地表设备", "出发前可用 E 呼叫联络终端、解冻应急补给箱。沿途的青色设备和队员遗物可以操作，靠近会显示提示；修理时留在附近，地图会登记发现过的设备。")
     _game_layer.visible = true
     _menu_layer.visible = false
     var focused := get_viewport().gui_get_focus_owner()
@@ -974,6 +1208,9 @@ func _build_world() -> void:
     _build_exploration_clues()
     _build_extraction()
     _build_scan_visual()
+    if _field_interactions == null:
+        _field_interactions = FROST_FIELD_INTERACTIONS.new(self)
+    _field_interactions.build()
 
 func _build_environment() -> void:
     _environment = WorldEnvironment.new()
@@ -1757,7 +1994,7 @@ func _build_samples() -> void:
         ring.material_override = _glow_material(Color("#8ed8ff"), 1.0)
         sample.add_child(ring)
         var label := Label3D.new()
-        label.text = "【异常冰样】\nF键拾取"
+        label.text = "【异常冰样 · 可选回收】\nF拾取 / X丢下"
         label.name = "ObjectLabel"
         label.visible = false
         label.position.y = 1.55
@@ -1855,6 +2092,46 @@ func _build_scan_visual() -> void:
     scan_visual.material_override = material
     scan_visual.visible = false
     _world_root.add_child(scan_visual)
+    scan_device = Node3D.new()
+    scan_device.name = "GroundScanner"
+    scan_device.visible = false
+    var base := MeshInstance3D.new()
+    var base_mesh := CylinderMesh.new()
+    base_mesh.top_radius = 0.28
+    base_mesh.bottom_radius = 0.38
+    base_mesh.height = 0.28
+    base.mesh = base_mesh
+    base.position.y = 0.18
+    base.material_override = _glow_material(Color("#5ac8ff"), 1.4)
+    scan_device.add_child(base)
+    var mast := MeshInstance3D.new()
+    var mast_mesh := CylinderMesh.new()
+    mast_mesh.top_radius = 0.045
+    mast_mesh.bottom_radius = 0.075
+    mast_mesh.height = 1.15
+    mast.mesh = mast_mesh
+    mast.position.y = 0.82
+    mast.material_override = _glow_material(Color("#b8f4ff"), 1.2)
+    scan_device.add_child(mast)
+    var beacon := OmniLight3D.new()
+    beacon.light_color = Color("#5ac8ff")
+    beacon.light_energy = 2.2
+    beacon.omni_range = 4.0
+    beacon.position.y = 1.35
+    scan_device.add_child(beacon)
+    var label := Label3D.new()
+    label.name = "ScannerLabel"
+    label.text = "扫描器\n扫描中"
+    label.position.y = 1.9
+    label.modulate = Color("#a9efff")
+    label.font_size = 42
+    label.pixel_size = 0.009
+    label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+    label.outline_size = 10
+    label.outline_modulate = Color("#061521")
+    label.shaded = false
+    scan_device.add_child(label)
+    _world_root.add_child(scan_device)
 
 func _build_exploration_clues() -> void:
     for node in clue_nodes.values():
@@ -1895,7 +2172,7 @@ func _build_exploration_clues() -> void:
         pulse.material_override = _glow_material(clue_color, 0.85)
         marker.add_child(pulse)
         var label := Label3D.new()
-        label.text = "信号残响" if clue_kind == "landmark" else ("热融痕迹" if clue_kind == "crate" else ("晶体回波" if clue_kind == "sample" else "拖行痕迹"))
+        label.text = "信号残响" if clue_kind == "landmark" else ("热融痕迹" if clue_kind == "crate" else ("异常样本回波" if clue_kind == "sample" else "拖行痕迹"))
         label.position.y = 0.75
         label.modulate = clue_color
         label.font_size = 34
@@ -2032,10 +2309,10 @@ func _tick_story(delta: float) -> void:
     story_elapsed += delta
     if story_elapsed >= 3.0 and not story_flags.has("arrival_log"):
         story_flags["arrival_log"] = true
-        show_story_rpc.rpc("飞船日志：霜烬星的三座气象信标，在十七小时前同时失联。记录里没有撤离舱。", 7.0)
+        show_story_rpc.rpc("飞船日志：霜烬星的三座气象信标在十七小时前同时失联。没有撤离舱，只有一条反复指向冰层下方的回波。", 7.0)
     elif story_elapsed >= 10.0 and not story_flags.has("broken_voice"):
         story_flags["broken_voice"] = true
-        show_story_rpc.rpc("无线电里传来一段断续的声音：‘如果你们还在天上……别相信亮着的灯。’", 7.0)
+        show_story_rpc.rpc("无线电里传来一段断续的声音：‘如果你们还在天上……别相信亮着的灯。先读懂它们为何亮起。’", 7.0)
 
 func _show_story(text: String, duration: float = 6.0) -> void:
     if _story_label == null:
@@ -2098,13 +2375,19 @@ func start_scan_for_peer(peer_id: int) -> void:
         if player != null and player.scan_cooldown_remaining > 0.0:
             show_feedback_rpc.rpc("扫描冷却 %.1fs" % player.scan_cooldown_remaining, Color("#ffaa66"), 0.8)
         return
+    if scan_device_active:
+        show_feedback_rpc.rpc("场上已有扫描器，请靠近它按 F 回收后再部署。", Color("#ffbd75"), 1.8)
+        return
     scan_peer_id = peer_id
     scan_origin = player.global_position
+    scan_device_position = scan_origin
+    scan_device_active = true
     scan_remaining = SCAN_DURATION
     scan_cooldown = SCAN_COOLDOWN
+    sync_scan_device_state.rpc(true, scan_device_position, scan_remaining)
     sync_scan_state.rpc(peer_id, scan_origin, SCAN_DURATION, SCAN_COOLDOWN, SCAN_STARTUP)
     var scan_hint := _scan_hint_for_player(player)
-    var scan_message := "扫描启动"
+    var scan_message := "扫描器已部署 · 范围 %.0fm" % SCAN_DEVICE_RADIUS
     if not scan_hint.is_empty():
         scan_message += " · " + scan_hint
     show_feedback_rpc.rpc(scan_message, Color("#5ac8ff"), 1.6)
@@ -2124,10 +2407,25 @@ func sync_scan_state(peer_id: int, origin: Vector3, duration: float, cooldown: f
     scan_remaining = duration
     scan_cooldown = cooldown
 
+@rpc("authority", "call_local", "reliable")
+func sync_scan_device_state(active: bool, origin: Vector3, remaining: float = 0.0) -> void:
+    scan_device_active = active
+    scan_device_position = origin
+    scan_origin = origin
+    scan_remaining = remaining
+    if scan_device != null:
+        scan_device.global_position = origin
+        scan_device.visible = active
+        var label := scan_device.get_node_or_null("ScannerLabel") as Label3D
+        if label != null:
+            label.text = "扫描器\n扫描中" if remaining > 0.0 else "扫描器\nF 回收"
+
 func _scan_hint_for_player(player: SpacePlayer3D) -> String:
     var nearest: Dictionary = {}
     var nearest_distance := INF
-    var scan_radius := STORM_SCAN_RADIUS if storm_active else CLEAR_SCAN_RADIUS
+    var nearest_any: Dictionary = {}
+    var nearest_any_distance := INF
+    var scan_radius := STORM_SCAN_DEVICE_RADIUS if storm_active else SCAN_DEVICE_RADIUS
     for clue in exploration_clues:
         var kind := String(clue.get("kind", ""))
         var clue_id := int(clue.get("id", 0))
@@ -2142,6 +2440,9 @@ func _scan_hint_for_player(player: SpacePlayer3D) -> String:
             continue
         var clue_position := Vector2(clue.get("position", Vector2.ZERO))
         var raw_distance := _flat_distance(player.global_position, Vector3(clue_position.x, 0.0, clue_position.y))
+        if raw_distance < nearest_any_distance:
+            nearest_any = clue
+            nearest_any_distance = raw_distance
         var distance := raw_distance
         if (knowledge_flags.has("weather_station") or knowledge_flags.has("transport")) and kind == "sample":
             distance -= 12.0
@@ -2149,7 +2450,13 @@ func _scan_hint_for_player(player: SpacePlayer3D) -> String:
             nearest = clue
             nearest_distance = distance
     if nearest.is_empty():
-        return "附近没有明确线索"
+        if nearest_any.is_empty():
+            return "暂时没有未发现的回波"
+        var any_position := Vector2(nearest_any.get("position", Vector2.ZERO))
+        var any_kind := String(nearest_any.get("kind", ""))
+        var any_name := "地标" if any_kind == "landmark" else ("气象信标" if any_kind == "beacon" else ("热能电池" if any_kind == "crate" else "异常冰样"))
+        var from := Vector2(player.global_position.x, player.global_position.z)
+        return "附近没有回波；最近的%s在%s %.0fm，移动后再部署" % [any_name, _direction_hint(from, any_position), nearest_any_distance]
     var target_id := int(nearest.get("target_id", 0))
     var target_position := Vector2.ZERO
     var clue_kind := String(nearest.get("kind", ""))
@@ -2162,7 +2469,7 @@ func _scan_hint_for_player(player: SpacePlayer3D) -> String:
     else:
         target_position = Vector2(nearest.get("position", Vector2.ZERO))
         return "扫描捕捉到%s的地标回声：%s" % [_direction_hint(Vector2(player.global_position.x, player.global_position.z), target_position), String(nearest.get("name", "未知"))]
-    var signal_name := "拖行回波" if clue_kind == "beacon" else ("热融回波" if clue_kind == "crate" else ("晶体回波" if clue_kind == "sample" else "地标回声"))
+    var signal_name := "拖行回波" if clue_kind == "beacon" else ("热融回波" if clue_kind == "crate" else ("异常样本回波" if clue_kind == "sample" else "地标回声"))
     return "扫描捕捉到%s的%s" % [_direction_hint(Vector2(player.global_position.x, player.global_position.z), target_position), signal_name]
 
 func _update_scan_visual(delta: float) -> void:
@@ -2172,18 +2479,25 @@ func _update_scan_visual(delta: float) -> void:
         return
     if scan_remaining <= 0.0:
         scan_visual.visible = false
+        if scan_device != null and scan_device_active:
+            scan_device.visible = true
+            var label := scan_device.get_node_or_null("ScannerLabel") as Label3D
+            if label != null:
+                label.text = "扫描器\nF 回收"
         return
     scan_visual.visible = true
-    scan_visual.global_position = Vector3(scan_origin.x, 0.09, scan_origin.z)
+    scan_visual.global_position = Vector3(scan_device_position.x, 0.09, scan_device_position.z)
     var progress := clampf(1.0 - scan_remaining / SCAN_DURATION, 0.0, 1.0)
-    var max_radius := STORM_SCAN_RADIUS if storm_active else CLEAR_SCAN_RADIUS
+    var max_radius := STORM_SCAN_DEVICE_RADIUS if storm_active else SCAN_DEVICE_RADIUS
     var radius := lerpf(0.4, max_radius, progress)
     scan_visual.scale = Vector3(radius, 1.0, radius)
+    if scan_device != null:
+        scan_device.global_position = scan_device_position
+        scan_device.visible = scan_device_active
     _reveal_clues_in_scan(radius)
 
 func _reveal_clues_in_scan(radius: float) -> void:
-    var scanner := players.get(scan_peer_id) as SpacePlayer3D
-    if scanner == null:
+    if not scan_device_active:
         return
     for clue in exploration_clues:
         var clue_id := int(clue.get("id", 0))
@@ -2198,7 +2512,7 @@ func _reveal_clues_in_scan(radius: float) -> void:
         if kind == "sample" and taken_samples.has(target_id):
             continue
         var clue_position := Vector2(clue.get("position", Vector2.ZERO))
-        var distance := _flat_distance(scanner.global_position, Vector3(clue_position.x, 0.0, clue_position.y))
+        var distance := _flat_distance(scan_device_position, Vector3(clue_position.x, 0.0, clue_position.y))
         if distance > radius or distance > CLUE_SCAN_RADIUS:
             continue
         scan_revealed_clues.append(clue_id)
@@ -2206,6 +2520,24 @@ func _reveal_clues_in_scan(radius: float) -> void:
         if marker != null:
             marker.visible = true
             _show_feedback("扫描锁定：地面出现可调查痕迹", Color("#75dff5"), 1.0)
+
+func _retrieve_scan_device(peer_id: int) -> bool:
+    var player := players.get(peer_id) as SpacePlayer3D
+    if player == null or not scan_device_active:
+        return false
+    var distance := _flat_distance(player.global_position, scan_device_position)
+    if distance > RESOURCE_INTERACTION_RADIUS:
+        return false
+    scan_device_active = false
+    scan_remaining = 0.0
+    scan_cooldown = 0.0
+    if scan_device != null:
+        scan_device.visible = false
+    if scan_visual != null:
+        scan_visual.visible = false
+    sync_scan_device_state.rpc(false, scan_device_position, 0.0)
+    show_feedback_rpc.rpc("扫描器已回收，可以继续部署。", Color("#8be7ff"), 1.2)
+    return true
 
 func _landmark_position(landmark_id: String) -> Vector2:
     for landmark in LANDMARK_DATA:
@@ -2230,6 +2562,22 @@ func _reveal_landmark_signal(landmark_id: String) -> void:
         if marker != null:
             marker.visible = true
         return
+
+func _reveal_next_beacon_signal() -> void:
+    for index in beacon_positions.size():
+        var target_id := index + 1
+        if activated_beacons.has(target_id):
+            continue
+        for clue in exploration_clues:
+            if String(clue.get("kind", "")) != "beacon" or int(clue.get("target_id", 0)) != target_id:
+                continue
+            var clue_id := int(clue.get("id", 0))
+            if not scan_revealed_clues.has(clue_id) and not discovered_clues.has(clue_id):
+                scan_revealed_clues.append(clue_id)
+            var marker := clue_nodes.get(clue_id) as Node3D
+            if marker != null:
+                marker.visible = true
+            return
 
 func _reveal_signal_echoes(source: Vector3, max_count: int = 2) -> int:
     # 高频是“探测换风险”：只揭示信号源周边最值得追的几条回波，不直接把整张地图摊开。
@@ -2547,6 +2895,42 @@ func _broadcast_exploration_state() -> void:
     if is_host:
         sync_exploration_state.rpc(story_flags, anomaly_resolved, ending_choice, rift_valve_open, signal_mode, signal_lure_until, signal_lure_position, signal_cooldown_until, map_markers)
 
+func _drop_carried_item(peer_id: int) -> void:
+    var player := players.get(peer_id) as SpacePlayer3D
+    if player == null or player.carrying == 0:
+        show_feedback_rpc.rpc("手上没有可丢弃的物品。", Color("#ffbd75"), 1.0)
+        return
+    var carrying_kind := player.carrying
+    var carrying_id := player.carrying_id
+    var drop_position := player.global_position + Vector3(0.0, 0.0, 0.9)
+    if carrying_kind == 1 and crates.has(carrying_id):
+        taken_crates.erase(carrying_id)
+        crates[carrying_id].global_position = drop_position
+        crates[carrying_id].visible = true
+        sync_dropped_item.rpc(1, carrying_id, drop_position)
+        show_feedback_rpc.rpc("已丢下热能电池，按 F 可重新拾取。", Color("#8be7ff"), 1.2)
+    elif carrying_kind == 2 and samples.has(carrying_id):
+        taken_samples.erase(carrying_id)
+        samples[carrying_id].global_position = drop_position
+        samples[carrying_id].visible = true
+        sync_dropped_item.rpc(2, carrying_id, drop_position)
+        show_feedback_rpc.rpc("已丢下异常冰样，按 F 可重新拾取。", Color("#c8b6ff"), 1.2)
+    else:
+        show_feedback_rpc.rpc("物品状态已失效，已清空手持栏。", Color("#ffbd75"), 1.2)
+    player.carrying = 0
+    player.carrying_id = 0
+    _sync_state.rpc(_enemy_snapshot(), enemy_wave_index, enemy_wave_timer, activated_beacons, taken_crates, deposited_resources, _vitals_snapshot(), journal_entries, discovered_regions)
+    sync_contract_state.rpc(mission_elapsed, salvage_value, knowledge_flags.keys(), taken_samples, scan_revealed_clues)
+
+@rpc("authority", "call_local", "reliable")
+func sync_dropped_item(kind: int, item_id: int, drop_position: Vector3) -> void:
+    if kind == 1 and crates.has(item_id):
+        crates[item_id].global_position = drop_position
+        crates[item_id].visible = true
+    elif kind == 2 and samples.has(item_id):
+        samples[item_id].global_position = drop_position
+        samples[item_id].visible = true
+
 func handle_action(peer_id: int, action: String) -> void:
     if not is_host:
         request_action.rpc_id(1, peer_id, action)
@@ -2568,6 +2952,8 @@ func handle_action(peer_id: int, action: String) -> void:
         return
     if action == "signal_low":
         _set_signal_mode(peer_id, "low")
+        return
+    if _field_interactions != null and _field_interactions.handle_action(peer_id, action):
         return
     if action == "repair":
         if _near_landmark(player, "relay") and knowledge_flags.has("relay") and activated_beacons.size() >= beacon_positions.size():
@@ -2594,42 +2980,56 @@ func handle_action(peer_id: int, action: String) -> void:
                 _set_status("玩家 %d 已修复气象信标 %d。" % [peer_id, id])
                 _record_journal("信标 %d" % id, "通讯塔恢复供电。旧频道没有求救，而是在重复一个陌生人的呼号。")
                 _spawn_particle_burst(beacons[id].global_position + Vector3(0, 1.5, 0), Color("#ffd966"), 8)
+                floating_feedback_rpc.rpc(beacons[id].global_position + Vector3(0, 2.0, 0), "信标已修复", Color("#ffe08a"))
                 show_feedback_rpc.rpc("信标修复", Color("#ffd966"), 1.0)
                 if activated_beacons.size() == 1 and not story_flags.has("first_beacon"):
                     story_flags["first_beacon"] = true
                     _reveal_landmark_signal("weather_station")
-                    show_story_rpc.rpc("信标重新亮起。旧频道自动接通：‘……你们终于来了。’", 7.0)
-                    _record_journal("异常回波", "第一座信标的回波指向旧气象站。先理解天气记录，才能校准下一座信标。")
+                    show_story_rpc.rpc("信标重新亮起。旧频道自动接通：‘……你们终于来了。’ 回波把坐标指向旧气象站。", 7.0)
+                    _record_journal("路线解锁", "第一座信标的回波指向旧气象站。先读取天气记录，才能校准后续信标。")
+                elif activated_beacons.size() >= beacon_positions.size() and not story_flags.has("all_beacons"):
+                    story_flags["all_beacons"] = true
+                    _reveal_landmark_signal("relay")
+                    _record_journal("路线解锁", "三座信标已经同时回应。回到废弃通信阵列，在中继站选择稳定或关闭地下异常；之后还要清掉撤离航道。")
+                    show_story_rpc.rpc("三座信标同时回应。地下异常已经无法继续回避，回到通信阵列做出选择，然后清理撤离航道。", 7.0)
                 _sync_state.rpc(_enemy_snapshot(), enemy_wave_index, enemy_wave_timer, activated_beacons, taken_crates, deposited_resources, _vitals_snapshot(), journal_entries, discovered_regions)
                 _broadcast_exploration_state()
                 return
     elif action == "pickup":
+        if _retrieve_scan_device(peer_id):
+            return
         for id in crates:
             if taken_crates.has(id) or player.carrying > 0:
                 continue
-            if _flat_distance(player.global_position, crates[id].global_position) <= 1.8:
+            if _flat_distance(player.global_position, crates[id].global_position) <= RESOURCE_INTERACTION_RADIUS:
                 taken_crates.append(id)
                 player.carrying = 1
+                player.carrying_id = id
                 crates[id].visible = false
                 _set_status("玩家 %d 拾取了热能电池。" % peer_id)
                 _record_journal("热能电池", "电池仍在发热，外壳上的编号属于已经注销的科考队。")
                 _spawn_particle_burst(crates[id].global_position + Vector3(0, 0.8, 0), Color("#6ee7b7"), 6)
+                floating_feedback_rpc.rpc(crates[id].global_position + Vector3(0, 1.35, 0), "电池 +1", Color("#9ff5c9"))
                 show_feedback_rpc.rpc("电池 +1", Color("#6ee7b7"), 0.8)
                 _sync_state.rpc(_enemy_snapshot(), enemy_wave_index, enemy_wave_timer, activated_beacons, taken_crates, deposited_resources, _vitals_snapshot(), journal_entries, discovered_regions)
                 return
         for id in samples:
             if taken_samples.has(id) or player.carrying > 0:
                 continue
-            if _flat_distance(player.global_position, samples[id].global_position) <= 1.8:
+            if _flat_distance(player.global_position, samples[id].global_position) <= RESOURCE_INTERACTION_RADIUS:
                 taken_samples.append(id)
                 player.carrying = 2
+                player.carrying_id = id
                 samples[id].visible = false
                 _set_status("玩家 %d 拾取了异常冰样。" % peer_id)
-                _record_journal("异常冰样", "样本内部仍在脉动，携带它时附近的地热回声会变得更清晰。")
+                _record_journal("异常冰样", "样本内部仍在脉动：可选回收并带回 +20 价值，携带时会提前引来敌袭。")
                 _spawn_particle_burst(samples[id].global_position + Vector3(0, 0.8, 0), Color("#b8a1ff"), 8)
+                floating_feedback_rpc.rpc(samples[id].global_position + Vector3(0, 1.35, 0), "样本 +1", Color("#d5c8ff"))
                 show_feedback_rpc.rpc("样本 +1 · 价值 %d" % SAMPLE_VALUE, Color("#c8b6ff"), 1.0)
                 sync_contract_state.rpc(mission_elapsed, salvage_value, knowledge_flags.keys(), taken_samples, scan_revealed_clues)
                 return
+    elif action == "drop":
+        _drop_carried_item(peer_id)
     elif action == "deposit":
         if _near_landmark(player, "relay") and knowledge_flags.has("relay") and activated_beacons.size() >= beacon_positions.size():
             _resolve_anomaly("shutdown")
@@ -2637,6 +3037,7 @@ func handle_action(peer_id: int, action: String) -> void:
         if player.carrying > 0 and _flat_distance(player.global_position, Vector3(EXTRACTION.x, 0, EXTRACTION.y)) <= 2.4:
             var carried_kind := player.carrying
             player.carrying = 0
+            player.carrying_id = 0
             if carried_kind == 2:
                 salvage_value += SAMPLE_VALUE
                 _set_status("已投送异常冰样，当前可选回收价值 %d / %d。" % [salvage_value, OPTIONAL_REWARD_TARGET])
@@ -2647,6 +3048,7 @@ func handle_action(peer_id: int, action: String) -> void:
                 _set_status("已投送热能电池 %d / %d，当前可选回收价值 %d / %d。" % [deposited_resources, crates.size(), salvage_value, OPTIONAL_REWARD_TARGET])
                 _record_journal("安全屋记录", "带回的电池让安全屋恢复了短暂的热量。地下信号也随之变强。")
             _spawn_particle_burst(Vector3(EXTRACTION.x, 1.2, EXTRACTION.y), Color("#5ac8ff"), 6)
+            floating_feedback_rpc.rpc(Vector3(EXTRACTION.x, 2.0, EXTRACTION.y), "投送完成", Color("#9fe8ff"))
             show_feedback_rpc.rpc("投送完成 · 可选回收价值 %d/%d" % [salvage_value, OPTIONAL_REWARD_TARGET], Color("#5ac8ff"), 1.0)
             if carried_kind == 1 and deposited_resources == 1 and not story_flags.has("first_battery"):
                 story_flags["first_battery"] = true
@@ -2701,23 +3103,26 @@ func _apply_landmark_knowledge(landmark_id: String) -> void:
     knowledge_flags[landmark_id] = true
     match landmark_id:
         "weather_station":
-            _record_journal("知识解锁", "旧气象站的观测台能标出异常冰样的频段；扫描时优先显示晶体回波。")
+            _record_journal("知识解锁", "旧气象站的观测台能标出异常冰样的频段；部署扫描器后会优先显示异常样本回波。")
             _reveal_sample_clues()
             _reveal_landmark_signal("ice_rift")
+            _reveal_next_beacon_signal()
             show_story_rpc.rpc("气象记录显示：暴风雪不是天气，而是信标启动后从冰层里升起的回应。", 7.0)
             _knowledge_feedback("知识解锁：异常冰样回波已加入扫描", Color("#c8b6ff"))
         "ice_rift":
-            _record_journal("知识解锁", "热脉裂谷的脉冲会周期性回落；在回落期打开阀门，才能把裂谷变成稳定热源。")
+            _record_journal("知识解锁", "天气记录与裂谷脉冲完全同频。等热脉回落时按 E 开阀，稳定热流会成为穿越冰原的安全节点。")
             _reveal_landmark_signal("relay")
-            show_story_rpc.rpc("裂谷的热脉与信标同频。地下回声不是从远处传来，而是在等待下一次启动。", 7.0)
+            _reveal_next_beacon_signal()
+            show_story_rpc.rpc("裂谷的热脉与信标同频。地下回声不是从远处传来，而是在等待下一次启动；先在回落期开阀，再去通信阵列。", 7.0)
             _knowledge_feedback("知识解锁：裂谷热脉可供回温", Color("#ffb36b"))
         "transport":
             _record_journal("知识解锁", "运输舱的货单确认：样本价值很高，但带回样本会让移动和撤离更危险。")
             _reveal_sample_clues()
             _knowledge_feedback("知识解锁：异常冰样价值 +20", Color("#b8a1ff"))
         "relay":
-            _record_journal("知识解锁", "通信阵列能预报下一次暴风雪；日志会显示风暴倒计时。")
-            show_story_rpc.rpc("通信阵列回放了失踪队伍的最后决定：第三座信标不是修复问题，而是选择。", 7.0)
+            _record_journal("知识解锁", "通信阵列回放了失踪队伍的最后决定：第三座信标不是单纯维修，而是决定地下回声的去留。")
+            show_story_rpc.rpc("通信阵列回放了失踪队伍的最后决定：第三座信标不是修复问题，而是选择。三座信标齐亮后，回到这里处理地下异常。", 7.0)
+            _reveal_next_beacon_signal()
             _knowledge_feedback("知识解锁：暴风雪预报已接入日志", Color("#75dff5"))
     if is_host:
         sync_contract_state.rpc(mission_elapsed, salvage_value, knowledge_flags.keys(), taken_samples, scan_revealed_clues)
@@ -2758,6 +3163,9 @@ func _tick_revive(delta: float) -> void:
             target.warmth = 1.0
             _set_status("玩家 %d 已救起玩家 %d。" % [reviver_id, target_id])
             _spawn_particle_burst(target.global_position + Vector3(0, 1.0, 0), Color("#6ee7b7"), 8)
+            camera_shake_rpc.rpc(reviver_id, 0.035, 0.12)
+            camera_shake_rpc.rpc(target_id, 0.08, 0.16)
+            floating_feedback_rpc.rpc(target.global_position + Vector3(0, 1.65, 0), "救援成功", Color("#9ff5c9"))
             show_feedback_rpc.rpc("救援成功", Color("#6ee7b7"), 1.0)
         else:
             revive_progress[reviver_id] = progress
@@ -2801,7 +3209,9 @@ func attack_feedback(peer_id: int, target: Vector3, hit: bool) -> void:
     if player == null:
         return
     player.show_attack_animation()
+    player.trigger_camera_shake(0.045 if hit else 0.025, 0.08)
     _spawn_attack_effect(player.global_position, target)
+    floating_feedback_rpc(target + Vector3(0, 1.2, 0), "命中" if hit else "未命中", Color("#ffd089") if hit else Color("#ff9d9d"))
     if peer_id == multiplayer.get_unique_id():
         _set_status("命中！按住空格连续攻击范围圈内的异形。" if hit else "已开火 · 圈内没有敌人，请靠近红色异形。")
 
@@ -2839,12 +3249,15 @@ func damage_player(peer_id: int, amount: int) -> void:
         return
     player.health = maxi(player.health - amount, 0)
     _spawn_particle_burst(player.global_position + Vector3(0, 0.8, 0), Color("#ff6b6b"), 8)
+    camera_shake_rpc.rpc(peer_id, 0.13, 0.18)
+    floating_feedback_rpc.rpc(player.global_position + Vector3(0, 1.45, 0), "-%d HP" % amount, Color("#ff8f88"))
     show_feedback_rpc.rpc("受伤 -%d HP" % amount, Color("#ff6b6b"), 0.8)
     if player.health <= 0:
         player.downed = true
         player.velocity = Vector3.ZERO
         _set_status("玩家 %d 倒地，等待队友靠近按 R 救援。" % peer_id)
         _spawn_particle_burst(player.global_position + Vector3(0, 1.0, 0), Color("#ff3333"), 15)
+        camera_shake_rpc.rpc(peer_id, 0.2, 0.28)
         show_feedback_rpc.rpc("倒地", Color("#ff3333"), 2.0)
         _check_all_downed()
 
@@ -2869,15 +3282,29 @@ func _tick_survival(delta: float) -> void:
                     break
         if not near_heat and rift_valve_open:
             near_heat = _flat_distance(p.global_position, Vector3(132.0, 0.0, -94.0)) <= HEAT_RADIUS * 1.35
-        if near_heat:
+        if not near_heat and _field_interactions != null:
+            for source in _field_interactions.heat_sources():
+                var source_point := Vector2(source.get("position", Vector2.ZERO))
+                var source_radius := float(source.get("radius", HEAT_RADIUS))
+                if _flat_distance(p.global_position, Vector3(source_point.x, 0.0, source_point.y)) <= source_radius:
+                    near_heat = true
+                    break
+        var sprint_oxygen_scale := SPRINT_OXYGEN_MULTIPLIER if p.sprinting else 1.0
+        var sprint_warmth_scale := SPRINT_WARMTH_MULTIPLIER if p.sprinting else 1.0
+        if near_heat and not p.sprinting:
             var heat_recovery_scale := 0.42 if storm_active else 1.0
             p.warmth = minf(p.warmth + WARMTH_RECOVER * heat_recovery_scale * delta, 1.0)
             p.oxygen = minf(p.oxygen + OXYGEN_RECOVER * heat_recovery_scale * delta, 100.0)
+        elif near_heat:
+            # 加速时仍可以经过热源，但体温和氧气会按加速消耗，避免“站在热源里无限冲刺”。
+            var heat_sprint_scale := 0.35 if not storm_active else 0.6
+            p.warmth = maxf(p.warmth - WARMTH_DRAIN * heat_sprint_scale * sprint_warmth_scale * delta, 0.0)
+            p.oxygen = maxf(p.oxygen - OXYGEN_DRAIN_BASE * heat_sprint_scale * sprint_oxygen_scale * delta, 0.0)
         else:
             var storm_cold_scale := 2.15 if storm_active else 1.0
             var storm_oxygen_scale := 1.45 if storm_active else 1.0
-            p.warmth = maxf(p.warmth - WARMTH_DRAIN * storm_cold_scale * delta, 0.0)
-            p.oxygen = maxf(p.oxygen - delta * (OXYGEN_DRAIN_BASE + (1.0 - p.warmth) * OXYGEN_DRAIN_COLD) * storm_oxygen_scale, 0.0)
+            p.warmth = maxf(p.warmth - WARMTH_DRAIN * storm_cold_scale * sprint_warmth_scale * delta, 0.0)
+            p.oxygen = maxf(p.oxygen - delta * (OXYGEN_DRAIN_BASE + (1.0 - p.warmth) * OXYGEN_DRAIN_COLD) * storm_oxygen_scale * sprint_oxygen_scale, 0.0)
             if p.oxygen <= 0.0:
                 p.downed = true
                 p.health = 0
@@ -2921,6 +3348,8 @@ func _tick_extraction(delta: float) -> void:
         mission_return_timer = 0.0
         var ending_name := "关闭信标" if ending_choice == "shutdown" else "稳定信标"
         mission_summary = "撤离成功：%s；回收价值 %d，发现区域 %d，样本 %d。" % [ending_name, salvage_value, discovered_regions.size(), taken_samples.size()]
+        if story_flags.has("crew_message_returned"):
+            mission_summary += " 岑夏与陆衡的留言已送回归航号。"
         _set_status(mission_summary)
 
 @rpc("authority", "call_local", "reliable")
@@ -2959,6 +3388,8 @@ func return_to_ship(reason: String, final_vitals: Array = []) -> void:
     reviving.clear()
     revive_progress.clear()
     if _world_root != null:
+        if _field_interactions != null:
+            _field_interactions.reset()
         remove_child(_world_root)
         _world_root.queue_free()
         _world_root = null
@@ -2987,6 +3418,12 @@ func return_to_ship(reason: String, final_vitals: Array = []) -> void:
     beacon_positions.clear()
     crate_positions.clear()
     scan_visual = null
+    scan_device = null
+    scan_device_active = false
+    scan_device_position = Vector3.ZERO
+    scan_peer_id = -1
+    scan_remaining = 0.0
+    scan_cooldown = 0.0
     _thought_timer = 0.0
     if _thought_label != null:
         _thought_label.visible = false
@@ -3022,14 +3459,14 @@ func _enemy_snapshot() -> Array:
     return snapshot
 
 func _world_snapshot() -> Dictionary:
-    return {"ship_state": _ship_session.snapshot(), "wave": enemy_wave_index, "timer": enemy_wave_timer, "enemies": _enemy_snapshot(), "beacons": activated_beacons, "crates": taken_crates, "samples": taken_samples, "deposited": deposited_resources, "salvage": salvage_value, "mission_elapsed": mission_elapsed, "knowledge": knowledge_flags.keys(), "anomaly_resolved": anomaly_resolved, "ending_choice": ending_choice, "story_flags": story_flags, "rift_valve_open": rift_valve_open, "signal_mode": signal_mode, "signal_lure_until": signal_lure_until, "signal_lure_position": signal_lure_position, "signal_cooldown_until": signal_cooldown_until, "map_markers": map_markers, "vitals": _vitals_snapshot(), "beacon_positions": beacon_positions, "crate_positions": crate_positions, "sample_positions": sample_positions, "journal": journal_entries, "regions": discovered_regions, "clues": discovered_clues, "scan_clues": scan_revealed_clues}
+    return {"ship_state": _ship_session.snapshot(), "wave": enemy_wave_index, "timer": enemy_wave_timer, "enemies": _enemy_snapshot(), "beacons": activated_beacons, "crates": taken_crates, "samples": taken_samples, "deposited": deposited_resources, "salvage": salvage_value, "mission_elapsed": mission_elapsed, "knowledge": knowledge_flags.keys(), "anomaly_resolved": anomaly_resolved, "ending_choice": ending_choice, "story_flags": story_flags, "rift_valve_open": rift_valve_open, "signal_mode": signal_mode, "signal_lure_until": signal_lure_until, "signal_lure_position": signal_lure_position, "signal_cooldown_until": signal_cooldown_until, "map_markers": map_markers, "vitals": _vitals_snapshot(), "beacon_positions": beacon_positions, "crate_positions": crate_positions, "sample_positions": sample_positions, "journal": journal_entries, "regions": discovered_regions, "clues": discovered_clues, "scan_clues": scan_revealed_clues, "scan_device_active": scan_device_active, "scan_device_position": scan_device_position, "scan_remaining": scan_remaining, "field_state": _field_interactions.snapshot() if _field_interactions != null else {}}
 
 func _vitals_snapshot() -> Array:
     var snapshot: Array = []
     for id in players:
         var p := players[id] as SpacePlayer3D
         if p != null:
-            snapshot.append([id, p.health, p.oxygen, p.warmth, p.carrying, p.downed])
+            snapshot.append([id, p.health, p.oxygen, p.warmth, p.carrying, p.downed, p.carrying_id, p.sprinting])
     return snapshot
 
 @rpc("authority", "call_local", "unreliable")
@@ -3046,6 +3483,8 @@ func sync_vitals(snapshot: Array, in_ship := false) -> void:
         p.warmth = float(entry[3])
         p.carrying = int(entry[4])
         p.downed = bool(entry[5])
+        p.carrying_id = int(entry[6]) if entry.size() > 6 else 0
+        p.sprinting = bool(entry[7]) if entry.size() > 7 else false
 
 @rpc("authority", "call_local", "reliable")
 func sync_full_state(snapshot: Dictionary) -> void:
@@ -3083,8 +3522,12 @@ func sync_full_state(snapshot: Dictionary) -> void:
     for marker in map_markers:
         next_marker_id = maxi(next_marker_id, int(marker.get("id", 0)) + 1)
     _apply_layout_snapshot(snapshot.get("beacon_positions", []), snapshot.get("crate_positions", []), snapshot.get("sample_positions", []))
+    if _field_interactions != null:
+        _field_interactions.apply_snapshot(snapshot.get("field_state", {}))
     if knowledge_flags.has("weather_station") or knowledge_flags.has("transport"):
         _reveal_sample_clues()
+    if bool(snapshot.get("scan_device_active", false)):
+        sync_scan_device_state(true, Vector3(snapshot.get("scan_device_position", Vector3.ZERO)), float(snapshot.get("scan_remaining", 0.0)))
     sync_vitals(snapshot.get("vitals", []))
     _apply_objective_visuals()
     _apply_enemy_snapshot(snapshot.get("enemies", []))
@@ -3103,6 +3546,12 @@ func sync_contract_state(elapsed: float, value: int, knowledge: Array, samples_s
         scan_revealed_clues.assign(scan_state)
     _apply_objective_visuals()
     _refresh_journal()
+
+@rpc("authority", "call_local", "reliable")
+func sync_field_state(data: Dictionary) -> void:
+    if _field_interactions != null:
+        _field_interactions.apply_snapshot(data)
+        _refresh_journal()
 
 @rpc("authority", "call_local", "reliable")
 func sync_exploration_state(next_story_flags: Dictionary, next_anomaly_resolved: bool, next_ending_choice: String, next_rift_valve_open: bool, next_signal_mode: String, next_signal_lure_until: float, next_signal_lure_position: Vector3, next_signal_cooldown_until: float, next_map_markers: Array = []) -> void:
@@ -3188,6 +3637,29 @@ func _apply_enemy_snapshot(snapshot: Array) -> void:
             enemies[id].queue_free()
             enemies.erase(id)
 
+func _next_objective_text() -> String:
+    if mission_completed:
+        return "撤离成功，正在返回飞船"
+    if mission_failed:
+        return "全队倒地，正在返航"
+    if extraction_enabled:
+        return "全队进入蓝色撤离平台并保持 3 秒"
+    if not knowledge_flags.has("weather_station"):
+        if activated_beacons.is_empty():
+            return "部署扫描器寻找第一座气象信标"
+        return "前往旧气象站调查，取得下一座信标的校准资料"
+    if not knowledge_flags.has("ice_rift"):
+        return "前往冰层裂谷，观察热脉回落并开启阀门"
+    if not knowledge_flags.has("relay"):
+        return "前往废弃通信阵列，解码地下回波"
+    if activated_beacons.size() < beacon_positions.size():
+        return "修复剩余气象信标（%d/%d）" % [activated_beacons.size(), beacon_positions.size()]
+    if not anomaly_resolved:
+        return "回到通信阵列，按 E 稳定或按 G 关闭地下异常"
+    if not enemies.is_empty():
+        return "清除撤离航道上的剩余敌人"
+    return "前往撤离平台集合"
+
 func _update_hud() -> void:
     if not game_started:
         return
@@ -3219,18 +3691,19 @@ func _update_hud() -> void:
             signal_text = "高频 · 探测/风暴"
         elif signal_mode == "low":
             signal_text = "低频 · 诱导"
-        _progress_label.text = "%s · %s\n调查 %d/%d   信标 %d/%d   %s   信号：%s   运行 %.0fs" % [phase, _region_hint(local.global_position), knowledge_count, REQUIRED_KNOWLEDGE.size(), activated_beacons.size(), beacon_positions.size(), anomaly_text, signal_text, mission_elapsed]
+        _progress_label.text = "%s · %s\n调查 %d/%d   信标 %d/%d\n%s   信号：%s   %.0fs\n下一步：%s" % [phase, _region_hint(local.global_position), knowledge_count, REQUIRED_KNOWLEDGE.size(), activated_beacons.size(), beacon_positions.size(), anomaly_text, signal_text, mission_elapsed, _next_objective_text()]
         _vitals_label.text = "生命 %d/5   氧气 %d%%   体温 %d%%\n%s" % [local.health, int(local.oxygen), int(local.warmth * 100.0), carry_text]
         var vital_color := Color("#ffad9f") if local.oxygen <= 25.0 or local.health <= 2 else Color("#d9eef4")
         _vitals_label.add_theme_color_override("font_color", vital_color)
         var cooldown := local.scan_cooldown_remaining
         var scan_tip := "Q  扫描 %.0fs" % ceilf(cooldown) if cooldown > 0.0 else "Q  扫描"
-        _hint_label.text = scan_tip + "    Tab  日志 / 操作"
+        _hint_label.text = scan_tip + "    Shift  加速（更耗氧/体温）    F  拾取/回收    X  丢下    Tab  日志    M  地图"
         _update_compass(local)
         if _journal_map_view != null:
             _journal_map_view.update_state(Vector2(local.global_position.x, local.global_position.z), discovered_regions, true)
             _journal_map_view.update_objectives(_known_map_positions("beacon", beacon_positions, activated_beacons), _known_map_positions("crate", crate_positions, taken_crates), activated_beacons, taken_crates)
             _journal_map_view.update_heat_sources(_known_heat_sources())
+            _journal_map_view.update_field_sites(_field_interactions.map_sites() if _field_interactions != null else [])
             _journal_map_view.update_markers(map_markers)
         var warning := ""
         if mission_failed:
@@ -3258,6 +3731,13 @@ func _update_hud() -> void:
 func _update_compass(local: SpacePlayer3D) -> void:
     if _compass_label == null:
         return
+    if scan_device_active:
+        var scanner_from := Vector2(local.global_position.x, local.global_position.z)
+        var scanner_to := Vector2(scan_device_position.x, scan_device_position.z)
+        var scanner_distance := scanner_from.distance_to(scanner_to)
+        if scanner_distance > RESOURCE_INTERACTION_RADIUS:
+            _compass_label.text = "扫描器   ◈ %s   %.0f m · 靠近后按 F 回收" % [_direction_hint(scanner_from, scanner_to), scanner_distance]
+            return
     if extraction_enabled:
         var extraction_from := Vector2(local.global_position.x, local.global_position.z)
         _compass_label.text = "撤离罗盘   ◈ %s   %.0f m" % [_direction_hint(extraction_from, EXTRACTION), extraction_from.distance_to(EXTRACTION)]
@@ -3279,15 +3759,37 @@ func _update_compass(local: SpacePlayer3D) -> void:
             best_distance = distance
             best_clue = clue
     if best_clue.is_empty():
-        _compass_label.text = "信号罗盘   ·   Q 扫描地面回波"
+        var next_target := _next_navigation_target()
+        if not next_target.is_empty():
+            var target_point := Vector2(next_target.get("position", Vector2.ZERO))
+            _compass_label.text = "下一步   %s   ◈ %s   %.0f m" % [String(next_target.get("label", "目标")), _direction_hint(from, target_point), from.distance_to(target_point)]
+        else:
+            _compass_label.text = "信号罗盘   ·   Q 部署扫描器，F 回收"
         return
     var clue_point := Vector2(best_clue.get("position", Vector2.ZERO))
     var clue_kind := String(best_clue.get("kind", ""))
-    var signal_name := "拖行回波" if clue_kind == "beacon" else ("热融回波" if clue_kind == "crate" else "晶体回波")
+    var signal_name := "拖行回波" if clue_kind == "beacon" else ("热融回波" if clue_kind == "crate" else "异常样本回波")
     _compass_distance = from.distance_to(clue_point)
     _compass_direction = _direction_hint(from, clue_point)
     _compass_target = signal_name
     _compass_label.text = "信号罗盘   %s   ◈ %s   %.0f m" % [signal_name, _compass_direction, _compass_distance]
+
+func _next_navigation_target() -> Dictionary:
+    if not knowledge_flags.has("weather_station") and not activated_beacons.is_empty():
+        return {"label": "旧气象站", "position": _landmark_position("weather_station")}
+    if not knowledge_flags.has("ice_rift") and knowledge_flags.has("weather_station"):
+        return {"label": "冰层裂谷", "position": _landmark_position("ice_rift")}
+    if not knowledge_flags.has("relay") and knowledge_flags.has("ice_rift"):
+        return {"label": "废弃通信阵列", "position": _landmark_position("relay")}
+    if activated_beacons.size() < beacon_positions.size() and knowledge_flags.has("relay"):
+        for index in beacon_positions.size():
+            if not activated_beacons.has(index + 1):
+                return {"label": "未修复气象信标", "position": Vector2(beacon_positions[index])}
+    if not anomaly_resolved and activated_beacons.size() >= beacon_positions.size() and knowledge_flags.has("relay"):
+        return {"label": "通信阵列中继站", "position": _landmark_position("relay")}
+    if extraction_enabled:
+        return {"label": "蓝色撤离平台", "position": EXTRACTION}
+    return {}
 
 func _known_map_positions(kind: String, positions: Array, completed: Array[int]) -> Array:
     var known: Array = []
@@ -3360,6 +3862,8 @@ func _nearest_threat_distance(local: SpacePlayer3D) -> float:
 func _update_interaction_hint() -> void:
     if _interaction_label == null or not game_started:
         return
+    if _interaction_progress != null:
+        _interaction_progress.visible = false
     var local := players.get(multiplayer.get_unique_id()) as SpacePlayer3D
     if local == null:
         _interaction_panel.visible = false
@@ -3372,6 +3876,20 @@ func _update_interaction_hint() -> void:
         _interaction_panel.visible = false
         return
     var prompts: Array[Dictionary] = []
+    if _field_interactions != null:
+        var field_prompt := _field_interactions.prompt(local)
+        if not field_prompt.is_empty():
+            prompts.append({"distance": -0.2, "priority": 96, "text": field_prompt})
+        var field_progress := _field_interactions.interaction_progress(local.peer_id)
+        if _field_interactions.has_interaction_job(local.peer_id) and _interaction_progress != null:
+            _interaction_progress.value = field_progress
+            _interaction_progress.visible = true
+    if scan_device_active:
+        var scanner_distance := _flat_distance(local.global_position, scan_device_position)
+        if scanner_distance <= RESOURCE_INTERACTION_RADIUS:
+            prompts.append({"distance": scanner_distance, "priority": 95, "text": "[F]  回收扫描器 · 扫描器会保留已锁定线索"})
+    if local.carrying > 0:
+        prompts.append({"distance": -0.5, "priority": 92, "text": "[X]  丢下携带物 · 之后可继续加速和拾取"})
     for entry in _object_tags:
         var node := entry.get("node") as Node3D
         if not is_instance_valid(node) or not node.visible:
@@ -3392,11 +3910,11 @@ func _update_interaction_hint() -> void:
                     var block_reason := _beacon_block_reason()
                     text = "[E]  修复信标" if block_reason.is_empty() else "[E]  信标需要新的环境资料"
             "crate":
-                if local.carrying == 0 and distance <= 1.8:
+                if local.carrying == 0 and distance <= RESOURCE_INTERACTION_RADIUS:
                     text = "[F]  拾取热能电池"
             "sample":
-                if local.carrying == 0 and distance <= 1.8:
-                    text = "[F]  拾取异常冰样"
+                if local.carrying == 0 and distance <= RESOURCE_INTERACTION_RADIUS:
+                    text = "[F]  拾取异常冰样（可选）"
             "extraction":
                 if local.carrying > 0 and distance <= 2.4:
                     text = "[G]  投送携带物"
@@ -3429,10 +3947,13 @@ func _update_interaction_hint() -> void:
         if mission_elapsed < signal_cooldown_until:
             signal_prompt = "信号阵列冷却中 · %.1f 秒后可再次切频" % (signal_cooldown_until - mission_elapsed)
         prompts.append({"distance": 0.0, "priority": 65, "text": signal_prompt})
-    var heat_distance := _flat_distance(local.global_position, Vector3(SAFEHOUSE.x, 0.0, SAFEHOUSE.y))
-    if heat_distance <= HEAT_RADIUS:
+    var nearest_heat_distance := INF
+    for source in _known_heat_sources():
+        var source_point := Vector2(source.get("position", Vector2.ZERO))
+        nearest_heat_distance = minf(nearest_heat_distance, local.global_position.distance_to(Vector3(source_point.x, local.global_position.y, source_point.y)))
+    if nearest_heat_distance <= HEAT_RADIUS:
         if local.oxygen < 98.0 or local.warmth < 0.98:
-            prompts.append({"distance": heat_distance, "priority": 10, "text": "热源正在补氧、回温"})
+            prompts.append({"distance": nearest_heat_distance, "priority": 10, "text": "热源正在补氧、回温"})
     for mate_value in players.values():
         var mate := mate_value as SpacePlayer3D
         if mate != null and mate.peer_id != local.peer_id and mate.downed and _flat_distance(local.global_position, mate.global_position) <= REVIVE_RANGE:
@@ -3499,14 +4020,15 @@ func _refresh_journal() -> void:
         if knowledge_flags.has(flag):
             knowledge_count += 1
     lines.append("调查：%d / %d    信标：%d / %d" % [knowledge_count, REQUIRED_KNOWLEDGE.size(), activated_beacons.size(), beacon_positions.size()])
-    lines.append("异常：%s    电池与样本：可选回收" % ("已处理" if anomaly_resolved else "未处理"))
+    lines.append("异常：%s    电池：可选回收 +10    异常冰样：可选回收 +20" % ("已处理" if anomaly_resolved else "未处理"))
+    lines.append("异常冰样会提前引来敌袭；携带不便时按 X 丢下，靠近后按 F 重新拾取")
     lines.append("热脉阀：%s    信号频段：%s" % ["已开启" if rift_valve_open else "未开启", "高频" if signal_mode == "high" else ("低频" if signal_mode == "low" else "中性")])
     lines.append("地图标记：%d / 12    H 热源 · C 线索 · V 清除最近" % map_markers.size())
     lines.append("回收价值：%d    样本：%d / %d" % [salvage_value, taken_samples.size(), sample_positions.size()])
     lines.append("探索时间：%.0f 秒    热脉周期：%.1f 秒" % [mission_elapsed, THERMAL_CYCLE])
     lines.append("")
     if journal_entries.is_empty():
-        lines.append("暂时没有记录。先离开安全屋观察环境，按 Q 扫描可疑回波，再靠近显形痕迹。")
+        lines.append("暂时没有记录。先部署扫描器（Q），扫描器固定扫描附近区域；扫描结束后靠近设备按 F 回收。")
     else:
         for entry in journal_entries:
             lines.append("· " + entry)
@@ -3520,6 +4042,18 @@ func _toggle_journal() -> void:
     if _journal_visible:
         _show_journal_page(false)
         _refresh_journal()
+
+func _toggle_map() -> void:
+    if not game_started or _journal_panel == null or _journal_map_view == null:
+        return
+    var map_is_open := _journal_visible and _journal_map_view.visible
+    _journal_visible = not map_is_open
+    _journal_panel.visible = _journal_visible
+    if _journal_visible:
+        _show_journal_page(true)
+        _refresh_journal()
+    else:
+        _journal_map_view.visible = false
 
 func _show_journal_page(show_map: bool) -> void:
     if _journal_log_view == null or _journal_map_view == null:
@@ -3544,6 +4078,8 @@ func _known_heat_sources() -> Array:
             sources.append({"position": Vector2(beacon.global_position.x, beacon.global_position.z), "label": "信标热源"})
     if rift_valve_open:
         sources.append({"position": Vector2(132.0, -94.0), "label": "稳定裂谷热源"})
+    if _field_interactions != null:
+        sources.append_array(_field_interactions.heat_sources())
     return sources
 
 func _clue_position(clue: Dictionary) -> Vector2:
@@ -3746,6 +4282,38 @@ func _spawn_particle_burst(position: Vector3, color: Color, count: int = 12) -> 
         tween.tween_property(particle, "global_position", particle.global_position + direction * speed, lifetime)
         tween.tween_property(particle, "scale", Vector3.ZERO, lifetime)
         tween.finished.connect(func(): particle.queue_free())
+
+@rpc("authority", "call_local", "reliable")
+func camera_shake_rpc(peer_id: int, strength: float = 0.08, duration: float = 0.12) -> void:
+    var player := players.get(peer_id) as SpacePlayer3D
+    if player != null:
+        player.trigger_camera_shake(strength, duration)
+
+@rpc("authority", "call_local", "reliable")
+func floating_feedback_rpc(position: Vector3, text: String, color: Color) -> void:
+    _spawn_floating_feedback(position, text, color)
+
+func _spawn_floating_feedback(position: Vector3, text: String, color: Color) -> void:
+    if not is_instance_valid(_world_root):
+        return
+    var label := Label3D.new()
+    label.text = text
+    label.position = position
+    label.font_size = 42
+    label.pixel_size = 0.010
+    label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+    label.modulate = color
+    label.outline_size = 9
+    label.outline_modulate = Color("#061521")
+    label.shaded = false
+    _world_root.add_child(label)
+    var lifetime := 0.9
+    var end_color := Color(color.r, color.g, color.b, 0.0)
+    var tween := create_tween()
+    tween.set_parallel(true)
+    tween.tween_property(label, "position:y", position.y + 1.0, lifetime)
+    tween.tween_property(label, "modulate", end_color, lifetime)
+    tween.finished.connect(func(): label.queue_free())
 
 @rpc("authority", "call_local", "reliable")
 func show_attack_visual(peer_id: int) -> void:
