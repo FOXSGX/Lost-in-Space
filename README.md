@@ -10,6 +10,8 @@ GitHub 仓库：[FOXSGX/Lost-in-Space](https://github.com/FOXSGX/Lost-in-Space)�
 
 当前可试玩流程为“主界面 → 可移动的归航号主舱 ↔ 训练舱 → 星际航线图 → 霜烬星 → 返回主舱”。主舱正按用户选择的精致卡通方向迭代，加入圆润设备、统一配色和舱内陈设；现为约 42×33 米的大空间，使用角色跟随镜头，整舱无法一屏看完。主舱已接入共享储物、舰体维修、补给恢复与物资制作、任务记录和全员准备。靠近设施按 `E`；星球内按 `3` 使用医疗包、按 `4` 使用氧气瓶。现场设备的持续操作会显示进度条，战斗和关键物资操作会显示浮动确认与轻量镜头反馈。玩法和可调整数值见 [`game/docs/ship-hub-3d.md`](game/docs/ship-hub-3d.md) 与 [`game/docs/interaction-experience.md`](game/docs/interaction-experience.md)。
 
+探索系统还包括地图线索支线、日志成就、星球长期状态、资源点刷新、失败资源散落、团队共享装备/货币和“星际集市·交易星球”。5—9 键是可以连续触发的欢乐道具，不设置冷却。实现细节见 [`game/docs/campaign-systems.md`](game/docs/campaign-systems.md)。
+
 ## 从这里开始
 
 - [第一次会议纪要与项目共识](docs/meetings/第一次会议纪要与项目共识.md)

@@ -7,6 +7,10 @@ const ITEM_NAMES := {"medical": "医疗包", "oxygen": "氧气瓶", "parts": "�
 const ITEM_COSTS := {"medical": 10, "oxygen": 5, "parts": 10}
 const TRAINING_STEPS := ["先在甲板上移动", "Q 扫描", "E 维修", "F 拾取", "G 投送", "空格 攻击", "R 救援", "训练完成，可返回主舱"]
 const SAVE_PATH := "user://ship-cabin-save.json"
+const GOOFY_ITEMS := ["penguin", "bubble", "board", "hologram", "smoke"]
+const GEAR_ITEMS := ["thermal_suit", "wide_scanner", "signal_stabilizer"]
+const GEAR_NAMES := {"thermal_suit": "恒温外套", "wide_scanner": "广域扫描器", "signal_stabilizer": "信号稳压器"}
+const GEAR_COSTS := {"thermal_suit": 45, "wide_scanner": 55, "signal_stabilizer": 65}
 
 var controller: Main3D
 var active := false
@@ -18,6 +22,13 @@ var ready_peers: Array[int] = []
 var training: Dictionary = {}
 var hull := 80
 var credits := 0
+## 团队共享的欢乐道具箱。道具是可重复使用的，不在任务内扣除数量。
+var goofy_stock: Dictionary = {"penguin": 1, "bubble": 1, "board": 1, "hologram": 1, "smoke": 1}
+var goofy_assignments: Dictionary = {}
+var gear_stock: Dictionary = {"thermal_suit": 0, "wide_scanner": 0, "signal_stabilizer": 0}
+var gear_assignments: Dictionary = {}
+## 每颗星球一份长期状态：主线发现、支线成就、自然演变资源都在这里保存。
+var planet_states: Dictionary = {}
 var last_report := "尚未进行远征。先检查舰体、领取补给，再到驾驶台选择航程。"
 var persistence_enabled := true
 var save_path := SAVE_PATH
@@ -109,6 +120,8 @@ func tick(delta: float) -> void:
     if controller._screen_view == "route":
         controller._land_button.disabled = not controller.is_host or not all_ready() or hull < 60
         controller._route_status.text = "准备 %d / %d · 舰体 %d%%（需 ≥60%%）" % [ready_peers.size(), controller.connected_ids.size(), hull]
+    elif controller._screen_view == "trade":
+        controller._refresh_trade_buttons()
 
 func interaction_hint(point: Vector3) -> String:
     if in_hub:
@@ -230,6 +243,9 @@ func handle_request(peer_id: int, action: String, item := "") -> void:
     if action.begins_with("use_"):
         _use_supply(peer_id, action.trim_prefix("use_"))
         return
+    if action == "trade":
+        _trade_at_market(peer_id, item)
+        return
     if not active:
         return
     if action == "ready":
@@ -286,6 +302,12 @@ func handle_request(peer_id: int, action: String, item := "") -> void:
         credits -= cost
         stock[item] = int(stock[item]) + 1
         result_message = "已制作 1 件" + String(ITEM_NAMES[item]) + "，存入共享库存。"
+    elif action == "assign_goofy" and near == "supply" and GOOFY_ITEMS.has(item):
+        goofy_assignments[peer_id] = item
+        result_message = "已将%s分配给玩家 %d；道具箱仍归全队共享，可随时改分配。" % [goofy_item_name(item), peer_id]
+    elif action == "assign_gear" and GEAR_ITEMS.has(item) and int(gear_stock.get(item, 0)) > 0:
+        gear_assignments[peer_id] = item
+        result_message = "已将%s分配给玩家 %d；装备属于团队共享仓。" % [GEAR_NAMES[item], peer_id]
     elif action == "repair" and near == "repair":
         if hull >= 100 or int(stock["parts"]) <= 0:
             _notify(peer_id, "舰体已完好。" if hull >= 100 else "没有维修零件，可在补给柱制作。")
@@ -323,6 +345,22 @@ func _use_supply(peer_id: int, item: String) -> void:
     else:
         player.oxygen = minf(player.oxygen + 45.0, 100.0)
     controller.sync_vitals.rpc(controller._vitals_snapshot())
+    broadcast()
+
+func _trade_at_market(peer_id: int, item: String) -> void:
+    if not active or not in_hub:
+        return
+    if GEAR_COSTS.has(item):
+        var cost := int(GEAR_COSTS[item])
+        if credits < cost:
+            _notify(peer_id, "团队回收点数不足：%s 需要 %d 点。" % [GEAR_NAMES[item], cost])
+            return
+        credits -= cost
+        gear_stock[item] = int(gear_stock.get(item, 0)) + 1
+        _notify(peer_id, "星际集市交易完成：%s 已加入共享装备仓。" % GEAR_NAMES[item])
+    elif GOOFY_ITEMS.has(item):
+        goofy_stock[item] = int(goofy_stock.get(item, 0)) + 1
+        _notify(peer_id, "星际集市补充了%s；它可以在星球内无限连按。" % goofy_item_name(item))
     broadcast()
 
 func _show_for_peer(peer_id: int, facility: String) -> void:
@@ -368,7 +406,7 @@ func _refresh_panel() -> void:
         "supply":
             _title.text = "补给柱"
             var player := controller.players.get(multiplayer.get_unique_id()) as SpacePlayer3D
-            _body.text = "生命 %d / 5 · 氧气 %d%% · 体温 %d%%\n团队回收点数：%d\n星球内按 3 使用医疗包，按 4 使用氧气瓶。" % [player.health, int(player.oxygen), int(player.warmth * 100), credits]
+            _body.text = "生命 %d / 5 · 氧气 %d%% · 体温 %d%%\n团队回收点数：%d\n共享装备仓：%s\n共享欢乐道具箱：%s\n道具没有冷却，可连续触发；5-9 直接使用。" % [player.health, int(player.oxygen), int(player.warmth * 100), credits, gear_inventory_text(), goofy_inventory_text()]
             _action_button("恢复生命、氧气与体温  ·  免费", "refill")
             for item in ["medical", "oxygen", "parts"]:
                 _action_button("制作%s  ·  %d 回收点数" % [ITEM_NAMES[item], ITEM_COSTS[item]], "craft", item, credits < int(ITEM_COSTS[item]))
@@ -451,7 +489,7 @@ func settle(success: bool, value: int, report: String) -> void:
     save_state()
 
 func snapshot() -> Dictionary:
-    return {"stock": stock.duplicate(true), "packs": packs.duplicate(true), "ready": ready_peers.duplicate(), "training": training.duplicate(), "hull": hull, "credits": credits, "last_report": last_report}
+    return {"stock": stock.duplicate(true), "packs": packs.duplicate(true), "ready": ready_peers.duplicate(), "training": training.duplicate(true), "hull": hull, "credits": credits, "last_report": last_report, "goofy_stock": goofy_stock.duplicate(true), "goofy_assignments": goofy_assignments.duplicate(true), "gear_stock": gear_stock.duplicate(true), "gear_assignments": gear_assignments.duplicate(true), "planet_states": planet_states.duplicate(true)}
 
 func apply_state(state: Dictionary) -> void:
     stock = state.get("stock", stock).duplicate(true)
@@ -461,6 +499,11 @@ func apply_state(state: Dictionary) -> void:
     hull = int(state.get("hull", hull))
     credits = int(state.get("credits", credits))
     last_report = String(state.get("last_report", last_report))
+    goofy_stock = state.get("goofy_stock", goofy_stock).duplicate(true)
+    goofy_assignments = state.get("goofy_assignments", goofy_assignments).duplicate(true)
+    gear_stock = state.get("gear_stock", gear_stock).duplicate(true)
+    gear_assignments = state.get("gear_assignments", gear_assignments).duplicate(true)
+    planet_states = state.get("planet_states", planet_states).duplicate(true)
     _refresh_panel()
     if active and not in_hub and room != null:
         (room as ShipTutorial3D).show_step(int(training.get(multiplayer.get_unique_id(), 0)))
@@ -483,7 +526,7 @@ func save_state() -> void:
             saved_stock[item] = int(saved_stock[item]) + int(bag.get(item, 0))
     var file := FileAccess.open(save_path + ".tmp", FileAccess.WRITE)
     if file != null:
-        file.store_string(JSON.stringify({"version": 1, "stock": saved_stock, "hull": hull, "credits": credits, "last_report": last_report}, "  "))
+        file.store_string(JSON.stringify({"version": 3, "stock": saved_stock, "hull": hull, "credits": credits, "last_report": last_report, "goofy_stock": goofy_stock, "goofy_assignments": goofy_assignments, "gear_stock": gear_stock, "gear_assignments": gear_assignments, "planet_states": planet_states}, "  "))
         file.close()
         var result := DirAccess.rename_absolute(save_path + ".tmp", save_path)
         if result != OK:
@@ -496,7 +539,7 @@ func load_state() -> void:
     if file == null:
         return
     var data = JSON.parse_string(file.get_as_text())
-    if not data is Dictionary or int(data.get("version", 0)) != 1:
+    if not data is Dictionary or int(data.get("version", 0)) not in [1, 2, 3]:
         return
     var saved_stock = data.get("stock", {})
     if not saved_stock is Dictionary:
@@ -507,9 +550,47 @@ func load_state() -> void:
     stock.parts = maxi(int(stock.parts), 1)
     credits = clampi(int(data.get("credits", 0)), 0, 999999)
     last_report = String(data.get("last_report", last_report))
+    if data.has("goofy_stock"):
+        goofy_stock = data.get("goofy_stock", goofy_stock).duplicate(true)
+    if data.has("goofy_assignments"):
+        goofy_assignments = data.get("goofy_assignments", goofy_assignments).duplicate(true)
+    if data.has("planet_states"):
+        planet_states = data.get("planet_states", planet_states).duplicate(true)
+    if data.has("gear_stock"):
+        gear_stock = data.get("gear_stock", gear_stock).duplicate(true)
+    if data.has("gear_assignments"):
+        gear_assignments = data.get("gear_assignments", gear_assignments).duplicate(true)
     packs.clear()
     training.clear()
     ready_peers.clear()
+
+func goofy_item_name(item_id: String) -> String:
+    return {"penguin": "回声企鹅", "bubble": "反重力泡", "board": "雪地滑板", "hologram": "全息替身", "smoke": "彩色信号烟"}.get(item_id, item_id)
+
+func goofy_inventory_text() -> String:
+    var labels: Array[String] = []
+    for item_id in GOOFY_ITEMS:
+        labels.append("%s×%d" % [goofy_item_name(item_id), int(goofy_stock.get(item_id, 0))])
+    return "、".join(labels)
+
+func gear_inventory_text() -> String:
+    var labels: Array[String] = []
+    for item_id in GEAR_ITEMS:
+        labels.append("%s×%d" % [String(GEAR_NAMES[item_id]), int(gear_stock.get(item_id, 0))])
+    return "、".join(labels)
+
+func has_gear(peer_id: int, item_id: String) -> bool:
+    return String(gear_assignments.get(peer_id, "")) == item_id
+
+func planet_state(planet_id: String) -> Dictionary:
+    var raw: Dictionary = planet_states.get(planet_id, {})
+    if raw.is_empty():
+        raw = {"story_flags": {}, "side_quest_states": {}, "achievements": {}, "world_flags": {}, "resource_epoch": 0, "lost_cargo": []}
+        planet_states[planet_id] = raw
+    return raw
+
+func set_planet_state(planet_id: String, state: Dictionary) -> void:
+    planet_states[planet_id] = state.duplicate(true)
 
 func show_home() -> void:
     leave()

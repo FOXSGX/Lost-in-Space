@@ -119,11 +119,21 @@ func _glow_material(color: Color) -> StandardMaterial3D:
     material.roughness = 0.38
     return material
 
-func server_tick(delta: float, players: Dictionary, lure_position := Vector3.ZERO, lure_active := false, storm_active := false) -> Dictionary:
+func server_tick(delta: float, players: Dictionary, lure_position := Vector3.ZERO, lure_active := false, storm_active := false, goofy_lures: Array = []) -> Dictionary:
     if players.is_empty():
         return {"sync": false}
-    if lure_active:
-        var lure_direction := lure_position - global_position
+    var selected_lure := lure_position
+    var has_lure := lure_active
+    var nearest_lure_distance := global_position.distance_to(lure_position) if lure_active else INF
+    for raw_position in goofy_lures:
+        var candidate := Vector3(raw_position)
+        var candidate_distance := global_position.distance_to(candidate)
+        if candidate_distance < nearest_lure_distance:
+            nearest_lure_distance = candidate_distance
+            selected_lure = candidate
+            has_lure = true
+    if has_lure:
+        var lure_direction := selected_lure - global_position
         lure_direction.y = 0.0
         if lure_direction.length() > 1.0:
             velocity = lure_direction.normalized() * move_speed * (1.30 if storm_active else 1.15)

@@ -12,6 +12,8 @@ var oxygen := 100.0
 var warmth := 1.0
 var carrying := 0
 var carrying_id := 0
+var goofy_board_remaining := 0.0
+var goofy_bubble_remaining := 0.0
 var sprinting := false
 var downed := false
 var scan_lock_remaining := 0.0
@@ -30,6 +32,7 @@ var _camera_shake_strength := 0.0
 var _camera_shake_clock := 0.0
 var _camera_shake_offset := Vector3.ZERO
 var _camera_shake_rotation := 0.0
+var _goofy_board_visual: MeshInstance3D
 
 func setup(id: int, color: Color) -> void:
     peer_id = id
@@ -63,6 +66,9 @@ func _process(delta: float) -> void:
     _last_visual_position = global_position
     if _visual != null:
         _visual.update_state(delta, Vector2(motion.x, motion.z), downed, scan_lock_remaining > 0.0, carrying > 0, health)
+    if _goofy_board_visual != null and is_instance_valid(_goofy_board_visual):
+        _goofy_board_visual.rotation.y += delta * 4.0
+        _goofy_board_visual.position.y = 0.12 + sin(Time.get_ticks_msec() * 0.008 + float(peer_id)) * 0.035
     var controller := get_parent() as Main3D
     if controller != null and controller.ship_active and _camera != null:
         if controller._ship_session.in_hub:
@@ -124,6 +130,24 @@ func teleport_to(point: Vector3) -> void:
     _camera_shake_duration = 0.0
     _camera_shake_strength = 0.0
     _camera_shake_clock = 0.0
+
+func set_goofy_state(kind: String, duration: float) -> void:
+    if kind == "board":
+        goofy_board_remaining = maxf(duration, 0.0)
+        if goofy_board_remaining > 0.0 and (_goofy_board_visual == null or not is_instance_valid(_goofy_board_visual)):
+            _goofy_board_visual = MeshInstance3D.new()
+            _goofy_board_visual.name = "GoofySnowBoard"
+            var mesh := BoxMesh.new()
+            mesh.size = Vector3(1.35, 0.08, 0.36)
+            _goofy_board_visual.mesh = mesh
+            _goofy_board_visual.material_override = _glow_material(Color("#ffd36e"))
+            _goofy_board_visual.position.y = 0.12
+            add_child(_goofy_board_visual)
+        elif goofy_board_remaining <= 0.0 and _goofy_board_visual != null and is_instance_valid(_goofy_board_visual):
+            _goofy_board_visual.queue_free()
+            _goofy_board_visual = null
+    elif kind == "bubble":
+        goofy_bubble_remaining = maxf(duration, 0.0)
 
 func configure_ship_camera() -> void:
     var controller := get_parent() as Main3D
@@ -226,6 +250,11 @@ func _physics_process(delta: float) -> void:
     var input_vector := Input.get_vector("move_left", "move_right", "move_up", "move_down")
     sprinting = Input.is_action_pressed("sprint")
     var move_speed := SPEED * (SPRINT_MULTIPLIER if sprinting else 1.0)
+    if goofy_board_remaining > 0.0:
+        move_speed *= 2.05
+        sprinting = true
+    goofy_board_remaining = maxf(goofy_board_remaining - delta, 0.0)
+    goofy_bubble_remaining = maxf(goofy_bubble_remaining - delta, 0.0)
     if carrying == 1:
         move_speed *= 0.72
     elif carrying == 2:
@@ -246,6 +275,9 @@ func _physics_process(delta: float) -> void:
         if Input.is_action_just_pressed(action):
             controller.handle_action(peer_id, action)
     for action in ["signal_high", "signal_low"]:
+        if Input.is_action_just_pressed(action):
+            controller.handle_action(peer_id, action)
+    for action in ["goofy_penguin", "goofy_bubble", "goofy_board", "goofy_hologram", "goofy_smoke"]:
         if Input.is_action_just_pressed(action):
             controller.handle_action(peer_id, action)
     if Input.is_action_pressed("attack") and _attack_cooldown <= 0.0 and scan_lock_remaining <= 0.0:

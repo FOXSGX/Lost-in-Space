@@ -11,6 +11,7 @@ const ART_UTILS := preload("res://scripts/art_utils.gd")
 const JOURNAL_MAP_SCENE := preload("res://scripts/journal_map_view.gd")
 const FROST_FIELD_INTERACTIONS := preload("res://scripts/frost_field_interactions.gd")
 const RUIN_PLANET := preload("res://scripts/ruin_planet.gd")
+const GOOFY_ITEM_EFFECTS := preload("res://scripts/goofy_item_effects.gd")
 const SCAN_DURATION := 4.0
 const SCAN_STARTUP := 0.8
 const SCAN_COOLDOWN := 6.0
@@ -60,6 +61,12 @@ const STORY_ARC_FLAGS := [
     "arc_helmet", "arc_relay", "arc_second_beacon", "arc_storm_front",
     "arc_reply", "arc_ending", "arc_return"
 ]
+const PLANET_ID := "frost_ash"
+const SIDE_QUEST_DATA := {
+    "echo_route": {"title": "第二条路线", "kind": "主线支线", "clue": "第一座信标的旧频道指向气象站；沿回波走，能为主线开启更安全的路线。", "reward": 15},
+    "ice_garden": {"title": "冰下花园", "kind": "星球见闻", "clue": "异常冰样的脉动组成了地下生态的节拍。带回一枚样本，记录这座星球的另一面。", "reward": 20},
+    "lost_observer": {"title": "失联观测员", "kind": "独立故事", "clue": "废弃通信阵列里有一段没有发出的留言。调查旧阵列，听完它的结尾。", "reward": 25}
+}
 const THERMAL_CYCLE := 18.0
 const THERMAL_COOLING_START := 12.0
 const THERMAL_COOLING_END := 16.5
@@ -107,6 +114,11 @@ var obstacles: Array[Node] = []
 var beacons: Dictionary = {}
 var crates: Dictionary = {}
 var samples: Dictionary = {}
+var lost_cargo: Array[Dictionary] = []
+var side_quest_states: Dictionary = {}
+var achievement_flags: Dictionary = {}
+var world_flags: Dictionary = {}
+var _planet_resource_epoch := 0
 var activated_beacons: Array[int] = []
 var taken_crates: Array[int] = []
 var taken_samples: Array[int] = []
@@ -155,6 +167,7 @@ var _world_root: Node3D
 var _field_interactions: FrostFieldInteractions
 var _ruin_planet: RuinPlanet
 var pending_destination := "demo"
+var _goofy_items
 var _environment: WorldEnvironment
 var _menu_world: Node3D
 var _menu_camera: Camera3D
@@ -233,8 +246,10 @@ var _settings_previous_paused := false
 var _settings_previous_process_mode := Node.PROCESS_MODE_INHERIT
 var _settings_child_process_modes: Dictionary = {}
 var _route_group: Control
+var _trade_group: Control
 var _room_status: Label
 var _route_status: Label
+var _trade_status: Label
 var _land_button: Button
 var _screen_view := "home"
 
@@ -248,6 +263,7 @@ func _ready() -> void:
     _build_menu_world()
     _build_ui()
     _field_interactions = FROST_FIELD_INTERACTIONS.new(self)
+    _goofy_items = GOOFY_ITEM_EFFECTS.new(self)
     _ship_session = ShipSession3D.new()
     _ship_session.name = "ShipSession"
     add_child(_ship_session)
@@ -307,6 +323,8 @@ func _process(delta: float) -> void:
     for mark_action in ["mark_heat", "mark_clue", "clear_marker"]:
         if Input.is_action_just_pressed(mark_action):
             handle_action(local_peer_id, mark_action)
+    if _goofy_items != null:
+        _goofy_items.tick(delta)
     # 画面与提示同样按星球分开：霜烬星的扫描器、暴风雪视觉、地标登记、
     # 心理提示和剧情文字都属于霜烬星，登陆腐墟星时不显示。
     if _on_frost_planet():
@@ -341,7 +359,7 @@ func _process(delta: float) -> void:
         _check_enemy_triggers()
         for enemy in enemies.values():
             var lure_active := mission_elapsed < signal_lure_until
-            var result := (enemy as SpaceEnemy3D).server_tick(delta, players, signal_lure_position, lure_active, storm_active)
+            var result := (enemy as SpaceEnemy3D).server_tick(delta, players, signal_lure_position, lure_active, storm_active, _goofy_items.lure_positions() if _goofy_items != null else [])
             if result.get("sync", false):
                 _sync_state.rpc(_enemy_snapshot(), enemy_wave_index, enemy_wave_timer, activated_beacons, taken_crates, deposited_resources, _vitals_snapshot(), journal_entries, discovered_regions)
         _tick_survival(delta)
@@ -380,6 +398,11 @@ func _build_ui() -> void:
     _route_group.visible = false
     _menu_layer.add_child(_route_group)
     _build_route_ui()
+    _trade_group = Control.new()
+    _trade_group.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+    _trade_group.visible = false
+    _menu_layer.add_child(_trade_group)
+    _build_trade_ui()
 
     _game_layer = CanvasLayer.new()
     _game_layer.layer = 10
@@ -772,7 +795,8 @@ func _build_room_ui() -> void:
     _ui_label(crew_panel, "● 船员 1     等待其他船员加入\n● 联机端口 24567     最大 4 人", Vector2(20, 52), Vector2(430, 64), 15, Color("#8fb4c4"))
     _room_status = _ui_label(_room_group, "主机已创建，准备选择航线。", Vector2(107, 398), Vector2(440, 48), 16, Color("#8ff1a0"))
     _ui_button(_room_group, "打开星际航线图", Vector2(104, 478), Vector2(232, 50), _show_route, true)
-    _ui_button(_room_group, "返回主界面", Vector2(352, 478), Vector2(232, 50), _show_home)
+    _ui_button(_room_group, "前往星际集市", Vector2(352, 478), Vector2(232, 50), _show_trade, true)
+    _ui_button(_room_group, "返回主界面", Vector2(104, 540), Vector2(480, 42), _show_home)
 
 func _build_route_ui() -> void:
     _panel(_route_group, Vector2(54, 54), Vector2(610, 565), Color(0.025, 0.08, 0.13, 0.94), Color("#2e6a83"), 18)
@@ -790,11 +814,53 @@ func _build_route_ui() -> void:
     _ui_label(_route_group, "03  /  尚未开放     电磁星球", Vector2(91, 484), Vector2(500, 28), 16, Color("#668392"))
     _ui_button(_route_group, "← 返回主舱", Vector2(91, 516), Vector2(240, 46), _show_room)
 
+func _build_trade_ui() -> void:
+    _panel(_trade_group, Vector2(54, 54), Vector2(760, 590), Color(0.025, 0.08, 0.13, 0.96), Color("#9b79d6"), 18)
+    _ui_label(_trade_group, "星际集市 · 交易星球", Vector2(88, 86), Vector2(620, 48), 36, Color("#f1fbff"))
+    _ui_label(_trade_group, "ORBITAL MARKET  /  共享装备与欢乐道具", Vector2(91, 136), Vector2(620, 24), 13, Color("#d1b4ff"))
+    _ui_label(_trade_group, "团队货币统一结算；买到的装备放入共享仓，再由船员自由分配。", Vector2(91, 178), Vector2(620, 30), 17, Color("#c4b9d8"))
+    var gear_card := _panel(_trade_group, Vector2(91, 230), Vector2(680, 200), Color(0.08, 0.08, 0.18, 0.94), Color("#816bc3"), 12)
+    _ui_label(gear_card, "装备交易", Vector2(20, 16), Vector2(300, 28), 22, Color("#e8dcff"))
+    _ui_label(gear_card, "恒温外套 45 · 广域扫描器 55 · 信号稳压器 65 回收点数", Vector2(20, 52), Vector2(620, 26), 15, Color("#b9abd3"))
+    _ui_button(gear_card, "购买恒温外套", Vector2(20, 90), Vector2(195, 38), func(): _trade_request("thermal_suit"), true)
+    _ui_button(gear_card, "购买广域扫描器", Vector2(235, 90), Vector2(195, 38), func(): _trade_request("wide_scanner"), true)
+    _ui_button(gear_card, "购买信号稳压器", Vector2(450, 90), Vector2(195, 38), func(): _trade_request("signal_stabilizer"), true)
+    _ui_button(gear_card, "分配恒温外套", Vector2(20, 140), Vector2(195, 34), func(): _trade_request("thermal_suit", "assign_gear"), true)
+    _ui_button(gear_card, "分配广域扫描器", Vector2(235, 140), Vector2(195, 34), func(): _trade_request("wide_scanner", "assign_gear"), true)
+    _ui_button(gear_card, "分配信号稳压器", Vector2(450, 140), Vector2(195, 34), func(): _trade_request("signal_stabilizer", "assign_gear"), true)
+    var toy_card := _panel(_trade_group, Vector2(91, 445), Vector2(680, 104), Color(0.08, 0.12, 0.17, 0.94), Color("#59c8d1"), 12)
+    _ui_label(toy_card, "欢乐道具补给", Vector2(20, 14), Vector2(280, 28), 20, Color("#e6fbff"))
+    _ui_label(toy_card, "企鹅、失重泡、滑板、替身、彩烟均可连续使用，不设置冷却。", Vector2(20, 46), Vector2(620, 24), 15, Color("#a7c4d3"))
+    _ui_button(toy_card, "补充欢乐道具箱", Vector2(20, 68), Vector2(250, 28), func(): _trade_request("penguin"), true)
+    _trade_status = _ui_label(_trade_group, "", Vector2(91, 558), Vector2(650, 28), 15, Color("#8ff1a0"))
+    _ui_button(_trade_group, "← 返回主舱", Vector2(91, 596), Vector2(240, 36), _show_room)
+
+func _trade_request(item_id: String, action := "trade") -> void:
+    if _ship_session == null:
+        return
+    _ship_session.request(action, item_id)
+    if _trade_status != null:
+        _trade_status.text = "已提交交易请求：" + item_id + "（共享仓将在同步后更新）"
+
+func _show_trade() -> void:
+    if not ship_active:
+        return
+    _set_screen("trade")
+    _menu_layer.visible = true
+    _refresh_trade_buttons()
+
+func _refresh_trade_buttons() -> void:
+    if _trade_status == null or _ship_session == null:
+        return
+    _trade_status.text = "团队回收点数：%d · 共享装备：%s" % [_ship_session.credits, _ship_session.gear_inventory_text()]
+
 func _set_screen(view: String) -> void:
     _screen_view = view
     _home_group.visible = view == "home"
     _room_group.visible = view == "room"
     _route_group.visible = view == "route"
+    if _trade_group != null:
+        _trade_group.visible = view == "trade"
 
 func _show_home() -> void:
     if _settings_visible:
@@ -1075,6 +1141,101 @@ func _clear_players() -> void:
         (player as Node).queue_free()
     players.clear()
 
+func _load_planet_progress() -> void:
+    if _ship_session == null:
+        return
+    var state := _ship_session.planet_state(PLANET_ID)
+    story_flags = state.get("story_flags", {}).duplicate(true)
+    knowledge_flags = state.get("knowledge_flags", {}).duplicate(true)
+    side_quest_states = state.get("side_quest_states", {}).duplicate(true)
+    achievement_flags = state.get("achievements", {}).duplicate(true)
+    world_flags = state.get("world_flags", {}).duplicate(true)
+    _planet_resource_epoch = int(state.get("resource_epoch", 0))
+    lost_cargo.clear()
+    for raw in state.get("lost_cargo", []):
+        var cargo: Dictionary = raw.duplicate(true) if raw is Dictionary else {}
+        if cargo.is_empty():
+            continue
+        var raw_position = cargo.get("position", [0.0, 0.0])
+        if raw_position is Dictionary:
+            cargo["position"] = [float(raw_position.get("x", 0.0)), float(raw_position.get("y", 0.0))]
+        elif raw_position is Vector2:
+            cargo["position"] = [raw_position.x, raw_position.y]
+        lost_cargo.append(cargo)
+
+func _save_planet_progress(failed: bool) -> void:
+    if _ship_session == null or not is_host:
+        return
+    if failed:
+        _scatter_failed_resources()
+    _planet_resource_epoch += 1
+    var state := {
+        "story_flags": story_flags.duplicate(true),
+        "knowledge_flags": knowledge_flags.duplicate(true),
+        "side_quest_states": side_quest_states.duplicate(true),
+        "achievements": achievement_flags.duplicate(true),
+        "world_flags": world_flags.duplicate(true),
+        "resource_epoch": _planet_resource_epoch,
+        "lost_cargo": lost_cargo.duplicate(true)
+    }
+    _ship_session.set_planet_state(PLANET_ID, state)
+
+func _scatter_failed_resources() -> void:
+    var rng := RandomNumberGenerator.new()
+    rng.seed = int(route_seed) ^ (_planet_resource_epoch * 7919) ^ 0x5A17
+    for player_value in players.values():
+        var player := player_value as SpacePlayer3D
+        if player == null or player.carrying <= 0:
+            continue
+        var kind := player.carrying
+        var position := Vector2(rng.randf_range(-MAP_SIZE.x * 0.44, MAP_SIZE.x * 0.44), rng.randf_range(-MAP_SIZE.y * 0.44, MAP_SIZE.y * 0.44))
+        var updated := false
+        for cargo in lost_cargo:
+            if int(cargo.get("kind", 0)) == kind and int(cargo.get("id", -1)) == player.carrying_id:
+                cargo["position"] = [position.x, position.y]
+                cargo["source"] = "mission_failure"
+                updated = true
+                break
+        if not updated:
+            lost_cargo.append({"kind": kind, "position": [position.x, position.y], "source": "mission_failure"})
+        _record_journal("资源散落", "任务失败时携带的%s被风雪带到星球的另一处；下次登陆仍可重新寻找。" % ("热能电池" if kind == 1 else "异常冰样"))
+
+func _append_lost_cargo_layout() -> void:
+    var crate_count := crate_positions.size()
+    var sample_count := sample_positions.size()
+    var cargo_index := 0
+    for cargo in lost_cargo:
+        var raw_position = cargo.get("position", [0.0, 0.0])
+        var point := Vector2.ZERO
+        if raw_position is Array and raw_position.size() >= 2:
+            point = Vector2(float(raw_position[0]), float(raw_position[1]))
+        elif raw_position is Vector2:
+            point = raw_position
+        var kind := int(cargo.get("kind", 1))
+        if kind == 2:
+            sample_positions.append(point)
+            cargo["id"] = sample_count + 1
+            sample_count += 1
+        else:
+            crate_positions.append(point)
+            cargo["id"] = crate_count + 1
+            crate_count += 1
+        cargo["slot"] = cargo_index
+        cargo_index += 1
+
+func _update_lost_cargo_position(kind: int, item_id: int, point: Vector3) -> void:
+    for cargo in lost_cargo:
+        if int(cargo.get("kind", 0)) == kind and int(cargo.get("id", -1)) == item_id:
+            cargo["position"] = [point.x, point.z]
+            return
+
+func _consume_lost_cargo(kind: int, item_id: int) -> void:
+    for index in range(lost_cargo.size() - 1, -1, -1):
+        var cargo: Dictionary = lost_cargo[index]
+        if int(cargo.get("kind", 0)) == kind and int(cargo.get("id", -1)) == item_id:
+            lost_cargo.remove_at(index)
+            return
+
 func _start_planet() -> void:
     if game_started:
         return
@@ -1107,6 +1268,10 @@ func _start_planet() -> void:
     storm_remaining = 0.0
     story_elapsed = 0.0
     story_flags.clear()
+    side_quest_states.clear()
+    achievement_flags.clear()
+    world_flags.clear()
+    lost_cargo.clear()
     enemy_trigger_flags.clear()
     enemy_spawn_center = Vector2(4.0, -2.0)
     reviving.clear()
@@ -1128,12 +1293,17 @@ func _start_planet() -> void:
     if _journal_panel != null:
         _journal_panel.visible = false
     _thought_timer = 0.0
+    _load_planet_progress()
     if is_host:
         _prepare_layout()
+        _append_lost_cargo_layout()
+        _prepare_exploration_clues()
     elif beacon_positions.is_empty():
         beacon_positions.assign(BEACON_POSITIONS)
         crate_positions.assign(CRATE_POSITIONS)
         sample_positions.assign(FrostMapLayout.SAMPLE_CORNERS)
+        _append_lost_cargo_layout()
+        _prepare_exploration_clues()
     if _menu_world != null:
         _menu_world.visible = false
     _build_world()
@@ -2398,7 +2568,8 @@ func _tick_storm(delta: float) -> void:
         return
     storm_elapsed += delta
     if storm_active:
-        storm_remaining = maxf(storm_remaining - delta, 0.0)
+        var storm_scale := 0.72 if _team_has_gear("signal_stabilizer") else 1.0
+        storm_remaining = maxf(storm_remaining - delta / storm_scale, 0.0)
         if storm_remaining <= 0.0:
             storm_active = false
             storm_elapsed = 0.0
@@ -2407,9 +2578,17 @@ func _tick_storm(delta: float) -> void:
         return
     if storm_elapsed >= STORM_INTERVAL:
         storm_active = true
-        storm_remaining = STORM_DURATION
+        storm_remaining = STORM_DURATION * (0.72 if _team_has_gear("signal_stabilizer") else 1.0)
         sync_storm_state.rpc(true, storm_remaining)
         _set_status("暴风雪来袭：视野收窄、移动变慢，体温与氧气消耗加剧。")
+
+func _team_has_gear(item_id: String) -> bool:
+    if _ship_session == null:
+        return false
+    for peer_id in connected_ids:
+        if _ship_session.has_gear(peer_id, item_id):
+            return true
+    return false
 
 func _tick_story(delta: float) -> void:
     story_elapsed += delta
@@ -2433,6 +2612,40 @@ func _story_progress_count() -> int:
         if story_flags.has(flag):
             count += 1
     return count
+
+func _ensure_side_quest_state(quest_id: String) -> Dictionary:
+    if not side_quest_states.has(quest_id):
+        side_quest_states[quest_id] = {"discovered": false, "completed": false}
+    return side_quest_states[quest_id]
+
+func _discover_side_quest(quest_id: String) -> void:
+    if not SIDE_QUEST_DATA.has(quest_id):
+        return
+    var state := _ensure_side_quest_state(quest_id)
+    if bool(state.get("discovered", false)):
+        return
+    state["discovered"] = true
+    side_quest_states[quest_id] = state
+    var data: Dictionary = SIDE_QUEST_DATA[quest_id]
+    _record_journal("支线线索 · " + String(data.get("title", quest_id)), String(data.get("clue", "新的线索已加入日志。")))
+    show_feedback_rpc.rpc("发现支线：%s" % String(data.get("title", quest_id)), Color("#f3c77b"), 2.0)
+
+func _complete_side_quest(quest_id: String) -> void:
+    if not SIDE_QUEST_DATA.has(quest_id):
+        return
+    var state := _ensure_side_quest_state(quest_id)
+    if bool(state.get("completed", false)):
+        return
+    state["discovered"] = true
+    state["completed"] = true
+    side_quest_states[quest_id] = state
+    var achievement_id := "achievement_" + quest_id
+    achievement_flags[achievement_id] = true
+    var data: Dictionary = SIDE_QUEST_DATA[quest_id]
+    _record_journal("成就解锁 · " + String(data.get("title", quest_id)), "完成支线「%s」；这颗星球的日志又多了一页。" % String(data.get("title", quest_id)))
+    show_story_rpc.rpc("成就解锁：%s\n%s" % [String(data.get("title", quest_id)), String(data.get("kind", "支线"))], 4.5)
+    if is_host:
+        sync_progress_state.rpc(side_quest_states, achievement_flags, lost_cargo)
 
 func _show_story(text: String, duration: float = 6.0) -> void:
     if _story_label == null:
@@ -2546,6 +2759,8 @@ func _scan_hint_for_player(player: SpacePlayer3D) -> String:
     var nearest_any: Dictionary = {}
     var nearest_any_distance := INF
     var scan_radius := STORM_SCAN_DEVICE_RADIUS if storm_active else SCAN_DEVICE_RADIUS
+    if _ship_session != null and _ship_session.has_gear(player.peer_id, "wide_scanner"):
+        scan_radius *= 1.35
     for clue in exploration_clues:
         var kind := String(clue.get("kind", ""))
         var clue_id := int(clue.get("id", 0))
@@ -2609,6 +2824,8 @@ func _update_scan_visual(delta: float) -> void:
     scan_visual.global_position = Vector3(scan_device_position.x, 0.09, scan_device_position.z)
     var progress := clampf(1.0 - scan_remaining / SCAN_DURATION, 0.0, 1.0)
     var max_radius := STORM_SCAN_DEVICE_RADIUS if storm_active else SCAN_DEVICE_RADIUS
+    if _ship_session != null and _ship_session.has_gear(scan_peer_id, "wide_scanner"):
+        max_radius *= 1.35
     var radius := lerpf(0.4, max_radius, progress)
     scan_visual.scale = Vector3(radius, 1.0, radius)
     if scan_device != null:
@@ -2633,7 +2850,8 @@ func _reveal_clues_in_scan(radius: float) -> void:
             continue
         var clue_position := Vector2(clue.get("position", Vector2.ZERO))
         var distance := _flat_distance(scan_device_position, Vector3(clue_position.x, 0.0, clue_position.y))
-        if distance > radius or distance > CLUE_SCAN_RADIUS:
+        var clue_limit := CLUE_SCAN_RADIUS * (1.35 if _ship_session != null and _ship_session.has_gear(scan_peer_id, "wide_scanner") else 1.0)
+        if distance > radius or distance > clue_limit:
             continue
         scan_revealed_clues.append(clue_id)
         var marker := clue_nodes.get(clue_id) as Node3D
@@ -2997,6 +3215,8 @@ func _resolve_anomaly(choice: String) -> void:
         return
     anomaly_resolved = true
     ending_choice = choice
+    world_flags["anomaly_choice"] = choice
+    world_flags["anomaly_resolved_once"] = true
     story_flags["anomaly_resolved"] = true
     storm_active = false
     storm_remaining = 0.0
@@ -3027,12 +3247,14 @@ func _drop_carried_item(peer_id: int) -> void:
         taken_crates.erase(carrying_id)
         crates[carrying_id].global_position = drop_position
         crates[carrying_id].visible = true
+        _update_lost_cargo_position(1, carrying_id, drop_position)
         sync_dropped_item.rpc(1, carrying_id, drop_position)
         show_feedback_rpc.rpc("已丢下热能电池，按 F 可重新拾取。", Color("#8be7ff"), 1.2)
     elif carrying_kind == 2 and samples.has(carrying_id):
         taken_samples.erase(carrying_id)
         samples[carrying_id].global_position = drop_position
         samples[carrying_id].visible = true
+        _update_lost_cargo_position(2, carrying_id, drop_position)
         sync_dropped_item.rpc(2, carrying_id, drop_position)
         show_feedback_rpc.rpc("已丢下异常冰样，按 F 可重新拾取。", Color("#c8b6ff"), 1.2)
     else:
@@ -3041,6 +3263,7 @@ func _drop_carried_item(peer_id: int) -> void:
     player.carrying_id = 0
     _sync_state.rpc(_enemy_snapshot(), enemy_wave_index, enemy_wave_timer, activated_beacons, taken_crates, deposited_resources, _vitals_snapshot(), journal_entries, discovered_regions)
     sync_contract_state.rpc(mission_elapsed, salvage_value, knowledge_flags.keys(), taken_samples, scan_revealed_clues)
+    sync_progress_state.rpc(side_quest_states, achievement_flags, lost_cargo)
 
 @rpc("authority", "call_local", "reliable")
 func sync_dropped_item(kind: int, item_id: int, drop_position: Vector3) -> void:
@@ -3051,12 +3274,27 @@ func sync_dropped_item(kind: int, item_id: int, drop_position: Vector3) -> void:
         samples[item_id].global_position = drop_position
         samples[item_id].visible = true
 
+@rpc("any_peer", "reliable")
+func request_goofy_item(item_id: String) -> void:
+    if is_host and _goofy_items != null:
+        _goofy_items.activate(multiplayer.get_remote_sender_id(), item_id)
+
+@rpc("authority", "call_local", "reliable")
+func spawn_goofy_effect_rpc(item_id: String, origin: Vector3, direction: Vector3, caster_id: int, effect_id: int, duration: float) -> void:
+    if _goofy_items != null:
+        _goofy_items.spawn_local(item_id, origin, direction, caster_id, effect_id, duration)
+
 func handle_action(peer_id: int, action: String) -> void:
     if not is_host:
         request_action.rpc_id(1, peer_id, action)
         return
     var player := players.get(peer_id) as SpacePlayer3D
     if player == null or player.downed:
+        return
+    var goofy_actions := {"goofy_penguin": "penguin", "goofy_bubble": "bubble", "goofy_board": "board", "goofy_hologram": "hologram", "goofy_smoke": "smoke"}
+    if goofy_actions.has(action):
+        if _goofy_items != null:
+            _goofy_items.activate(peer_id, String(goofy_actions[action]))
         return
     if action == "mark_heat":
         _place_map_marker(peer_id, "heat")
@@ -3111,6 +3349,7 @@ func handle_action(peer_id: int, action: String) -> void:
                     _record_journal("路线解锁", "第一座信标的回波指向旧气象站。先读取天气记录，才能校准后续信标。")
                 elif activated_beacons.size() >= beacon_positions.size() and not story_flags.has("all_beacons"):
                     story_flags["all_beacons"] = true
+                    world_flags["all_beacons_once"] = true
                     _reveal_landmark_signal("relay")
                     _record_journal("路线解锁", "三座信标已经同时回应。回到废弃通信阵列，在中继站选择稳定或关闭地下异常；之后还要清掉撤离航道。")
                     show_story_rpc.rpc("三座信标同时回应。地下异常已经无法继续回避，回到通信阵列做出选择，然后清理撤离航道。", 7.0)
@@ -3144,6 +3383,8 @@ func handle_action(peer_id: int, action: String) -> void:
                 player.carrying_id = id
                 samples[id].visible = false
                 _set_status("玩家 %d 拾取了异常冰样。" % peer_id)
+                _discover_side_quest("ice_garden")
+                _complete_side_quest("ice_garden")
                 _record_journal("异常冰样", "样本内部仍在脉动：可选回收并带回 +20 价值，携带时会提前引来敌袭。")
                 _spawn_particle_burst(samples[id].global_position + Vector3(0, 0.8, 0), Color("#b8a1ff"), 8)
                 floating_feedback_rpc.rpc(samples[id].global_position + Vector3(0, 1.35, 0), "样本 +1", Color("#d5c8ff"))
@@ -3158,8 +3399,10 @@ func handle_action(peer_id: int, action: String) -> void:
             return
         if player.carrying > 0 and _flat_distance(player.global_position, Vector3(EXTRACTION.x, 0, EXTRACTION.y)) <= 2.4:
             var carried_kind := player.carrying
+            var carried_id := player.carrying_id
             player.carrying = 0
             player.carrying_id = 0
+            _consume_lost_cargo(carried_kind, carried_id)
             if carried_kind == 2:
                 salvage_value += SAMPLE_VALUE
                 _set_status("已投送异常冰样，当前可选回收价值 %d / %d。" % [salvage_value, OPTIONAL_REWARD_TARGET])
@@ -3177,6 +3420,7 @@ func handle_action(peer_id: int, action: String) -> void:
                 show_story_rpc.rpc("电池箱上的编号属于一支已经注销的科考队。它们把东西送到了这里，却没有回收。", 7.0)
             _sync_state.rpc(_enemy_snapshot(), enemy_wave_index, enemy_wave_timer, activated_beacons, taken_crates, deposited_resources, _vitals_snapshot(), journal_entries, discovered_regions)
             sync_contract_state.rpc(mission_elapsed, salvage_value, knowledge_flags.keys(), taken_samples, scan_revealed_clues)
+            sync_progress_state.rpc(side_quest_states, achievement_flags, lost_cargo)
     elif action == "revive":
         for mate in players.values():
             if mate.peer_id != peer_id and mate.downed and _flat_distance(player.global_position, mate.global_position) <= REVIVE_RANGE:
@@ -3212,17 +3456,27 @@ func request_clue_discovery(clue_id: int) -> void:
             discovered_regions.append(region)
         _record_journal(String(found.get("name", "未知地标")) + " · " + region, "远景地标已登记。靠近它并按 E 调查，才能读懂留下的信号。")
     elif kind == "beacon":
+        _discover_side_quest("echo_route")
         _record_journal("现场痕迹", "拖痕指向一座尚未修复的气象信标。")
     elif kind == "crate":
         _record_journal("现场痕迹", "热融痕迹指向一枚热能电池，附近可能有人先来过。")
     elif kind == "sample":
+        _discover_side_quest("ice_garden")
         _record_journal("现场痕迹", "紫色反光藏在冰层边缘，像一枚被遗忘的异常冰样。")
+    elif kind == "landmark" and String(found.get("landmark_id", "")) == "relay":
+        _discover_side_quest("lost_observer")
     _sync_state.rpc(_enemy_snapshot(), enemy_wave_index, enemy_wave_timer, activated_beacons, taken_crates, deposited_resources, _vitals_snapshot(), journal_entries, discovered_regions)
 
 func _apply_landmark_knowledge(landmark_id: String) -> void:
     if landmark_id.is_empty() or knowledge_flags.has(landmark_id):
         return
     knowledge_flags[landmark_id] = true
+    if landmark_id == "weather_station":
+        _discover_side_quest("echo_route")
+        _complete_side_quest("echo_route")
+    elif landmark_id == "relay":
+        _discover_side_quest("lost_observer")
+        _complete_side_quest("lost_observer")
     match landmark_id:
         "weather_station":
             _record_journal("知识解锁", "旧气象站的观测台能标出异常冰样的频段；部署扫描器后会优先显示异常样本回波。")
@@ -3423,6 +3677,7 @@ func _tick_survival(delta: float) -> void:
                     break
         var sprint_oxygen_scale := SPRINT_OXYGEN_MULTIPLIER if p.sprinting else 1.0
         var sprint_warmth_scale := SPRINT_WARMTH_MULTIPLIER if p.sprinting else 1.0
+        var warmth_gear_scale := 0.62 if _ship_session != null and _ship_session.has_gear(p.peer_id, "thermal_suit") else 1.0
         if near_heat and not p.sprinting:
             var heat_recovery_scale := 0.42 if storm_active else 1.0
             p.warmth = minf(p.warmth + WARMTH_RECOVER * heat_recovery_scale * delta, 1.0)
@@ -3430,12 +3685,12 @@ func _tick_survival(delta: float) -> void:
         elif near_heat:
             # 加速时仍可以经过热源，但体温和氧气会按加速消耗，避免“站在热源里无限冲刺”。
             var heat_sprint_scale := 0.35 if not storm_active else 0.6
-            p.warmth = maxf(p.warmth - WARMTH_DRAIN * heat_sprint_scale * sprint_warmth_scale * delta, 0.0)
+            p.warmth = maxf(p.warmth - WARMTH_DRAIN * heat_sprint_scale * sprint_warmth_scale * warmth_gear_scale * delta, 0.0)
             p.oxygen = maxf(p.oxygen - OXYGEN_DRAIN_BASE * heat_sprint_scale * sprint_oxygen_scale * delta, 0.0)
         else:
             var storm_cold_scale := 2.15 if storm_active else 1.0
             var storm_oxygen_scale := 1.45 if storm_active else 1.0
-            p.warmth = maxf(p.warmth - WARMTH_DRAIN * storm_cold_scale * sprint_warmth_scale * delta, 0.0)
+            p.warmth = maxf(p.warmth - WARMTH_DRAIN * storm_cold_scale * sprint_warmth_scale * warmth_gear_scale * delta, 0.0)
             p.oxygen = maxf(p.oxygen - delta * (OXYGEN_DRAIN_BASE + (1.0 - p.warmth) * OXYGEN_DRAIN_COLD) * storm_oxygen_scale * sprint_oxygen_scale, 0.0)
             if p.oxygen <= 0.0:
                 p.downed = true
@@ -3489,6 +3744,7 @@ func _tick_extraction(delta: float) -> void:
 func return_to_ship(reason: String, final_vitals: Array = []) -> void:
     var returning_vitals := final_vitals if not final_vitals.is_empty() else _vitals_snapshot()
     if is_host:
+        _save_planet_progress(mission_failed)
         _ship_session.settle(mission_completed, salvage_value, reason)
     game_started = false
     mission_completed = false
@@ -3592,7 +3848,7 @@ func _enemy_snapshot() -> Array:
     return snapshot
 
 func _world_snapshot() -> Dictionary:
-    return {"ship_state": _ship_session.snapshot(), "wave": enemy_wave_index, "timer": enemy_wave_timer, "enemies": _enemy_snapshot(), "beacons": activated_beacons, "crates": taken_crates, "samples": taken_samples, "deposited": deposited_resources, "salvage": salvage_value, "mission_elapsed": mission_elapsed, "knowledge": knowledge_flags.keys(), "anomaly_resolved": anomaly_resolved, "ending_choice": ending_choice, "story_flags": story_flags, "rift_valve_open": rift_valve_open, "signal_mode": signal_mode, "signal_lure_until": signal_lure_until, "signal_lure_position": signal_lure_position, "signal_cooldown_until": signal_cooldown_until, "map_markers": map_markers, "vitals": _vitals_snapshot(), "beacon_positions": beacon_positions, "crate_positions": crate_positions, "sample_positions": sample_positions, "journal": journal_entries, "regions": discovered_regions, "clues": discovered_clues, "scan_clues": scan_revealed_clues, "scan_device_active": scan_device_active, "scan_device_position": scan_device_position, "scan_remaining": scan_remaining, "field_state": _field_interactions.snapshot() if _field_interactions != null else {}}
+    return {"ship_state": _ship_session.snapshot(), "wave": enemy_wave_index, "timer": enemy_wave_timer, "enemies": _enemy_snapshot(), "beacons": activated_beacons, "crates": taken_crates, "samples": taken_samples, "deposited": deposited_resources, "salvage": salvage_value, "mission_elapsed": mission_elapsed, "knowledge": knowledge_flags.keys(), "anomaly_resolved": anomaly_resolved, "ending_choice": ending_choice, "story_flags": story_flags, "side_quest_states": side_quest_states, "achievements": achievement_flags, "world_flags": world_flags, "resource_epoch": _planet_resource_epoch, "lost_cargo": lost_cargo, "rift_valve_open": rift_valve_open, "signal_mode": signal_mode, "signal_lure_until": signal_lure_until, "signal_lure_position": signal_lure_position, "signal_cooldown_until": signal_cooldown_until, "map_markers": map_markers, "vitals": _vitals_snapshot(), "beacon_positions": beacon_positions, "crate_positions": crate_positions, "sample_positions": sample_positions, "journal": journal_entries, "regions": discovered_regions, "clues": discovered_clues, "scan_clues": scan_revealed_clues, "scan_device_active": scan_device_active, "scan_device_position": scan_device_position, "scan_remaining": scan_remaining, "goofy_effects": _goofy_items.snapshot() if _goofy_items != null else [], "field_state": _field_interactions.snapshot() if _field_interactions != null else {}}
 
 func _vitals_snapshot() -> Array:
     var snapshot: Array = []
@@ -3643,6 +3899,14 @@ func sync_full_state(snapshot: Dictionary) -> void:
     story_flags.clear()
     for flag in saved_story_flags.keys():
         story_flags[String(flag)] = saved_story_flags[flag]
+    side_quest_states = snapshot.get("side_quest_states", side_quest_states).duplicate(true)
+    achievement_flags = snapshot.get("achievements", achievement_flags).duplicate(true)
+    world_flags = snapshot.get("world_flags", world_flags).duplicate(true)
+    _planet_resource_epoch = int(snapshot.get("resource_epoch", _planet_resource_epoch))
+    lost_cargo.clear()
+    for raw_cargo in snapshot.get("lost_cargo", []):
+        if raw_cargo is Dictionary:
+            lost_cargo.append(raw_cargo.duplicate(true))
     knowledge_flags.clear()
     for flag in snapshot.get("knowledge", []):
         knowledge_flags[String(flag)] = true
@@ -3657,6 +3921,8 @@ func sync_full_state(snapshot: Dictionary) -> void:
     _apply_layout_snapshot(snapshot.get("beacon_positions", []), snapshot.get("crate_positions", []), snapshot.get("sample_positions", []))
     if _field_interactions != null:
         _field_interactions.apply_snapshot(snapshot.get("field_state", {}))
+    if _goofy_items != null:
+        _goofy_items.apply_snapshot(snapshot.get("goofy_effects", []))
     if knowledge_flags.has("weather_station") or knowledge_flags.has("transport"):
         _reveal_sample_clues()
     if bool(snapshot.get("scan_device_active", false)):
@@ -3678,6 +3944,16 @@ func sync_contract_state(elapsed: float, value: int, knowledge: Array, samples_s
     if not scan_state.is_empty():
         scan_revealed_clues.assign(scan_state)
     _apply_objective_visuals()
+    _refresh_journal()
+
+@rpc("authority", "call_local", "reliable")
+func sync_progress_state(next_side_quests: Dictionary, next_achievements: Dictionary, next_lost_cargo: Array) -> void:
+    side_quest_states = next_side_quests.duplicate(true)
+    achievement_flags = next_achievements.duplicate(true)
+    lost_cargo.clear()
+    for raw in next_lost_cargo:
+        if raw is Dictionary:
+            lost_cargo.append(raw.duplicate(true))
     _refresh_journal()
 
 @rpc("authority", "call_local", "reliable")
@@ -3846,7 +4122,8 @@ func _update_hud() -> void:
         _vitals_label.add_theme_color_override("font_color", vital_color)
         var cooldown := local.scan_cooldown_remaining
         var scan_tip := "Q  扫描 %.0fs" % ceilf(cooldown) if cooldown > 0.0 else "Q  扫描"
-        _hint_label.text = scan_tip + "    Shift  加速（更耗氧/体温）    F  拾取/回收    X  丢下    Tab  日志    M  地图"
+        var goofy_tip: String = _goofy_items.hint_text() if _goofy_items != null else ""
+        _hint_label.text = scan_tip + "    Shift  加速（更耗氧/体温）    F  拾取/回收    X  丢下    Tab  日志    M  地图    " + goofy_tip
         _update_compass(local)
         if _journal_map_view != null:
             _journal_map_view.update_state(Vector2(local.global_position.x, local.global_position.z), discovered_regions, true)
@@ -4183,6 +4460,14 @@ func _refresh_journal() -> void:
     lines.append("热脉阀：%s    信号频段：%s" % ["已开启" if rift_valve_open else "未开启", "高频" if signal_mode == "high" else ("低频" if signal_mode == "low" else "中性")])
     lines.append("地图标记：%d / 12    H 热源 · C 线索 · V 清除最近" % map_markers.size())
     lines.append("回收价值：%d    样本：%d / %d" % [salvage_value, taken_samples.size(), sample_positions.size()])
+    var quest_lines: Array[String] = []
+    for quest_id in SIDE_QUEST_DATA:
+        var quest_state: Dictionary = _ensure_side_quest_state(String(quest_id))
+        var quest_data: Dictionary = SIDE_QUEST_DATA[quest_id]
+        var status := "已完成" if bool(quest_state.get("completed", false)) else ("已发现" if bool(quest_state.get("discovered", false)) else "未发现")
+        quest_lines.append("%s：%s" % [String(quest_data.get("title", quest_id)), status])
+    lines.append("支线任务：" + " · ".join(quest_lines))
+    lines.append("成就：%d / %d    资源刷新轮次：%d    失败散落资源：%d" % [achievement_flags.size(), SIDE_QUEST_DATA.size(), _planet_resource_epoch, lost_cargo.size()])
     lines.append("探索时间：%.0f 秒    热脉周期：%.1f 秒" % [mission_elapsed, THERMAL_CYCLE])
     lines.append("")
     if journal_entries.is_empty():
