@@ -2,6 +2,9 @@ extends CharacterBody3D
 class_name SpaceEnemy3D
 
 var enemy_id := 0
+var display_name := "霜噬生物"
+var hint_text := "追踪热量 · 空格攻击"
+var _name_label: Label3D
 var health := 3
 var max_health := 3
 var move_speed := 1.8
@@ -18,6 +21,14 @@ func setup(id: int, player_count: int = 1) -> void:
     move_speed = 3.05 + maxi(player_count - 1, 0) * 0.15
     attack_damage = 2 if player_count >= 4 else 1
     _build_visual()
+
+# 让不同星球给同一种敌人换名字：霜烬星叫「霜噬生物」，腐墟星叫「感染体」。
+# 必须在 setup() 之后调用，因为标签是 _build_visual() 里创建的。
+func set_creature_label(next_name: String, next_hint: String) -> void:
+    display_name = next_name
+    hint_text = next_hint
+    if _name_label != null:
+        _name_label.text = "【%s】\n%s" % [display_name, hint_text]
 
 func _enter_tree() -> void:
     set_multiplayer_authority(1)
@@ -81,7 +92,8 @@ func _build_visual() -> void:
     danger_light.position.y = 0.8
     add_child(danger_light)
     var label := Label3D.new()
-    label.text = "【霜噬生物】\n追踪热量 · 空格攻击"
+    label.text = "【%s】\n%s" % [display_name, hint_text]
+    _name_label = label
     label.position = Vector3(0.0, 1.85, 0.0)
     label.font_size = 46
     label.pixel_size = 0.011

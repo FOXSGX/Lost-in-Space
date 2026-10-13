@@ -7,8 +7,10 @@ const MAX_PLAYERS := 4
 const PLAYER_SCENE := preload("res://scenes/player_3d.tscn")
 const ENEMY_SCENE := preload("res://scenes/enemy_3d.tscn")
 const OBSTACLE_SCENE := preload("res://scenes/frost_obstacle_3d.tscn")
+const ART_UTILS := preload("res://scripts/art_utils.gd")
 const JOURNAL_MAP_SCENE := preload("res://scripts/journal_map_view.gd")
 const FROST_FIELD_INTERACTIONS := preload("res://scripts/frost_field_interactions.gd")
+const RUIN_PLANET := preload("res://scripts/ruin_planet.gd")
 const SCAN_DURATION := 4.0
 const SCAN_STARTUP := 0.8
 const SCAN_COOLDOWN := 6.0
@@ -145,6 +147,8 @@ var scan_device_position := Vector3.ZERO
 
 var _world_root: Node3D
 var _field_interactions: FrostFieldInteractions
+var _ruin_planet: RuinPlanet
+var pending_destination := "demo"
 var _environment: WorldEnvironment
 var _menu_world: Node3D
 var _menu_camera: Camera3D
@@ -297,19 +301,24 @@ func _process(delta: float) -> void:
     for mark_action in ["mark_heat", "mark_clue", "clear_marker"]:
         if Input.is_action_just_pressed(mark_action):
             handle_action(local_peer_id, mark_action)
-    if minigame_active:
-        _update_clue_minigame(delta)
-    _update_scan_visual(delta)
-    if _field_interactions != null:
-        _field_interactions.tick(delta)
-    _update_storm_visual(delta)
-    _update_vision_overlay()
+    # 画面与提示同样按星球分开：霜烬星的扫描器、暴风雪视觉、地标登记、
+    # 心理提示和剧情文字都属于霜烬星，登陆腐墟星时不显示。
+    if _on_frost_planet():
+        if minigame_active:
+            _update_clue_minigame(delta)
+        _update_scan_visual(delta)
+        if _field_interactions != null:
+            _field_interactions.tick(delta)
+        _update_storm_visual(delta)
+        _update_vision_overlay()
+        _update_interaction_hint()
+        _register_visible_landmarks()
+        _update_exploration_thought(delta)
+        _update_story(delta)
+    elif _ruin_planet != null:
+        _ruin_planet.tick(delta)
     _update_hud()
-    _update_interaction_hint()
-    _register_visible_landmarks()
     _update_feedback(delta)
-    _update_exploration_thought(delta)
-    _update_story(delta)
     if not is_host:
         return
     if mission_completed or mission_failed:
@@ -318,17 +327,20 @@ func _process(delta: float) -> void:
             var result_text := mission_summary if not mission_summary.is_empty() else ("任务完成，已返回飞船准备区。" if mission_completed else "登陆失败，已返回飞船准备区。")
             return_to_ship.rpc(result_text, _vitals_snapshot())
         return
-    _tick_story(delta)
-    _tick_storm(delta)
-    _check_enemy_triggers()
-    for enemy in enemies.values():
-        var lure_active := mission_elapsed < signal_lure_until
-        var result := (enemy as SpaceEnemy3D).server_tick(delta, players, signal_lure_position, lure_active, storm_active)
-        if result.get("sync", false):
-            _sync_state.rpc(_enemy_snapshot(), enemy_wave_index, enemy_wave_timer, activated_beacons, taken_crates, deposited_resources, _vitals_snapshot(), journal_entries, discovered_regions)
-    _tick_survival(delta)
+    # 霜烬星特有的系统只在霜烬星运行。登陆腐墟星时必须整段跳过，
+    # 否则暴风雪、霜烬星刷怪、体温生存和它的撤离判定会继续在后台跑。
+    if _on_frost_planet():
+        _tick_story(delta)
+        _tick_storm(delta)
+        _check_enemy_triggers()
+        for enemy in enemies.values():
+            var lure_active := mission_elapsed < signal_lure_until
+            var result := (enemy as SpaceEnemy3D).server_tick(delta, players, signal_lure_position, lure_active, storm_active)
+            if result.get("sync", false):
+                _sync_state.rpc(_enemy_snapshot(), enemy_wave_index, enemy_wave_timer, activated_beacons, taken_crates, deposited_resources, _vitals_snapshot(), journal_entries, discovered_regions)
+        _tick_survival(delta)
+        _tick_extraction(delta)
     _tick_revive(delta)
-    _tick_extraction(delta)
     mission_elapsed += delta
     contract_sync_accumulator += delta
     if contract_sync_accumulator >= 0.5:
@@ -767,7 +779,9 @@ func _build_route_ui() -> void:
     _ui_label(planet_card, "FROST ASH\n环境调查 · 气象信标 · 暴风雪撤离", Vector2(22, 100), Vector2(420, 52), 15, Color("#9ebdca"))
     _land_button = _ui_button(planet_card, "确认航程  →", Vector2(334, 116), Vector2(176, 48), _confirm_land, true)
     _route_status = _ui_label(_route_group, "", Vector2(91, 424), Vector2(520, 24), 14, Color("#8fb4c4"))
-    _ui_label(_route_group, "02  /  尚未开放     电磁星球", Vector2(91, 454), Vector2(500, 28), 16, Color("#668392"))
+    _ui_label(_route_group, "02  /  可登陆         腐墟星", Vector2(91, 446), Vector2(300, 26), 16, Color("#a8c26a"))
+    _ui_button(_route_group, "登陆腐墟星  →", Vector2(400, 440), Vector2(200, 36), _land_ruin, true)
+    _ui_label(_route_group, "03  /  尚未开放     电磁星球", Vector2(91, 484), Vector2(500, 28), 16, Color("#668392"))
     _ui_button(_route_group, "← 返回主舱", Vector2(91, 516), Vector2(240, 46), _show_room)
 
 func _set_screen(view: String) -> void:
@@ -1023,7 +1037,7 @@ func _on_peer_connected(peer_id: int) -> void:
         return
     spawn_player_for_peer.rpc(peer_id)
     sync_full_state.rpc_id(peer_id, _world_snapshot())
-    _set_status("玩家 %d 已加入 3D 霜烬星。" % peer_id)
+    _set_status("玩家 %d 已加入。" % peer_id)
 
 func _on_peer_disconnected(peer_id: int) -> void:
     connected_ids.erase(peer_id)
@@ -1039,6 +1053,14 @@ func _on_server_disconnected() -> void:
     _set_status("主机已断开连接，请重新创建或加入房间。")
 
 func _confirm_land() -> void:
+    pending_destination = "demo"
+    _ship_session.confirm_land()
+
+
+# 航线图第二格：腐墟星（planet-02）。
+# 复用同一套「全员就绪 + 舰体达标」校验，只切换目的地。
+func _land_ruin() -> void:
+    pending_destination = "ruin"
     _ship_session.confirm_land()
 
 func _clear_players() -> void:
@@ -1109,9 +1131,14 @@ func _start_planet() -> void:
     if _menu_world != null:
         _menu_world.visible = false
     _build_world()
-    _record_journal("登陆记录", "霜烬星的三座气象信标在十七小时前同时失联。旧气象站记录、冰层裂谷热脉和废弃通信阵列的回放，可能解释信号为何从地底返回。")
-    _record_journal("当前路线", "先部署扫描器寻找第一座信标；第一座信标恢复后，回波会指向旧气象站。调查顺序会逐步打开下一条路。")
-    _record_journal("地表设备", "出发前可用 E 呼叫联络终端、解冻应急补给箱。沿途的青色设备和队员遗物可以操作，靠近会显示提示；修理时留在附近，地图会登记发现过的设备。")
+    if pending_destination == "ruin":
+        _record_journal("登陆记录", "腐墟星的地表联络在数年前中断。殖民城的超市、医院和学校还立在那里，但已经没有人回应呼叫。")
+        _record_journal("当前路线", "靠近建筑正门或物资点按 E。翻找物资会发出声响——这一关里，想活下去和想安静是冲突的。")
+        _record_journal("生存提醒", "感染体看不见你，但听得见你。冲刺（Shift）和攻击都会大幅提高噪音，噪音越高它们追得越远。")
+    else:
+        _record_journal("登陆记录", "霜烬星的三座气象信标在十七小时前同时失联。旧气象站记录、冰层裂谷热脉和废弃通信阵列的回放，可能解释信号为何从地底返回。")
+        _record_journal("当前路线", "先部署扫描器寻找第一座信标；第一座信标恢复后，回波会指向旧气象站。调查顺序会逐步打开下一条路。")
+        _record_journal("地表设备", "出发前可用 E 呼叫联络终端、解冻应急补给箱。沿途的青色设备和队员遗物可以操作，靠近会显示提示；修理时留在附近，地图会登记发现过的设备。")
     _game_layer.visible = true
     _menu_layer.visible = false
     var focused := get_viewport().gui_get_focus_owner()
@@ -1187,6 +1214,14 @@ func _prepare_exploration_clues() -> void:
         })
         clue_id += 1
 
+# 腐墟星（planet-02）的世界构建入口。
+# 目前 _build_world() 只构建霜烬星；等阶段分支接上后调用这个方法即可，
+# 不需要改动霜烬星现有的任何构建逻辑。
+func build_ruin_planet() -> void:
+    if _ruin_planet == null:
+        _ruin_planet = RUIN_PLANET.new(self)
+    _ruin_planet.build()
+
 func _build_world() -> void:
     _world_root = Node3D.new()
     _world_root.name = "FrostAsh3DWorld"
@@ -1199,7 +1234,7 @@ func _build_world() -> void:
     for raw in FrostMapLayout.OBSTACLES:
         var obstacle := OBSTACLE_SCENE.instantiate() as FrostObstacle3D
         _world_root.add_child(obstacle)
-        obstacle.setup(raw[0], raw[1], float(raw[3]), int(raw[2]))
+        obstacle.setup(raw[0], raw[1], float(raw[3]), int(raw[2]), terrain_height(Vector2(raw[0])))
         obstacles.append(obstacle)
     _build_zone_visuals()
     _build_beacons()
@@ -1211,6 +1246,48 @@ func _build_world() -> void:
     if _field_interactions == null:
         _field_interactions = FROST_FIELD_INTERACTIONS.new(self)
     _field_interactions.build()
+    _apply_planet_visibility()
+
+# 按目的地决定哪颗星球的世界可见。
+# 腐墟星（planet-02）有自己的世界根（含光照和地面），
+# 登陆它时必须把霜烬星整棵树隐藏，否则两个世界会叠在一起。
+func _on_frost_planet() -> bool:
+    return pending_destination != "ruin"
+
+func _apply_planet_visibility() -> void:
+    var on_ruin := pending_destination == "ruin"
+    if on_ruin and _ruin_planet == null:
+        build_ruin_planet()
+    if _ruin_planet != null:
+        _ruin_planet.set_visible(on_ruin)
+    if _world_root != null:
+        _world_root.visible = not on_ruin
+        # 霜烬星的地面碰撞也必须一起关掉，否则在腐墟星上会踩到看不见的冰面，
+        # 感觉像走在空气上，而且能走出腐墟星的地界。
+        for body in _world_root.find_children("*", "StaticBody3D", true, false):
+            var static_body := body as StaticBody3D
+            if static_body != null:
+                static_body.collision_layer = 0 if on_ruin else 2
+    # 小地图的画布尺寸和布局也必须跟着换：它默认写死霜烬星的 384×256 冰原，
+    # 不改的话按 M 看到的地图永远是霜烬星。
+    if _journal_map_view != null:
+        if on_ruin and _ruin_planet != null:
+            _journal_map_view.map_size = _ruin_planet.GROUND_EXTENT * 2.0
+            _journal_map_view.cliffs = []
+            _journal_map_view.pathways = []
+            _journal_map_view.landmarks = []
+            _journal_map_view.safehouse = _ruin_planet.SPAWN_POSITION
+            _journal_map_view.extraction = _ruin_planet.EXTRACTION_POSITION
+        else:
+            _journal_map_view.map_size = MAP_SIZE
+            # 这里必须是冰崖墙，不是 OBSTACLES。OBSTACLES 是 58 处两三米大的碎冰岩，
+            # 画到地图上只有几个像素，等于把 12 道墙整片抹掉；地图是给玩家读通路的，
+            # 丢掉墙之后只剩下一地噪点。地图初始配置用的也是 ICE_CLIFFS。
+            _journal_map_view.cliffs = FrostMapLayout.ICE_CLIFFS
+            _journal_map_view.pathways = FrostMapLayout.PATHWAYS
+            _journal_map_view.landmarks = LANDMARK_DATA
+            _journal_map_view.safehouse = SAFEHOUSE
+            _journal_map_view.extraction = EXTRACTION
 
 func _build_environment() -> void:
     _environment = WorldEnvironment.new()
@@ -1225,39 +1302,46 @@ func _build_environment() -> void:
     sky.sky_material = sky_material
     env.sky = sky
     env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-    env.ambient_light_color = Color("#94c8d8")
-    env.ambient_light_energy = 0.85
+    # 环境光原本是 0.85 的亮蓝，等于给所有表面无差别地加了一层白，
+    # 顶点色被压平、雪原泛白、区域之间看不出明度差。现在压到 0.34 并加深颜色，
+    # 让"受光面亮、背光面冷"成为画面主要结构，地表颜色才回到设计值附近。
+    env.ambient_light_color = Color("#4d7c96")
+    env.ambient_light_energy = 0.32
     env.fog_enabled = true
-    env.fog_light_color = Color("#1a4a5f")
-    env.fog_density = 0.005
-    env.tonemap_mode = Environment.TONE_MAPPER_FILMIC
+    env.fog_light_color = Color("#12313f")
+    env.fog_density = 0.004
+    # 换掉 filmic：它把 0.2~0.35 的线性中间调抬到 0.53~0.66，
+    # 结果冰湖、台地和雪面全挤在高亮区间，俯视画面分不出层级。
+    # ACES 在中间调更克制、高光滚降更自然，地表这才有明暗层次。
+    env.tonemap_mode = Environment.TONE_MAPPER_ACES
     env.glow_enabled = true
-    env.glow_intensity = 0.45
-    env.glow_strength = 0.85
+    # 泛光只留给热源、信标和发光标识。阈值提高后雪面本身不再发光，
+    # 否则整个冰原会糊成一片雾。
+    env.glow_intensity = 0.3
+    env.glow_strength = 0.7
+    env.glow_hdr_threshold = 1.25
     env.glow_blend_mode = Environment.GLOW_BLEND_MODE_ADDITIVE
     _environment.environment = env
     _world_root.add_child(_environment)
     var sun := DirectionalLight3D.new()
-    sun.rotation_degrees = Vector3(-55.0, -32.0, 0.0)
-    sun.light_color = Color("#d8f5ff")
-    sun.light_energy = 1.45
+    # 主光抬高到 58°，让投影更短、更接近正午雪原；阴影是俯视视角里
+    # 唯一能说明"这个物件有多高"的线索。
+    sun.rotation_degrees = Vector3(-58.0, -38.0, 0.0)
+    sun.light_color = Color("#eaf7ff")
+    sun.light_energy = 1.6
     sun.shadow_enabled = true
-    sun.directional_shadow_max_distance = 80.0
+    sun.directional_shadow_max_distance = 120.0
     _world_root.add_child(sun)
-    var fill := OmniLight3D.new()
-    fill.name = "FrostBlueFill"
-    fill.position = Vector3(-6.0, 5.0, 7.0)
-    fill.light_color = Color("#5de4ff")
-    fill.light_energy = 3.8
-    fill.omni_range = 16.0
-    _world_root.add_child(fill)
-    var accent_fill := OmniLight3D.new()
-    accent_fill.name = "AccentFill"
-    accent_fill.position = Vector3(8.0, 6.0, -5.0)
-    accent_fill.light_color = Color("#88d4f5")
-    accent_fill.light_energy = 2.2
-    accent_fill.omni_range = 12.0
-    _world_root.add_child(accent_fill)
+    # 原来的两盏补光钉在地图原点附近，而地图是 384×256 的冰原：
+    # 它们只在出生点周围烧出两个亮斑，走远之后毫无作用，还让画面中心过曝。
+    # 换成低角度冷蓝天光，给所有物体的背光面补上"雪地反照"的冷色，
+    # 全程一致，也不再制造局部亮斑。
+    var sky_wrap := DirectionalLight3D.new()
+    sky_wrap.name = "FrostSkyWrap"
+    sky_wrap.rotation_degrees = Vector3(-22.0, 142.0, 0.0)
+    sky_wrap.light_color = Color("#5b93c4")
+    sky_wrap.light_energy = 0.6
+    _world_root.add_child(sky_wrap)
 
 var _drift_noise: FastNoiseLite
 var _ripple_noise: FastNoiseLite
@@ -1362,11 +1446,16 @@ func _terrain_color(point: Vector2) -> Color:
         var corridor := _pathway_proximity(point, pathway)
         if corridor <= 0.0:
             continue
-        var target := Color("#b9dce8") if bool(pathway.get("fragile", false)) else Color("#5d8296")
+        var target := Color("#b9dce8") if bool(pathway.get("fragile", false)) else Color("#54798d")
         color = color.lerp(target, corridor * 0.6)
-    # 低频的雪面深浅。用连续噪声而不是逐点二分，避免出现织物格纹。
-    var grain := _ripple_noise.get_noise_2d(point.x * 0.9, point.y * 0.9)
-    color = color.lerp(color.lightened(0.16), clampf(grain, 0.0, 1.0) * 0.5)
+    # 雪原的"风塑"质感：低频噪声过零时切换明暗，正侧是受光的雪脊、
+    # 负侧是背光的雪窝。这样在完全不改地形起伏的前提下，
+    # 俯视画面也能读出地面不是一张平板。原来是单向提亮，只让全局变白。
+    var grain := _ripple_noise.get_noise_2d(point.x * 1.35, point.y * 1.35)
+    if grain > 0.0:
+        color = color.lerp(color.lightened(0.22), grain * 0.55)
+    else:
+        color = color.lerp(color.darkened(0.18).lerp(Color("#10293a"), 0.4), -grain * 0.5)
     return color
 
 func _pathway_proximity(point: Vector2, pathway: Dictionary) -> float:
@@ -1453,13 +1542,15 @@ func _scatter_region_details(parent: Node3D, region_name: String, center: Vector
 func _scatter_multimesh_ice(parent: Node3D, region_name: String, center: Vector2, half: Vector2, base_color: Color, is_round: bool, rng: RandomNumberGenerator) -> void:
     # 装饰层使用 MultiMesh：每个区域一个批次，避免为几十枚碎冰各建一个绘制实例。
     var mesh := BoxMesh.new()
-    mesh.size = Vector3(0.42, 0.8, 0.28)
+    # 原来只有 0.42×0.8×0.28，在 28 米的镜头范围里读成了地面上的白点。
+    # 放大到约半米见方之后，雪原在玩家尺度上才看得出"被风堆过"。
+    mesh.size = Vector3(0.62, 0.86, 0.44)
     var material := _gloss_material(base_color.lightened(0.24), 0.3)
     var multimesh := MultiMesh.new()
     multimesh.transform_format = MultiMesh.TRANSFORM_3D
     multimesh.use_colors = false
     multimesh.mesh = mesh
-    multimesh.instance_count = 28
+    multimesh.instance_count = 34
     for index in multimesh.instance_count:
         var point := Vector2(rng.randf_range(-half.x * 0.9, half.x * 0.9), rng.randf_range(-half.y * 0.9, half.y * 0.9))
         if is_round and point.length() > half.x * 0.88:
@@ -1479,14 +1570,14 @@ func _scatter_multimesh_ice(parent: Node3D, region_name: String, center: Vector2
 func _region_color(kind: String) -> Color:
     # 六个区域各自有明确的明度和冷暖，玩家一眼能认出自己换了区。
     match kind:
-        "start": return Color("#5c6f7a")      # 冷灰青：着陆区被压实的地面
-        "canyon": return Color("#23414f")     # 深冷蓝：峡谷阴影
-        "plateau": return Color("#b3cfda")    # 最亮：台地积雪
-        "lake": return Color("#3d7f91")       # 青绿：冰湖
-        "rift": return Color("#5c3f36")       # 暖褐：地热裂谷
-        "wreckage": return Color("#5a666d")   # 中性灰：金属残骸
-        "extraction": return Color("#3f6b52") # 暗绿：撤离点
-        _: return Color("#1e3a4a")
+        "start": return Color("#4e6272")      # 冷灰青：着陆区被压实的地面
+        "canyon": return Color("#17384b")     # 深冷蓝：峡谷阴影
+        "plateau": return Color("#a9cbdc")    # 最亮：台地积雪
+        "lake": return Color("#2f7488")       # 青绿：冰湖
+        "rift": return Color("#6d4534")       # 暖褐：地热裂谷
+        "wreckage": return Color("#4d5a63")   # 中性灰：金属残骸
+        "extraction": return Color("#33604a") # 暗绿：撤离点
+        _: return Color("#17303f")
 
 func _build_ice_cliffs() -> void:
     for cliff in FrostMapLayout.ICE_CLIFFS:
@@ -1580,6 +1671,7 @@ func _build_zone_visuals() -> void:
     # 否则半透明的暖色面会把周围雪地染成土黄。
     safehouse.material_override = _zone_material(Color(0.72, 0.80, 0.86, 0.55), Color("#9fb8c6"))
     _world_root.add_child(safehouse)
+    ART_UTILS.contact_shadow(_world_root, Vector3(SAFEHOUSE.x, terrain_height(SAFEHOUSE), SAFEHOUSE.y), 4.6)
     var heat_core := MeshInstance3D.new()
     var core_mesh := SphereMesh.new()
     core_mesh.radius = 0.68
@@ -1684,6 +1776,7 @@ func _build_landmark(display_name: String, position: Vector2, silhouette: String
     landmark.add_child(label)
     _world_labels.append(label)
     _world_root.add_child(landmark)
+    ART_UTILS.contact_shadow(_world_root, Vector3(position.x, terrain_height(position), position.y), 3.6)
 
 func _landmark_tower(parent: Node3D, color: Color) -> void:
     # 倒塌的天线塔：倾斜的主柱加一段倒下的塔架。
@@ -1835,6 +1928,7 @@ func _build_beacons() -> void:
         beacon.name = "WeatherBeacon3D_%d" % (index + 1)
         beacon.position = Vector3(beacon_positions[index].x, 0.0, beacon_positions[index].y)
         _world_root.add_child(beacon)
+        ART_UTILS.contact_shadow(_world_root, Vector3(beacon_positions[index].x, terrain_height(beacon_positions[index]), beacon_positions[index].y), 1.25)
         var base_platform := MeshInstance3D.new()
         var platform_mesh := CylinderMesh.new()
         platform_mesh.top_radius = 0.85
@@ -1904,6 +1998,7 @@ func _build_crates() -> void:
         crate.name = "HeatBattery3D_%d" % (index + 1)
         crate.position = Vector3(crate_positions[index].x, 0.3, crate_positions[index].y)
         _world_root.add_child(crate)
+        ART_UTILS.contact_shadow(_world_root, Vector3(crate_positions[index].x, terrain_height(crate_positions[index]), crate_positions[index].y), 0.78)
         var base := MeshInstance3D.new()
         var base_mesh := CylinderMesh.new()
         base_mesh.top_radius = 0.45
@@ -1974,6 +2069,7 @@ func _build_samples() -> void:
         sample.name = "IceSample3D_%d" % (index + 1)
         sample.position = Vector3(sample_positions[index].x, 0.16, sample_positions[index].y)
         _world_root.add_child(sample)
+        ART_UTILS.contact_shadow(_world_root, Vector3(sample_positions[index].x, terrain_height(sample_positions[index]), sample_positions[index].y), 0.62)
         var shard := MeshInstance3D.new()
         var shard_mesh := PrismMesh.new()
         shard_mesh.size = Vector3(0.65, 0.9, 0.65)
@@ -2021,6 +2117,7 @@ func _build_extraction() -> void:
     pad.material_override = _material(Color("#2d6a7a"), 0.45)
     pad.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
     _world_root.add_child(pad)
+    ART_UTILS.contact_shadow(_world_root, Vector3(EXTRACTION.x, terrain_height(EXTRACTION), EXTRACTION.y), 2.55)
     var ring := MeshInstance3D.new()
     var ring_mesh := TorusMesh.new()
     ring_mesh.inner_radius = 2.50
@@ -2189,6 +2286,9 @@ func _build_exploration_clues() -> void:
             marker.visible = true
 
 func _spawn_position(peer_id: int) -> Vector3:
+    # 登陆腐墟星时用腐墟星自己的出生点，其余情况沿用霜烬星的安全屋槽位。
+    if pending_destination == "ruin" and _ruin_planet != null:
+        return _ruin_planet.spawn_position(peer_id)
     var slots := [Vector3(SAFEHOUSE.x - 2.2, 0.0, SAFEHOUSE.y + 1.8), Vector3(SAFEHOUSE.x, 0.0, SAFEHOUSE.y + 1.8), Vector3(SAFEHOUSE.x + 2.2, 0.0, SAFEHOUSE.y + 1.8), Vector3(SAFEHOUSE.x + 4.4, 0.0, SAFEHOUSE.y + 1.8)]
     return slots[(peer_id - 1) % slots.size()]
 
@@ -2955,6 +3055,8 @@ func handle_action(peer_id: int, action: String) -> void:
         return
     if _field_interactions != null and _field_interactions.handle_action(peer_id, action):
         return
+    if _ruin_planet != null and _ruin_planet.handle_action(peer_id, action):
+        return
     if action == "repair":
         if _near_landmark(player, "relay") and knowledge_flags.has("relay") and activated_beacons.size() >= beacon_positions.size():
             _resolve_anomaly("stabilize")
@@ -3189,9 +3291,19 @@ func attack_from_peer(peer_id: int) -> void:
         if distance <= distance_limit:
             distance_limit = distance
             nearest = candidate
+    # 腐墟星的感染体存在独立模块里，不在 enemies 字典中，必须单独判定，
+    # 否则在腐墟星按空格永远打不到东西。
+    if nearest == null and not _on_frost_planet() and _ruin_planet != null:
+        nearest = _ruin_planet.nearest_zombie(player.global_position, SpacePlayer3D.ATTACK_RANGE)
     if nearest == null:
         attack_feedback.rpc(peer_id, player.global_position + Vector3(0, 0, -1.2), false)
-        show_feedback_rpc.rpc("超出射程", Color("#ff6b6b"), 0.6)
+        # 带上最近目标的距离，方便判断是"没有敌人"还是"敌人太远"。
+        var hint := ""
+        if not _on_frost_planet() and _ruin_planet != null:
+            var far := _ruin_planet.nearest_zombie(player.global_position, 9999.0)
+            if far != null:
+                hint = "（最近 %.1f 米）" % _flat_distance(player.global_position, far.global_position)
+        show_feedback_rpc.rpc("超出射程" + hint, Color("#ff6b6b"), 0.8)
         return
     attack_feedback.rpc(peer_id, nearest.global_position, true)
     if nearest.take_damage(1):
@@ -3667,7 +3779,7 @@ func _update_hud() -> void:
     _vitals_panel.visible = not _journal_visible
     _hint_label.visible = not _journal_visible
     _compass_panel.visible = not _journal_visible
-    var phase := "探索霜烬星"
+    var phase := "探索霜烬星" if _on_frost_planet() else "探索腐墟星"
     if extraction_enabled:
         phase = "前往撤离平台"
     elif _objectives_ready():
@@ -3691,8 +3803,24 @@ func _update_hud() -> void:
             signal_text = "高频 · 探测/风暴"
         elif signal_mode == "low":
             signal_text = "低频 · 诱导"
-        _progress_label.text = "%s · %s\n调查 %d/%d   信标 %d/%d\n%s   信号：%s   %.0fs\n下一步：%s" % [phase, _region_hint(local.global_position), knowledge_count, REQUIRED_KNOWLEDGE.size(), activated_beacons.size(), beacon_positions.size(), anomaly_text, signal_text, mission_elapsed, _next_objective_text()]
-        _vitals_label.text = "生命 %d/5   氧气 %d%%   体温 %d%%\n%s" % [local.health, int(local.oxygen), int(local.warmth * 100.0), carry_text]
+        if _on_frost_planet():
+            _progress_label.text = "%s · %s\n调查 %d/%d   信标 %d/%d\n%s   信号：%s   %.0fs\n下一步：%s" % [phase, _region_hint(local.global_position), knowledge_count, REQUIRED_KNOWLEDGE.size(), activated_beacons.size(), beacon_positions.size(), anomaly_text, signal_text, mission_elapsed, _next_objective_text()]
+        else:
+            # 腐墟星没有信标和信号频段，这里换成它自己的进度：噪音、回收点数、
+            # 建筑与物资的发现数量。
+            var ruin_noise := 0
+            var ruin_food := 0
+            var ruin_buildings := 0
+            if _ruin_planet != null:
+                ruin_noise = int(round(_ruin_planet.noise_level(local.peer_id) * 100.0))
+                ruin_food = _ruin_planet.food_sites.size() - _ruin_planet.taken_food.size()
+                ruin_buildings = _ruin_planet.discovered_buildings.size()
+            _progress_label.text = "%s · %s\n噪音 %d%%   物资剩余 %d   已发现建筑 %d/3\n回收价值 %d   %.0fs" % [phase, _region_hint(local.global_position), ruin_noise, ruin_food, ruin_buildings, salvage_value, mission_elapsed]
+        if _on_frost_planet():
+            _vitals_label.text = "生命 %d/5   氧气 %d%%   体温 %d%%\n%s" % [local.health, int(local.oxygen), int(local.warmth * 100.0), carry_text]
+        else:
+            # 腐墟星没有失温机制，体温不参与玩法，所以不显示，避免误导。
+            _vitals_label.text = "生命 %d/5   氧气 %d%%\n%s" % [local.health, int(local.oxygen), carry_text]
         var vital_color := Color("#ffad9f") if local.oxygen <= 25.0 or local.health <= 2 else Color("#d9eef4")
         _vitals_label.add_theme_color_override("font_color", vital_color)
         var cooldown := local.scan_cooldown_remaining
@@ -3701,9 +3829,15 @@ func _update_hud() -> void:
         _update_compass(local)
         if _journal_map_view != null:
             _journal_map_view.update_state(Vector2(local.global_position.x, local.global_position.z), discovered_regions, true)
-            _journal_map_view.update_objectives(_known_map_positions("beacon", beacon_positions, activated_beacons), _known_map_positions("crate", crate_positions, taken_crates), activated_beacons, taken_crates)
-            _journal_map_view.update_heat_sources(_known_heat_sources())
-            _journal_map_view.update_field_sites(_field_interactions.map_sites() if _field_interactions != null else [])
+            if _on_frost_planet():
+                _journal_map_view.update_objectives(_known_map_positions("beacon", beacon_positions, activated_beacons), _known_map_positions("crate", crate_positions, taken_crates), activated_beacons, taken_crates)
+                _journal_map_view.update_heat_sources(_known_heat_sources())
+                _journal_map_view.update_field_sites(_field_interactions.map_sites() if _field_interactions != null else [])
+            else:
+                # 腐墟星没有信标、热源和地表设备，地图改为标出建筑与物资点。
+                _journal_map_view.update_objectives([], [], [], [])
+                _journal_map_view.update_heat_sources([])
+                _journal_map_view.update_field_sites(_ruin_planet.map_sites() if _ruin_planet != null else [])
             _journal_map_view.update_markers(map_markers)
         var warning := ""
         if mission_failed:
@@ -3712,15 +3846,17 @@ func _update_hud() -> void:
             warning = "撤离成功 · 正在返航"
         elif local.downed:
             warning = "你已倒地 · 等待队友救援"
-        elif local.oxygen <= 25.0:
+        elif _on_frost_planet() and local.oxygen <= 25.0:
             warning = "氧气不足 · 返回热源补氧"
+        elif not _on_frost_planet() and _ruin_planet != null and _ruin_planet.noise_level(local.peer_id) >= 0.5:
+            warning = "噪音过高 · 感染体正在循声靠近"
         elif _nearest_threat_distance(local) <= 5.0:
-            warning = "霜噬生物正在靠近"
-        elif mission_elapsed < signal_lure_until:
+            warning = "霜噬生物正在靠近" if _on_frost_planet() else "感染体正在靠近"
+        elif _on_frost_planet() and mission_elapsed < signal_lure_until:
             warning = "低频诱导生效 · 生物正在远离队伍"
-        elif storm_active:
+        elif _on_frost_planet() and storm_active:
             warning = "暴风雪 · 视野收窄 / 移动变慢 / 失温加剧"
-        elif knowledge_flags.has("relay") and not anomaly_resolved:
+        elif _on_frost_planet() and knowledge_flags.has("relay") and not anomaly_resolved:
             warning = "通信阵列预报 · 距离风暴 %.0fs" % maxf(STORM_INTERVAL - storm_elapsed, 0.0)
         elif extraction_enabled:
             warning = "撤离开放 · 全队集合"
