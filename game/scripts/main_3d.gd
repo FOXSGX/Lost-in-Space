@@ -1129,6 +1129,18 @@ func _on_connected_to_server() -> void:
 func _on_connection_failed() -> void:
     _set_status("连接失败，请检查主机 IP 和端口。")
 
+## 腐墟星感染体由 ruin_planet 自己维护，不进 enemies 字典。
+## 中途加入的玩家看不到它们，所以这里补一条只对腐墟星生效的同步通道。
+## 霜烬星不调用这两个函数，行为完全不变。
+func broadcast_ruin_enemies(state: Array) -> void:
+    if pending_destination == "ruin" and _ruin_planet != null:
+        sync_ruin_enemies.rpc(state)
+
+@rpc("authority", "call_remote", "reliable")
+func sync_ruin_enemies(state: Array) -> void:
+    if _ruin_planet != null and pending_destination == "ruin":
+        _ruin_planet.apply_enemy_snapshot(state)
+
 func _on_peer_connected(peer_id: int) -> void:
     if not is_host:
         return
@@ -1138,7 +1150,7 @@ func _on_peer_connected(peer_id: int) -> void:
         _ship_session.add_peer(peer_id)
         return
     spawn_player_for_peer.rpc(peer_id)
-    sync_full_state.rpc_id(peer_id, _world_snapshot())
+    sync_full_state.rpc_id(peer_id, _snapshot_for_sync())
     _set_status("玩家 %d 已加入。" % peer_id)
 
 func _on_peer_disconnected(peer_id: int) -> void:
@@ -1360,7 +1372,7 @@ func _start_planet() -> void:
         enemy_spawned = false
         enemy_wave_index = 0
         enemy_wave_timer = 0.0
-        sync_full_state.rpc(_world_snapshot())
+        sync_full_state.rpc(_snapshot_for_sync())
         sync_contract_state.rpc(mission_elapsed, salvage_value, knowledge_flags.keys(), taken_samples, scan_revealed_clues)
 
 func _prepare_layout() -> void:
@@ -3983,6 +3995,19 @@ func _enemy_snapshot() -> Array:
         snapshot.append([e.enemy_id, e.global_position, e.health])
     return snapshot
 
+## 在通用快照上补两个只和腐墟星有关的字段。
+## 霜烬星时 destination 是 "demo"、ruin_enemies 是空数组，
+## 客户端的补发流程和改动之前完全一致。
+func _snapshot_for_sync() -> Dictionary:
+    var snapshot := _world_snapshot()
+    snapshot["destination"] = pending_destination
+    if _ruin_planet != null and not _on_frost_planet():
+        snapshot["ruin_enemies"] = _ruin_planet.enemy_snapshot()
+    else:
+        snapshot["ruin_enemies"] = []
+    return snapshot
+
+
 func _world_snapshot() -> Dictionary:
     return {"ship_state": _ship_session.snapshot(), "wave": enemy_wave_index, "timer": enemy_wave_timer, "enemies": _enemy_snapshot(), "beacons": activated_beacons, "crates": taken_crates, "samples": taken_samples, "deposited": deposited_resources, "salvage": salvage_value, "mission_elapsed": mission_elapsed, "knowledge": knowledge_flags.keys(), "anomaly_resolved": anomaly_resolved, "ending_choice": ending_choice, "story_flags": story_flags, "side_quest_states": side_quest_states, "achievements": achievement_flags, "world_flags": world_flags, "resource_epoch": _planet_resource_epoch, "lost_cargo": lost_cargo, "rift_valve_open": rift_valve_open, "signal_mode": signal_mode, "signal_lure_until": signal_lure_until, "signal_lure_position": signal_lure_position, "signal_cooldown_until": signal_cooldown_until, "map_markers": map_markers, "vitals": _vitals_snapshot(), "beacon_positions": beacon_positions, "crate_positions": crate_positions, "sample_positions": sample_positions, "journal": journal_entries, "regions": discovered_regions, "clues": discovered_clues, "scan_clues": scan_revealed_clues, "scan_device_active": scan_device_active, "scan_device_position": scan_device_position, "scan_remaining": scan_remaining, "goofy_effects": _goofy_items.snapshot() if _goofy_items != null else [], "field_state": _field_interactions.snapshot() if _field_interactions != null else {}}
 
@@ -4015,6 +4040,10 @@ func sync_vitals(snapshot: Array, in_ship := false) -> void:
 func sync_full_state(snapshot: Dictionary) -> void:
     _ship_session.apply_state(snapshot.get("ship_state", {}))
     if not game_started:
+        # 中途加入时先把目的地同步过来，否则客户端会按默认的霜烬星建世界。
+        var destination := String(snapshot.get("destination", "demo"))
+        if destination != "":
+            pending_destination = destination
         _start_planet()
     enemy_wave_index = int(snapshot.get("wave", 0))
     enemy_wave_timer = float(snapshot.get("timer", 0.0))
@@ -4067,6 +4096,8 @@ func sync_full_state(snapshot: Dictionary) -> void:
     sync_vitals(snapshot.get("vitals", []))
     _apply_objective_visuals()
     _apply_enemy_snapshot(snapshot.get("enemies", []))
+    if _ruin_planet != null and not _on_frost_planet():
+        _ruin_planet.apply_enemy_snapshot(snapshot.get("ruin_enemies", []))
 
 @rpc("authority", "call_local", "reliable")
 func sync_contract_state(elapsed: float, value: int, knowledge: Array, samples_state: Array, scan_state: Array = []) -> void:
@@ -4263,7 +4294,11 @@ func _update_hud() -> void:
         var cooldown := local.scan_cooldown_remaining
         var scan_tip := "Q  扫描 %.0fs" % ceilf(cooldown) if cooldown > 0.0 else "Q  扫描"
         var goofy_tip: String = _goofy_items.hint_text() if _goofy_items != null else ""
-        _hint_label.text = scan_tip + "    Shift  加速（更耗氧/体温）    F  拾取/回收    X  丢下    Tab  日志    M  地图    " + goofy_tip
+        if _on_frost_planet():
+            _hint_label.text = scan_tip + "    Shift  加速（更耗氧/体温）    F  拾取/回收    X  丢下    Tab  日志    M  地图    " + goofy_tip
+        else:
+            # 腐墟星没有失温机制，加速的代价是噪音而不是体温。
+            _hint_label.text = scan_tip + "    Shift  加速（提高噪音）    E  交互    F  拾取/回收    X  丢下    Tab  日志    M  地图    " + goofy_tip
         _update_compass(local)
         if _journal_map_view != null:
             _journal_map_view.update_state(Vector2(local.global_position.x, local.global_position.z), discovered_regions, true)
@@ -4425,6 +4460,10 @@ func _register_visible_landmarks() -> void:
             request_clue_discovery.rpc_id(1, clue_id)
 
 func _region_hint(position: Vector3) -> String:
+    # 腐墟星没有霜烬星那套冰原区域划分，直接沿用会让 HUD 显示「中央冰湖」之类的
+    # 霜烬星地名。这里改为按最近的建筑命名，远处就是外环废墟。
+    if not _on_frost_planet():
+        return _ruin_region_hint(position)
     # 直接由区域数据算，不再写死阈值：改地图时不需要同步改这里。
     var point := Vector2(position.x, position.z)
     var best_name := "外环冰原"
@@ -4447,6 +4486,23 @@ func _region_hint(position: Vector3) -> String:
             best_score = score
             best_name = region_name
     return best_name
+
+
+## 腐墟星的区域提示：按最近的建筑命名，远离建筑时叫外环废墟。
+func _ruin_region_hint(position: Vector3) -> String:
+    if _ruin_planet == null:
+        return "外环废墟"
+    var point := Vector2(position.x, position.z)
+    var best_name := "外环废墟"
+    var best_distance := 30.0
+    for id in _ruin_planet.buildings:
+        var entry: Vector3 = _ruin_planet.buildings[id].root.position
+        var distance := point.distance_to(Vector2(entry.x, entry.z))
+        if distance < best_distance:
+            best_distance = distance
+            best_name = String(_ruin_planet.buildings[id].name)
+    return best_name
+
 
 func _nearest_threat_distance(local: SpacePlayer3D) -> float:
     var nearest := INF
