@@ -19,6 +19,7 @@ var room: Node3D
 var stock := {"medical": 8, "oxygen": 8, "parts": 6}
 var packs: Dictionary = {}
 var ready_peers: Array[int] = []
+var selected_destination := "demo"
 var training: Dictionary = {}
 var hull := 80
 var credits := 0
@@ -122,7 +123,10 @@ func tick(delta: float) -> void:
                 broadcast()
     if controller._screen_view == "route":
         controller._land_button.disabled = not controller.is_host or not all_ready() or hull < 60
-        controller._route_status.text = "准备 %d / %d · 舰体 %d%%（需 ≥60%%）" % [ready_peers.size(), controller.connected_ids.size(), hull]
+        if controller._electro_land_button != null:
+            controller._electro_land_button.disabled = not controller.is_host or not all_ready() or hull < 60
+        var selected_title := String(PlanetRegistry.info(selected_destination).get("title", selected_destination))
+        controller._route_status.text = "已选%s · 准备 %d / %d · 舰体 %d%%（需 ≥60%%）" % [selected_title, ready_peers.size(), controller.connected_ids.size(), hull]
     elif controller._screen_view == "trade":
         controller._refresh_trade_buttons()
 
@@ -163,6 +167,7 @@ func enter_ship(to_hub: bool, ids: Array, state: Dictionary, vitals: Array = [])
     leave()
     active = true
     in_hub = to_hub
+    selected_destination = "demo"
     controller.connected_ids.assign(ids)
     controller.game_started = false
     apply_state(state)
@@ -467,7 +472,13 @@ func all_ready() -> bool:
 
 func confirm_land() -> void:
     if controller.is_host and active and hull >= 60 and all_ready():
-        controller._start_planet()
+        controller.start_planet(selected_destination)
+
+func select_destination(destination: String) -> void:
+    if destination not in ["demo", "electromagnetic", "ruin"]:
+        return
+    selected_destination = destination
+    controller._show_route()
 
 func add_peer(peer_id: int) -> void:
     if not packs.has(peer_id):
@@ -497,7 +508,7 @@ func settle(success: bool, value: int, report: String) -> void:
     save_state()
 
 func snapshot() -> Dictionary:
-    return {"stock": stock.duplicate(true), "packs": packs.duplicate(true), "ready": ready_peers.duplicate(), "training": training.duplicate(true), "hull": hull, "credits": credits, "last_report": last_report, "goofy_stock": goofy_stock.duplicate(true), "goofy_assignments": goofy_assignments.duplicate(true), "gear_stock": gear_stock.duplicate(true), "gear_assignments": gear_assignments.duplicate(true), "planet_states": planet_states.duplicate(true)}
+    return {"stock": stock.duplicate(true), "packs": packs.duplicate(true), "ready": ready_peers.duplicate(), "training": training.duplicate(true), "hull": hull, "credits": credits, "last_report": last_report, "goofy_stock": goofy_stock.duplicate(true), "goofy_assignments": goofy_assignments.duplicate(true), "gear_stock": gear_stock.duplicate(true), "gear_assignments": gear_assignments.duplicate(true), "planet_states": planet_states.duplicate(true), "selected_destination": selected_destination}
 
 func apply_state(state: Dictionary) -> void:
     stock = state.get("stock", stock).duplicate(true)
@@ -512,6 +523,7 @@ func apply_state(state: Dictionary) -> void:
     gear_stock = state.get("gear_stock", gear_stock).duplicate(true)
     gear_assignments = state.get("gear_assignments", gear_assignments).duplicate(true)
     planet_states = state.get("planet_states", planet_states).duplicate(true)
+    selected_destination = String(state.get("selected_destination", selected_destination))
     _refresh_panel()
     if active and not in_hub and room != null:
         (room as ShipTutorial3D).show_step(int(training.get(multiplayer.get_unique_id(), 0)))

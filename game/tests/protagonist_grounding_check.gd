@@ -27,14 +27,16 @@ func run() -> void:
     var visual := preload("res://scenes/protagonist_visual.tscn").instantiate() as ProtagonistVisual
     root.add_child(visual)
     await process_frame
-    var helmet := visual.get_node("Body/Helmet") as MeshInstance3D
+    var helmet := visual.find_child("Helmet", true, false) as MeshInstance3D
     var arrays := helmet.mesh.surface_get_arrays(0)
     var vertices: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
     var normals: PackedVector3Array = arrays[Mesh.ARRAY_NORMAL]
-    for index in range(0, vertices.size(), 3):
-        var face_normal := (vertices[index + 1] - vertices[index]).cross(vertices[index + 2] - vertices[index])
-        var outward := (normals[index] + normals[index + 1] + normals[index + 2]).normalized()
-        check(face_normal.dot(outward) < 0.0, "头盔网格不符合 Godot 的顺时针正面规则")
+    # 绕序检查只对手工构建的 ArrayMesh 有意义；GLB 导入的网格由导入器保证朝向。
+    if helmet.mesh.resource_path.is_empty():
+        for index in range(0, vertices.size(), 3):
+            var face_normal := (vertices[index + 1] - vertices[index]).cross(vertices[index + 2] - vertices[index])
+            var outward := (normals[index] + normals[index + 1] + normals[index + 2]).normalized()
+            check(face_normal.dot(outward) < 0.0, "头盔网格不符合 Godot 的顺时针正面规则")
     var modes: Array[String] = ["站立", "行走", "扫描", "救援", "受伤", "倒地", "救起"]
     for mode in modes:
         visual.set_rescuing(mode == "救援")

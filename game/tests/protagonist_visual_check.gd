@@ -12,10 +12,10 @@ func _run() -> void:
     await process_frame
     var visual := player.get_node_or_null("ProtagonistVisual") as ProtagonistVisual
     assert(visual != null, "主角视觉场景必须加载")
-    assert(visual.get_node_or_null("Body/Helmet") != null, "头盔网格缺失")
-    assert(visual.get_node_or_null("Body/Visor") != null, "面罩网格缺失")
-    assert(visual.get_node_or_null("Body/Backpack") != null, "背包网格缺失")
-    assert(visual.get_node_or_null("Body/LeftArmPivot/YellowShoulder") != null, "肩标网格缺失")
+    assert(visual.find_child("Helmet", true, false) != null, "头盔网格缺失")
+    assert(visual.find_child("Visor", true, false) != null, "面罩网格缺失")
+    assert(visual.find_child("Backpack", true, false) != null, "背包网格缺失")
+    assert(visual.find_child("YellowShoulder", true, false) != null, "肩标网格缺失")
     visual.update_state(0.016, Vector2.RIGHT, false, false, true, 5)
     assert(visual.get_node("Body/CarriedBattery").visible, "拾取后携带物需显示")
     visual.update_state(0.016, Vector2.ZERO, true, false, false, 0)

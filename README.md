@@ -8,7 +8,7 @@ GitHub 仓库：[FOXSGX/Lost-in-Space](https://github.com/FOXSGX/Lost-in-Space)�
 
 当前 `game/` 已切换为 Godot 4 的真实 3D 运行架构：使用 `Node3D`、正交 `Camera3D`、`CharacterBody3D` 和 `StaticBody3D`，以低模 3D + 正交视角呈现《弓箭手大作战》风格的 2.5D 体验。原 2D/伪 2.5D 版本已备份到 `backups/霜烬星-2.5d-20261009/`。
 
-当前可试玩流程为“主界面 → 可移动的归航号主舱 ↔ 训练舱 → 星际航线图 → 霜烬星 → 返回主舱”。主舱正按用户选择的精致卡通方向迭代，加入圆润设备、统一配色和舱内陈设；现为约 42×33 米的大空间，使用角色跟随镜头，整舱无法一屏看完。主舱已接入共享储物、舰体维修、补给恢复与物资制作、任务记录和全员准备。靠近设施按 `E`；星球内按 `3` 使用医疗包、按 `4` 使用氧气瓶。现场设备的持续操作会显示进度条，战斗和关键物资操作会显示浮动确认与轻量镜头反馈。玩法和可调整数值见 [`game/docs/ship-hub-3d.md`](game/docs/ship-hub-3d.md) 与 [`game/docs/interaction-experience.md`](game/docs/interaction-experience.md)。
+当前可试玩流程为“主界面 → 可移动的归航号主舱 ↔ 训练舱 → 星际航线图 → 霜烬星或共振星 → 返回主舱”。主舱正按用户选择的精致卡通方向迭代，加入圆润设备、统一配色和舱内陈设；现为约 42×33 米的大空间，使用角色跟随镜头，整舱无法一屏看完。主舱已接入共享储物、舰体维修、补给恢复与物资制作、任务记录和全员准备。靠近设施按 `E`；星球内按 `3` 使用医疗包、按 `4` 使用氧气瓶；共振星使用透视 3D 镜头、纵深机械结构、地面引导光点和“下一步”目标标牌，三节模块分别提供路线双端锁止、磁力货箱护送、交替光束校准，随后进入升降接力、镜面反射、冷却单元护送三段反应堆甲板任务，单人按 `Z` 部署辅助无人机。现场设备的持续操作会显示进度条，战斗和关键物资操作会显示浮动确认与轻量镜头反馈。玩法和可调整数值见 [`game/docs/ship-hub-3d.md`](game/docs/ship-hub-3d.md)、[`game/docs/interaction-experience.md`](game/docs/interaction-experience.md) 与 [`docs/design/planets/planet-01-共振星.md`](docs/design/planets/planet-01-共振星.md)。
 
 探索系统还包括地图线索支线、日志成就、星球长期状态、资源点刷新、失败资源散落、团队共享装备/货币和“星际集市·交易星球”。5—9 键是可以连续触发的欢乐道具，不设置冷却。实现细节见 [`game/docs/campaign-systems.md`](game/docs/campaign-systems.md)。
 
@@ -53,7 +53,7 @@ GitHub 仓库：[FOXSGX/Lost-in-Space](https://github.com/FOXSGX/Lost-in-Space)�
 - 运行入口：`game/project.godot`
 - 成员1交付说明：[`game/docs/week1-member1.md`](game/docs/week1-member1.md)
 - 主机端口：`24567`
-- 霜烬星测试：主机切换阶段后，靠近 3 个气象信标按 `E` 修复；电磁星球暂作为后续关卡保留。
+- 霜烬星测试：主机切换阶段后，靠近 3 个气象信标按 `E` 修复；共振星测试：模块 1 由导能和定场玩家双端锁止，模块 2 由搬运者和稳定者护送磁力货箱，模块 3 由队伍交替校准 A/B/C 光束，单人按 `Z` 部署辅助无人机。
 - Windows 导出预设：`game/export_presets.cfg`
 
 用 Godot 4.3+ 导入 `game/project.godot` 后运行。一个实例点击“创建主机”，其他实例输入主机局域网 IP 并点击“加入主机”。

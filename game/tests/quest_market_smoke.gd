@@ -42,9 +42,29 @@ func run() -> void:
     player.teleport_to(Vector3(-135, 0, -82))
     main.handle_action(1, "repair")
     check(bool(main.side_quest_states.echo_route.completed) and bool(main.achievement_flags.achievement_echo_route), "支线完成或成就没有解锁")
+    # 自由探索活动不占用主线：靠近地图上的青色活动点后，按 E 持续操作并获得共享回收价值。
+    check(main._roam_activities != null and main._roam_activities.states.size() == 3, "霜烬星没有建立自由探索活动点")
+    var roam_point := Vector2(main._roam_activities.positions.resource_cache)
+    player.teleport_to(Vector3(roam_point.x, 0.0, roam_point.y))
+    var before_salvage := main.salvage_value
+    main.handle_action(1, "repair")
+    check(main._roam_activities.has_interaction_job(1), "靠近青色自由活动点后没有开始持续操作")
+    main._roam_activities.tick(2.1)
+    check(int(main._roam_activities.states.resource_cache.stage) == 1 and main.salvage_value == before_salvage, "自由活动第一阶段没有正确推进")
+    main.handle_action(1, "repair")
+    main._roam_activities.tick(3.1)
+    check(int(main._roam_activities.states.resource_cache.completed_count) == 1 and main.salvage_value == before_salvage + 16, "自由活动完成后没有发放共享回收价值")
+    check(Vector2(main._roam_activities.positions.resource_cache) != roam_point, "自由活动完成后没有移动到下一处候选地点")
+    var found_roam_log := false
+    for entry in main.journal_entries:
+        if String(entry).contains("自由活动完成"):
+            found_roam_log = true
+            break
+    check(found_roam_log, "自由活动完成没有留下日志记录")
     if failures.is_empty():
         print("QUEST_MARKET_SMOKE_OK: %d checks" % checks)
         quit(0)
+        return
     for f in failures: push_error(f)
     quit(1)
 

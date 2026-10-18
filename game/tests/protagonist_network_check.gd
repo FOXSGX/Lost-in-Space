@@ -6,10 +6,13 @@ func _initialize() -> void:
     call_deferred("_run")
 
 func _run() -> void:
-    var mode := OS.get_cmdline_user_args()[0] if not OS.get_cmdline_user_args().is_empty() else ""
+    var args := OS.get_cmdline_user_args()
+    var mode := args[0] if not args.is_empty() else ""
+    var port := int(args[1]) if args.size() > 1 else 24567
     var game := MAIN_SCENE.instantiate() as Main3D
     root.add_child(game)
     await process_frame
+    game.network_port = port
     if mode == "host":
         game._create_host()
     elif mode == "client":
@@ -20,7 +23,9 @@ func _run() -> void:
         push_error("需要 host 或 client 参数")
         quit(2)
         return
-    await create_timer(2.0).timeout
+    var deadline := Time.get_ticks_msec() + 8000
+    while game.players.size() < 2 and Time.get_ticks_msec() < deadline:
+        await create_timer(0.1).timeout
     if game.players.size() < 2:
         push_error("联机角色未生成：%s，玩家数量 %d" % [mode, game.players.size()])
         quit(1)
@@ -31,13 +36,16 @@ func _run() -> void:
             quit(1)
             return
     if mode == "host":
-        await create_timer(0.3).timeout
+        await create_timer(1.0).timeout
         game.set_revive_visual.rpc(1, true)
         await create_timer(0.8).timeout
         game.set_revive_visual.rpc(1, false)
     else:
-        await create_timer(0.2).timeout
+        var rescue_deadline := Time.get_ticks_msec() + 2500
         var host_player := game.players.get(1) as SpacePlayer3D
+        while (host_player == null or not host_player._visual._rescuing) and Time.get_ticks_msec() < rescue_deadline:
+            await create_timer(0.1).timeout
+            host_player = game.players.get(1) as SpacePlayer3D
         if host_player == null or not host_player._visual._rescuing:
             push_error("客户端未收到救援动作同步")
             quit(1)

@@ -19,3 +19,11 @@ Desktop.ini
 # Godot 4 editor/import cache
 **/.godot/
 
+
+# 本地迭代产物与引擎缓存
+/work/
+/game/.godot/
+*.log
+
+# 本地引擎/工具二进制（不进仓库）
+/tools/

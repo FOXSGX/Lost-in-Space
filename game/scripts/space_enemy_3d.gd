@@ -22,14 +22,6 @@ func setup(id: int, player_count: int = 1) -> void:
     attack_damage = 2 if player_count >= 4 else 1
     _build_visual()
 
-# 让不同星球给同一种敌人换名字：霜烬星叫「霜噬生物」，腐墟星叫「感染体」。
-# 必须在 setup() 之后调用，因为标签是 _build_visual() 里创建的。
-func set_creature_label(next_name: String, next_hint: String) -> void:
-    display_name = next_name
-    hint_text = next_hint
-    if _name_label != null:
-        _name_label.text = "【%s】\n%s" % [display_name, hint_text]
-
 func _enter_tree() -> void:
     set_multiplayer_authority(1)
 
@@ -43,6 +35,12 @@ func _ready() -> void:
     shape.shape = capsule
     shape.position.y = 0.58
     add_child(shape)
+
+func set_creature_label(next_name: String, next_hint: String) -> void:
+    display_name = next_name
+    hint_text = next_hint
+    if _name_label != null:
+        _name_label.text = "【%s】\n%s" % [display_name, hint_text]
 
 func _build_visual() -> void:
     var body := MeshInstance3D.new()

@@ -15,6 +15,14 @@
 - `ai-generated/spaceship-cabin/README.md`：需求、布局建议与待讨论事项。
 - `editable/spaceship-cabin/`：对应的可编辑 3D 源脚本、GLB 模型、预览和交互位置建议。
 
+## 共振星高细节资产
+
+- `generated/resonance/resonance-grounded-factory-concept.png`：行星地表工业工厂概念参考，确定地面、轨道、移动模块和反应堆的空间关系。
+- `editable/resonance/build_resonance_module_hero.py`：Blender 5.2.2 便携版生成器，负责导出第一个高细节移动模块。
+- `editable/resonance/resonance_module_hero.blend`：可继续手工修改的 Blender 源文件。
+- `editable/resonance/resonance_module_hero-preview.png`：独立建模审阅图，不进入游戏运行时。
+- `../game/assets/resonance/models/resonance_module_hero.glb`：Godot 使用的运行时模型；具体导入和验证规则见 `../game/docs/resonance-asset-pipeline.md`。
+
 ## 参考图
 
 - `references/characters/`：人物低多边形切面风格参考。
