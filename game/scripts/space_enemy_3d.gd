@@ -1,6 +1,15 @@
 extends CharacterBody3D
 class_name SpaceEnemy3D
 
+# Only the frost caller opts in; other planets keep their existing combat rules.
+const FROST_WINDUP := 0.75
+const FROST_RECOVERY := 1.25
+const FROST_STRIKE_RADIUS := 1.6
+var frost_windup := 0.0
+var frost_recovery := 0.0
+var frost_strike_position := Vector3.ZERO
+var _strike_marker: MeshInstance3D
+
 var enemy_id := 0
 var display_name := "霜噬生物"
 var hint_text := "追踪热量 · 空格攻击"
@@ -117,8 +126,34 @@ func _glow_material(color: Color) -> StandardMaterial3D:
     material.roughness = 0.38
     return material
 
-func server_tick(delta: float, players: Dictionary, lure_position := Vector3.ZERO, lure_active := false, storm_active := false, goofy_lures: Array = []) -> Dictionary:
+func server_tick(delta: float, players: Dictionary, lure_position := Vector3.ZERO, lure_active := false, storm_active := false, goofy_lures: Array = [], frost_combat := false) -> Dictionary:
     if players.is_empty():
+        return {"sync": false}
+    if frost_combat and frost_windup > 0.0:
+        velocity = Vector3.ZERO
+        frost_windup = maxf(frost_windup - delta, 0.0)
+        if frost_windup <= 0.0:
+            var leap := frost_strike_position - global_position
+            leap.y = 0.0
+            move_and_collide(leap)
+            var controller := get_parent() as Main3D
+            for value in players.values():
+                var victim := value as SpacePlayer3D
+                if victim == null or victim.downed:
+                    continue
+                var offset := victim.global_position - global_position
+                if Vector2(offset.x, offset.z).length() <= FROST_STRIKE_RADIUS and absf(offset.y) < 2.0:
+                    if controller != null:
+                        controller.damage_player(victim.peer_id, attack_damage)
+            frost_recovery = FROST_RECOVERY
+            sync_frost_attack.rpc(false, frost_strike_position)
+            sync_transform.rpc(global_position)
+        return {"sync": true}
+    if frost_combat and frost_recovery > 0.0:
+        frost_recovery = maxf(frost_recovery - delta, 0.0)
+        velocity = Vector3.ZERO
+        if frost_recovery <= 0.0:
+            sync_frost_attack.rpc(false, frost_strike_position, true)
         return {"sync": false}
     var selected_lure := lure_position
     var has_lure := lure_active
@@ -163,6 +198,14 @@ func server_tick(delta: float, players: Dictionary, lure_position := Vector3.ZER
     direction.y = 0.0
     var actual_distance := global_position.distance_to(nearest.global_position)
     var storm_speed_scale := 1.32 if storm_active else 1.0
+    if frost_combat and actual_distance <= 2.8:
+        # Commit to the ground point, never follow a dodging player during windup.
+        frost_strike_position = nearest.global_position
+        frost_strike_position.y = global_position.y
+        frost_windup = FROST_WINDUP
+        velocity = Vector3.ZERO
+        sync_frost_attack.rpc(true, frost_strike_position)
+        return {"sync": true}
     if actual_distance > 1.35:
         velocity = direction.normalized() * move_speed * storm_speed_scale
         move_and_slide()
@@ -178,6 +221,26 @@ func server_tick(delta: float, players: Dictionary, lure_position := Vector3.ZER
         sync_transform.rpc(global_position)
         return {"sync": true}
     return {"sync": false}
+
+@rpc("authority", "reliable", "call_local")
+func sync_frost_attack(active: bool, target: Vector3, recovered := false) -> void:
+    if _strike_marker == null:
+        _strike_marker = MeshInstance3D.new()
+        var ring := TorusMesh.new()
+        ring.inner_radius = FROST_STRIKE_RADIUS - 0.14
+        ring.outer_radius = FROST_STRIKE_RADIUS
+        ring.rings = 32
+        ring.ring_segments = 8
+        _strike_marker.mesh = ring
+        _strike_marker.material_override = _glow_material(Color("#ffb347"))
+        add_child(_strike_marker)
+        _strike_marker.top_level = true
+    _strike_marker.global_position = target + Vector3(0, 0.12, 0)
+    _strike_marker.visible = active
+    if _name_label != null:
+        _name_label.text = "扑击蓄力 · 离开橙圈！" if active else "%s\n扑击后停顿 · 趁机反击" % display_name
+        if recovered:
+            _name_label.text = "%s\n靠近会扑击 · 留意橙圈" % display_name
 
 func take_damage(amount: int) -> bool:
     health = maxi(health - amount, 0)

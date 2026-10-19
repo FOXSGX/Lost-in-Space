@@ -467,7 +467,7 @@ func _process(delta: float) -> void:
     _check_enemy_triggers()
     for enemy in enemies.values():
         var lure_active := mission_elapsed < signal_lure_until
-        var result := (enemy as SpaceEnemy3D).server_tick(delta, players, signal_lure_position, lure_active, storm_active, _goofy_items.lure_positions() if _goofy_items != null else [])
+        var result := (enemy as SpaceEnemy3D).server_tick(delta, players, signal_lure_position, lure_active, storm_active, _goofy_items.lure_positions() if _goofy_items != null else [], true)
         if result.get("sync", false):
             _sync_state.rpc(_enemy_snapshot(), enemy_wave_index, enemy_wave_timer, activated_beacons, taken_crates, deposited_resources, _vitals_snapshot(), journal_entries, discovered_regions)
     _tick_survival(delta)
@@ -4601,7 +4601,7 @@ func _update_hud() -> void:
         elif local.oxygen <= 25.0:
             warning = "氧气不足 · 返回热源补氧"
         elif _nearest_threat_distance(local) <= 5.0:
-            warning = "霜噬生物正在靠近"
+            warning = "敌人扑击：离开橙圈，趁停顿反击"
         elif mission_elapsed < signal_lure_until:
             warning = "低频诱导生效 · 生物正在远离队伍"
         elif storm_active:
