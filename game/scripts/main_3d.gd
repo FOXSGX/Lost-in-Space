@@ -436,24 +436,27 @@ func _process(delta: float) -> void:
     for mark_action in ["mark_heat", "mark_clue", "clear_marker"]:
         if Input.is_action_just_pressed(mark_action):
             handle_action(multiplayer.get_unique_id(), mark_action)
-    if minigame_active:
-        _update_clue_minigame(delta)
-    _update_scan_visual(delta)
-    if _field_interactions != null:
-        _field_interactions.tick(delta)
-    if _roam_activities != null:
-        _roam_activities.tick(delta)
+    # 霜烬星特有的画面、天气与提示只在霜烬星运行。
+    # 腐墟星有自己的光照、天气和提示，混进来会看到暴风雪、霜烬星地标和它的剧情。
+    if current_planet_id != "ruin":
+        if minigame_active:
+            _update_clue_minigame(delta)
+        _update_scan_visual(delta)
+        if _field_interactions != null:
+            _field_interactions.tick(delta)
+        if _roam_activities != null:
+            _roam_activities.tick(delta)
+        _refresh_side_quest_sites()
+        _update_storm_visual(delta)
+        _update_vision_overlay()
+        _register_visible_landmarks()
+        _update_exploration_thought(delta)
+        _update_story(delta)
     if _goofy_items != null:
         _goofy_items.tick(delta)
-    _refresh_side_quest_sites()
-    _update_storm_visual(delta)
-    _update_vision_overlay()
     _update_hud()
     _update_interaction_hint()
-    _register_visible_landmarks()
     _update_feedback(delta)
-    _update_exploration_thought(delta)
-    _update_story(delta)
     if not is_host:
         return
     if mission_completed or mission_failed:
@@ -462,17 +465,21 @@ func _process(delta: float) -> void:
             var result_text := mission_summary if not mission_summary.is_empty() else ("任务完成，已返回飞船准备区。" if mission_completed else "登陆失败，已返回飞船准备区。")
             return_to_ship.rpc(result_text, _vitals_snapshot())
         return
-    _tick_story(delta)
-    _tick_storm(delta)
-    _check_enemy_triggers()
-    for enemy in enemies.values():
-        var lure_active := mission_elapsed < signal_lure_until
-        var result := (enemy as SpaceEnemy3D).server_tick(delta, players, signal_lure_position, lure_active, storm_active, _goofy_items.lure_positions() if _goofy_items != null else [])
-        if result.get("sync", false):
-            _sync_state.rpc(_enemy_snapshot(), enemy_wave_index, enemy_wave_timer, activated_beacons, taken_crates, deposited_resources, _vitals_snapshot(), journal_entries, discovered_regions)
-    _tick_survival(delta)
+    # 霜烬星的剧情、暴风雪、刷怪、体温生存和撤离判定都只在霜烬星跑。
+    # 腐墟星没有热源，如果在那边跑体温逻辑，玩家会必然失温倒地；
+    # 撤离判定也用的是霜烬星的信标条件，永远无法满足。
+    if current_planet_id != "ruin":
+        _tick_story(delta)
+        _tick_storm(delta)
+        _check_enemy_triggers()
+        for enemy in enemies.values():
+            var lure_active := mission_elapsed < signal_lure_until
+            var result := (enemy as SpaceEnemy3D).server_tick(delta, players, signal_lure_position, lure_active, storm_active, _goofy_items.lure_positions() if _goofy_items != null else [])
+            if result.get("sync", false):
+                _sync_state.rpc(_enemy_snapshot(), enemy_wave_index, enemy_wave_timer, activated_beacons, taken_crates, deposited_resources, _vitals_snapshot(), journal_entries, discovered_regions)
+        _tick_survival(delta)
+        _tick_extraction(delta)
     _tick_revive(delta)
-    _tick_extraction(delta)
     mission_elapsed += delta
     contract_sync_accumulator += delta
     if contract_sync_accumulator >= 0.5:
@@ -4545,17 +4552,20 @@ func _update_hud() -> void:
         _resonance_stage.update_hud(players.get(multiplayer.get_unique_id()) as SpacePlayer3D)
         return
     _objective_panel.visible = not _journal_visible
-    _side_quest_panel.visible = not _journal_visible
+    # 支线面板属于霜烬星，腐墟星上隐藏（这一条原本由 _on_frost_planet() 保证，
+    # 合并时随那个函数一起丢了）。
+    _side_quest_panel.visible = not _journal_visible and current_planet_id != "ruin"
     _vitals_panel.visible = not _journal_visible
     _hint_label.visible = not _journal_visible
     _compass_panel.visible = not _journal_visible
-    var phase := "探索霜烬星"
-    if extraction_enabled:
-        phase = "前往撤离平台"
-    elif _objectives_ready():
-        phase = "撤离前清理航道"
-    elif anomaly_resolved:
-        phase = "确认撤离路线"
+    var phase := "探索腐墟星" if current_planet_id == "ruin" else "探索霜烬星"
+    if current_planet_id != "ruin":
+        if extraction_enabled:
+            phase = "前往撤离平台"
+        elif _objectives_ready():
+            phase = "撤离前清理航道"
+        elif anomaly_resolved:
+            phase = "确认撤离路线"
     var local := players.get(multiplayer.get_unique_id()) as SpacePlayer3D
     if local != null:
         var carry_text := "背包空"
@@ -4573,15 +4583,31 @@ func _update_hud() -> void:
             signal_text = "高频 · 探测/风暴"
         elif signal_mode == "low":
             signal_text = "低频 · 诱导"
-        _progress_label.text = "%s · %s\n调查 %d/%d   信标 %d/%d\n%s   信号：%s   %.0fs\n下一步：%s" % [phase, _region_hint(local.global_position), knowledge_count, REQUIRED_KNOWLEDGE.size(), activated_beacons.size(), beacon_positions.size(), anomaly_text, signal_text, mission_elapsed, _next_objective_text()]
-        _update_side_quest_tracker(local)
-        _vitals_label.text = "生命 %d/5   氧气 %d%%   体温 %d%%\n%s" % [local.health, int(local.oxygen), int(local.warmth * 100.0), carry_text]
+        if current_planet_id == "ruin":
+            # 腐墟星没有信标、异常和信号频段，显示它自己的进度。
+            var ruin_noise := 0
+            var ruin_food := 0
+            var ruin_buildings := 0
+            if _ruin_planet != null:
+                ruin_noise = int(round(_ruin_planet.noise_level(local.peer_id) * 100.0))
+                ruin_food = _ruin_planet.food_sites.size() - _ruin_planet.taken_food.size()
+                ruin_buildings = _ruin_planet.discovered_buildings.size()
+            _progress_label.text = "%s · %s\n噪音 %d%%   物资剩余 %d   已发现建筑 %d/%d\n回收价值 %d   %.0fs" % [phase, _region_hint(local.global_position), ruin_noise, ruin_food, ruin_buildings, _ruin_planet.buildings.size() if _ruin_planet != null else 0, salvage_value, mission_elapsed]
+            _vitals_label.text = "生命 %d/5   氧气 %d%%\n%s" % [local.health, int(local.oxygen), carry_text]
+        else:
+            _progress_label.text = "%s · %s\n调查 %d/%d   信标 %d/%d\n%s   信号：%s   %.0fs\n下一步：%s" % [phase, _region_hint(local.global_position), knowledge_count, REQUIRED_KNOWLEDGE.size(), activated_beacons.size(), beacon_positions.size(), anomaly_text, signal_text, mission_elapsed, _next_objective_text()]
+            _update_side_quest_tracker(local)
+            _vitals_label.text = "生命 %d/5   氧气 %d%%   体温 %d%%\n%s" % [local.health, int(local.oxygen), int(local.warmth * 100.0), carry_text]
         var vital_color := Color("#ffad9f") if local.oxygen <= 25.0 or local.health <= 2 else Color("#d9eef4")
         _vitals_label.add_theme_color_override("font_color", vital_color)
         var cooldown := local.scan_cooldown_remaining
         var scan_tip := "Q  扫描 %.0fs" % ceilf(cooldown) if cooldown > 0.0 else "Q  扫描"
         var goofy_tip: String = _goofy_items.hint_text() if _goofy_items != null else ""
-        _hint_label.text = scan_tip + "    Shift  加速（更耗氧/体温）    F  拾取/回收    X  丢下    Tab  日志    M  地图    " + goofy_tip
+        if current_planet_id == "ruin":
+            # 腐墟星没有失温机制，加速的代价是噪音。
+            _hint_label.text = scan_tip + "    Shift  加速（提高噪音）    E  交互    F  拾取/回收    X  丢下    Tab  日志    M  地图    " + goofy_tip
+        else:
+            _hint_label.text = scan_tip + "    Shift  加速（更耗氧/体温）    F  拾取/回收    X  丢下    Tab  日志    M  地图    " + goofy_tip
         _update_compass(local)
         if _journal_map_view != null:
             _journal_map_view.update_state(Vector2(local.global_position.x, local.global_position.z), discovered_regions, true)
@@ -4736,6 +4762,9 @@ func _register_visible_landmarks() -> void:
             request_clue_discovery.rpc_id(1, clue_id)
 
 func _region_hint(position: Vector3) -> String:
+    # 腐墟星没有霜烬星那套冰原区域，直接沿用会显示「中央冰湖」之类的霜烬星地名。
+    if current_planet_id == "ruin":
+        return _ruin_region_hint(position)
     # 直接由区域数据算，不再写死阈值：改地图时不需要同步改这里。
     var point := Vector2(position.x, position.z)
     var best_name := "外环冰原"
@@ -4757,6 +4786,22 @@ func _region_hint(position: Vector3) -> String:
         if score > best_score:
             best_score = score
             best_name = region_name
+    return best_name
+
+
+## 腐墟星的区域提示：按最近的建筑命名，远离建筑时叫外环废墟。
+func _ruin_region_hint(position: Vector3) -> String:
+    if _ruin_planet == null:
+        return "外环废墟"
+    var point := Vector2(position.x, position.z)
+    var best_name := "外环废墟"
+    var best_distance := 30.0
+    for id in _ruin_planet.buildings:
+        var entry: Vector3 = _ruin_planet.buildings[id].root.position
+        var distance := point.distance_to(Vector2(entry.x, entry.z))
+        if distance < best_distance:
+            best_distance = distance
+            best_name = String(_ruin_planet.buildings[id].name)
     return best_name
 
 func _nearest_threat_distance(local: SpacePlayer3D) -> float:
