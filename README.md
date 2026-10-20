@@ -12,6 +12,22 @@ GitHub 仓库：[FOXSGX/Lost-in-Space](https://github.com/FOXSGX/Lost-in-Space)�
 
 探索系统还包括地图线索支线、日志成就、星球长期状态、资源点刷新、失败资源散落、团队共享装备/货币和“星际集市·交易星球”。5—9 键是可以连续触发的欢乐道具，不设置冷却。实现细节见 [`game/docs/campaign-systems.md`](game/docs/campaign-systems.md)。
 
+## 共振星 03.1 绞盘原型（独立预览）
+
+`game/previews/resonance_03_winch_prototype/` 是独立单人试玩原型：第三人称走到断裂轨道，选择吊耳挂缆，
+回绞盘收放，观察轨道实际移动、过冲与放线回摆，最后到锁定座插销。正常 HUD 只给目标/状态/张力条，
+F3 才显示角度等调试数据。**尚未接入正式共振星关卡**，等 Resonance 02 质量返工验收后再讨论整合。
+
+- 工程说明：[`README.md`](game/previews/resonance_03_winch_prototype/README.md)
+- 操作说明：[`README_试玩说明.txt`](game/previews/resonance_03_winch_prototype/README_试玩说明.txt)
+- 已知问题：[`KNOWN-ISSUES.md`](game/previews/resonance_03_winch_prototype/KNOWN-ISSUES.md)
+- 帧时间分析：[`PERFORMANCE.md`](game/previews/resonance_03_winch_prototype/PERFORMANCE.md)
+- 交接：[`HANDOFF.md`](game/previews/resonance_03_winch_prototype/HANDOFF.md)
+- 单人试玩包：`builds/Resonance_03_Winch_v0.1_20261020/`（双击 `启动_Resonance_03_Winch.cmd`）
+- 本轮证据：`work/gameplay-iterations/20261020-resonance-03-1-playability/`
+
+真人试玩尚未进行；自动探针通过不等于玩法已被证明有趣。
+
 ## 从这里开始
 
 - [第一次会议纪要与项目共识](docs/meetings/第一次会议纪要与项目共识.md)
