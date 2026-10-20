@@ -467,7 +467,7 @@ func _process(delta: float) -> void:
     _check_enemy_triggers()
     for enemy in enemies.values():
         var lure_active := mission_elapsed < signal_lure_until
-        var result := (enemy as SpaceEnemy3D).server_tick(delta, players, signal_lure_position, lure_active, storm_active, _goofy_items.lure_positions() if _goofy_items != null else [])
+        var result := (enemy as SpaceEnemy3D).server_tick(delta, players, signal_lure_position, lure_active, storm_active, _goofy_items.lure_positions() if _goofy_items != null else [], true)
         if result.get("sync", false):
             _sync_state.rpc(_enemy_snapshot(), enemy_wave_index, enemy_wave_timer, activated_beacons, taken_crates, deposited_resources, _vitals_snapshot(), journal_entries, discovered_regions)
     _tick_survival(delta)
@@ -482,6 +482,7 @@ func _process(delta: float) -> void:
     if _vitals_accumulator >= 0.1:
         _vitals_accumulator = 0.0
         sync_vitals.rpc(_vitals_snapshot())
+        sync_extraction_state.rpc(extraction_enabled, extraction_progress)
 
 func _build_ui() -> void:
     _menu_layer = CanvasLayer.new()
@@ -4105,15 +4106,22 @@ func fail_mission() -> void:
     mission_summary = "全员倒地：回收价值 %d，发现区域 %d，样本 %d。" % [salvage_value, discovered_regions.size(), taken_samples.size()]
     _set_status(mission_summary)
 
+@rpc("authority", "call_remote", "unreliable_ordered")
+func sync_extraction_state(enabled: bool, progress: float) -> void:
+    if not game_started or ship_active or current_planet_id != "demo":
+        return
+    extraction_enabled = enabled
+    extraction_progress = clampf(progress, 0.0, 3.0) if enabled else 0.0
+
 func _tick_extraction(delta: float) -> void:
-    if not _objectives_ready() or not enemies.is_empty():
+    if not _objectives_ready():
         extraction_enabled = false
         extraction_progress = 0.0
         return
     if not extraction_enabled:
-        _set_status("地下异常已处理且区域已清场，撤离点开放；携带物资属于额外回收。")
+        _set_status("地下异常已处理，撤离点开放！可以诱开敌人直接撤离，额外回收由你决定。")
     extraction_enabled = true
-    var all_ready := true
+    var all_ready := not players.is_empty()
     for player in players.values():
         var p := player as SpacePlayer3D
         if p.downed or _flat_distance(p.global_position, Vector3(EXTRACTION.x, 0, EXTRACTION.y)) > 2.5:
@@ -4274,7 +4282,7 @@ func _enemy_snapshot() -> Array:
     return snapshot
 
 func _world_snapshot() -> Dictionary:
-    return {"planet_id": current_planet_id, "ruin_enemies": _ruin_planet.enemy_snapshot() if (_ruin_planet != null and current_planet_id == "ruin") else [], "kit": kit_assignments.duplicate(true), "credits": credits, "owned_skins": owned_skins, "player_skins": player_skins.duplicate(true), "resonance_state": _resonance_stage.stage_snapshot() if current_planet_id == "electromagnetic" and _resonance_stage != null else {}, "ship_state": _ship_session.snapshot(), "wave": enemy_wave_index, "timer": enemy_wave_timer, "enemies": _enemy_snapshot(), "beacons": activated_beacons, "crates": taken_crates, "samples": taken_samples, "deposited": deposited_resources, "salvage": salvage_value, "mission_elapsed": mission_elapsed, "knowledge": knowledge_flags.keys(), "anomaly_resolved": anomaly_resolved, "ending_choice": ending_choice, "story_flags": story_flags, "side_quest_states": side_quest_states, "achievements": achievement_flags, "world_flags": world_flags, "resource_epoch": _planet_resource_epoch, "lost_cargo": lost_cargo, "rift_valve_open": rift_valve_open, "signal_mode": signal_mode, "signal_lure_until": signal_lure_until, "signal_lure_position": signal_lure_position, "signal_cooldown_until": signal_cooldown_until, "map_markers": map_markers, "vitals": _vitals_snapshot(), "beacon_positions": beacon_positions, "crate_positions": crate_positions, "sample_positions": sample_positions, "journal": journal_entries, "regions": discovered_regions, "clues": discovered_clues, "scan_clues": scan_revealed_clues, "scan_device_active": scan_device_active, "scan_device_position": scan_device_position, "scan_remaining": scan_remaining, "goofy_effects": _goofy_items.snapshot() if _goofy_items != null else [], "field_state": _field_interactions.snapshot() if _field_interactions != null else {}, "roam_state": _roam_activities.snapshot() if _roam_activities != null else {}}
+    return {"extraction_enabled": extraction_enabled, "extraction_progress": extraction_progress, "planet_id": current_planet_id, "ruin_enemies": _ruin_planet.enemy_snapshot() if (_ruin_planet != null and current_planet_id == "ruin") else [], "kit": kit_assignments.duplicate(true), "credits": credits, "owned_skins": owned_skins, "player_skins": player_skins.duplicate(true), "resonance_state": _resonance_stage.stage_snapshot() if current_planet_id == "electromagnetic" and _resonance_stage != null else {}, "ship_state": _ship_session.snapshot(), "wave": enemy_wave_index, "timer": enemy_wave_timer, "enemies": _enemy_snapshot(), "beacons": activated_beacons, "crates": taken_crates, "samples": taken_samples, "deposited": deposited_resources, "salvage": salvage_value, "mission_elapsed": mission_elapsed, "knowledge": knowledge_flags.keys(), "anomaly_resolved": anomaly_resolved, "ending_choice": ending_choice, "story_flags": story_flags, "side_quest_states": side_quest_states, "achievements": achievement_flags, "world_flags": world_flags, "resource_epoch": _planet_resource_epoch, "lost_cargo": lost_cargo, "rift_valve_open": rift_valve_open, "signal_mode": signal_mode, "signal_lure_until": signal_lure_until, "signal_lure_position": signal_lure_position, "signal_cooldown_until": signal_cooldown_until, "map_markers": map_markers, "vitals": _vitals_snapshot(), "beacon_positions": beacon_positions, "crate_positions": crate_positions, "sample_positions": sample_positions, "journal": journal_entries, "regions": discovered_regions, "clues": discovered_clues, "scan_clues": scan_revealed_clues, "scan_device_active": scan_device_active, "scan_device_position": scan_device_position, "scan_remaining": scan_remaining, "goofy_effects": _goofy_items.snapshot() if _goofy_items != null else [], "field_state": _field_interactions.snapshot() if _field_interactions != null else {}, "roam_state": _roam_activities.snapshot() if _roam_activities != null else {}}
 
 func _vitals_snapshot() -> Array:
     var snapshot: Array = []
@@ -4334,6 +4342,8 @@ func sync_full_state(snapshot: Dictionary) -> void:
         return
     if not game_started:
         _start_planet()
+    extraction_enabled = bool(snapshot.get("extraction_enabled", false))
+    extraction_progress = float(snapshot.get("extraction_progress", 0.0))
     enemy_wave_index = int(snapshot.get("wave", 0))
     enemy_wave_timer = float(snapshot.get("timer", 0.0))
     activated_beacons.assign(snapshot.get("beacons", []))
@@ -4516,7 +4526,14 @@ func _next_objective_text() -> String:
     if mission_failed:
         return "全队倒地，正在返航"
     if extraction_enabled:
-        return "全队进入蓝色撤离平台并保持 3 秒"
+        var ready_count := 0
+        for value in players.values():
+            var player := value as SpacePlayer3D
+            if player != null and not player.downed and _flat_distance(player.global_position, Vector3(EXTRACTION.x, 0, EXTRACTION.y)) <= 2.5:
+                ready_count += 1
+        if extraction_progress > 0.0:
+            return "全队保持在蓝色平台 · 起飞还需 %.1f 秒" % (3.0 - extraction_progress)
+        return "蓝色平台集合 %d/%d · 救起倒地队友 · 不必清怪" % [ready_count, players.size()]
     if not knowledge_flags.has("weather_station"):
         if activated_beacons.is_empty():
             return "部署扫描器寻找第一座气象信标"
@@ -4529,8 +4546,7 @@ func _next_objective_text() -> String:
         return "修复剩余气象信标（%d/%d）" % [activated_beacons.size(), beacon_positions.size()]
     if not anomaly_resolved:
         return "回到通信阵列，按 E 稳定或按 G 关闭地下异常"
-    if not enemies.is_empty():
-        return "清除撤离航道上的剩余敌人"
+
     return "前往撤离平台集合"
 
 func _update_hud() -> void:
@@ -4553,7 +4569,7 @@ func _update_hud() -> void:
     if extraction_enabled:
         phase = "前往撤离平台"
     elif _objectives_ready():
-        phase = "撤离前清理航道"
+        phase = "前往撤离平台"
     elif anomaly_resolved:
         phase = "确认撤离路线"
     var local := players.get(multiplayer.get_unique_id()) as SpacePlayer3D
@@ -4601,7 +4617,7 @@ func _update_hud() -> void:
         elif local.oxygen <= 25.0:
             warning = "氧气不足 · 返回热源补氧"
         elif _nearest_threat_distance(local) <= 5.0:
-            warning = "霜噬生物正在靠近"
+            warning = "敌人扑击：离开橙圈，趁停顿反击"
         elif mission_elapsed < signal_lure_until:
             warning = "低频诱导生效 · 生物正在远离队伍"
         elif storm_active:
@@ -4609,7 +4625,7 @@ func _update_hud() -> void:
         elif knowledge_flags.has("relay") and not anomaly_resolved:
             warning = "通信阵列预报 · 距离风暴 %.0fs" % maxf(STORM_INTERVAL - storm_elapsed, 0.0)
         elif extraction_enabled:
-            warning = "撤离开放 · 全队集合"
+            warning = "撤离开放 · 不必清怪，直接集合"
         _alert_label.text = warning
         _alert_label.visible = not warning.is_empty()
         _alert_label.add_theme_color_override("font_color", Color("#ffad9f") if local.downed or local.oxygen <= 25.0 else Color("#ffd089"))
@@ -4840,7 +4856,7 @@ func _update_interaction_hint() -> void:
                 if local.carrying > 0 and distance <= 2.4:
                     text = "[G]  投送携带物"
                 elif extraction_enabled:
-                    text = "全队留在平台 · 撤离 %.1f / 3 秒" % extraction_progress
+                    text = "全队留在平台 · 起飞还需 %.1f 秒 · 无需清怪" % (3.0 - extraction_progress)
         if not text.is_empty():
             prompts.append({"distance": distance, "priority": 50, "text": text})
     for landmark in LANDMARK_DATA:
