@@ -32,13 +32,13 @@ func item_name(item_id: String) -> String:
     return String(ITEM_DATA.get(item_id, {}).get("name", item_id))
 
 func hint_text() -> String:
-    return "5 企鹅  6 失重泡  7 滑板  8 替身  9 彩烟"
+    return "1 / 2 选物品 · 左键使用欢乐道具"
 
 func activate(peer_id: int, item_id: String) -> void:
     if not ITEM_DATA.has(item_id) or not controller.is_host:
         return
     var player := controller.players.get(peer_id) as SpacePlayer3D
-    if player == null or player.downed or not controller.game_started or controller.mission_completed or controller.mission_failed:
+    if player == null or player.downed or (not controller.game_started and not controller.ship_active) or controller.mission_completed or controller.mission_failed:
         return
     var effect_id := _next_effect_id
     _next_effect_id += 1
@@ -58,7 +58,12 @@ func spawn_local(item_id: String, origin: Vector3, direction: Vector3, caster_id
     else:
         effect.node = _build_effect_node(item_id, origin, data.color)
         if effect.node != null:
-            controller._world_root.add_child(effect.node)
+            var parent: Node3D = controller._ship_session.room if controller.ship_active else controller._world_root
+            if parent != null:
+                parent.add_child(effect.node)
+                if controller.ship_active:
+                    for label: Node in effect.node.find_children("*", "Label3D", true, false):
+                        (label as Label3D).visible = false
     active_effects.append(effect)
 
 func tick(delta: float) -> void:

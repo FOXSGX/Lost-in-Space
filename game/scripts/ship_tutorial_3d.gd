@@ -1,149 +1,185 @@
 extends Node3D
 class_name ShipTutorial3D
 
-const STATION_POSITIONS := [
-    Vector3(-7.0, 0.0, -3.3), # 扫描
-    Vector3(-2.8, 0.0, -3.3), # 修复
-    Vector3(1.4, 0.0, -3.3), # 拾取
-    Vector3(5.7, 0.0, -3.3), # 投送
-    Vector3(5.7, 0.0, 2.8), # 攻击
-    Vector3(1.4, 0.0, 2.8), # 救援
-    Vector3(-6.2, 0.0, 2.8), # 航线
-]
-const STATION_NAMES := ["Q 扫描", "E 修复", "F 拾取", "G 投送", "空格 攻击", "R 救援", "E 航线"]
-const STATION_COLORS := [
-    Color("#62d9f3"), Color("#f3c76a"), Color("#73e0a3"),
-    Color("#69bfff"), Color("#ff8a8e"), Color("#f0a7ff"), Color("#7be8dc")
-]
-
-var _station_lights: Array[OmniLight3D] = []
-var _station_labels: Array[Label3D] = []
-var _battery: MeshInstance3D
-var _target: MeshInstance3D
-var _rescue_light: OmniLight3D
+const ENTRY_POINT: Vector3 = Vector3(8.1, 0, 5.1)
+const ENTRY_YAW: float = 0.85
+const HOP_POINT: Vector3 = Vector3(-3.8, 0.55, 3.8)
+const BOOST_POINT: Vector3 = Vector3(-4.2, 2.6, -2.3)
+const CROSS_POINT: Vector3 = Vector3(2.2, 4.35, -2.3)
+const FINISH_POINT: Vector3 = Vector3(6.4, 5.7, 2.5)
+# Old diagnostic scripts can still resolve these landmarks; the stations are gone.
+const INSTALL_POINT: Vector3 = BOOST_POINT
+const SCAN_POINT: Vector3 = CROSS_POINT
+const TARGET_POINT: Vector3 = FINISH_POINT
+const NATIVE: String = "res://assets/ship-hub/kenney/space-station/"
+const TABLE: PackedScene = preload(NATIVE + "table-large.glb")
+const FLOOR: PackedScene = preload(NATIVE + "floor-detail.glb")
+const WALL: PackedScene = preload(NATIVE + "wall-banner.glb")
+const WINDOW: PackedScene = preload(NATIVE + "wall-window.glb")
+const DOOR: PackedScene = preload("res://assets/ship-hub/kenney/modular-space/gate-door-window.glb")
+const POSTERS: Dictionary = {
+    "equip": preload("res://assets/training-wall-posters/01-equip.png"),
+    "jump": preload("res://assets/training-wall-posters/02-jump.png"),
+    "boost": preload("res://assets/training-wall-posters/03-boost.png"),
+    "recharge": preload("res://assets/training-wall-posters/04-recharge.png"),
+    "cross": preload("res://assets/training-wall-posters/05-cross.png"),
+    "exit": preload("res://assets/training-wall-posters/06-exit.png"),
+}
+var _markers: Array[MeshInstance3D] = []
+var _step: int = 0
 
 func _ready() -> void:
     _build_room()
-    _build_stations()
-    show_step(0)
+    _build_course()
+    show_step(_step)
 
 func station_position(step: int) -> Vector3:
-    return STATION_POSITIONS[clampi(step - 1, 0, STATION_POSITIONS.size() - 1)]
+    var points: Array[Vector3] = [Vector3(-7, 0, 3.8), Vector3(-7, 0, 3.8), HOP_POINT, BOOST_POINT, FINISH_POINT, FINISH_POINT]
+    return points[clampi(step, 0, points.size() - 1)]
 
 func show_step(step: int) -> void:
-    for index in _station_lights.size():
-        var active := index == step - 1 or (step >= 7 and index == 6)
-        _station_lights[index].light_energy = 2.4 if active else 0.55
-        _station_labels[index].modulate = Color.WHITE if active else Color("#7896a5")
-    if _battery != null:
-        _battery.visible = step < 4
-    if _target != null:
-        _target.visible = step < 6
-    if _rescue_light != null:
-        _rescue_light.light_color = Color("#79e5a9") if step >= 7 else Color("#f0a7ff")
+    _step = step
+    for index: int in _markers.size():
+        _markers[index].material_override = _material(Color("#a5f1d0") if step >= mini(index + 3, 5) else Color("#eeb663"), true)
 
 func _build_room() -> void:
-    var environment := WorldEnvironment.new()
-    var env := Environment.new()
+    var environment: WorldEnvironment = WorldEnvironment.new()
+    var env: Environment = Environment.new()
     env.background_mode = Environment.BG_COLOR
-    env.background_color = Color("#030b17")
+    env.background_color = Color("#182f48")
     env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-    env.ambient_light_color = Color("#89b7ce")
-    env.ambient_light_energy = 0.55
+    env.ambient_light_color = Color("#d2e6ec")
+    env.ambient_light_energy = 0.75
     environment.environment = env
     add_child(environment)
+    _solid("WalkableHull", Vector3(0, -0.12, 0), Vector3(21, 0.24, 13.5))
+    _box("FloorBase", Vector3(0, -0.15, 0), Vector3(21, 0.15, 13.5), Color("#344e64"))
+    _solid("ForwardWallCollision", Vector3(0, 4.6, -6.65), Vector3(21, 9.2, 0.25))
+    _solid("AftWallCollision", Vector3(0, 4.6, 6.65), Vector3(21, 9.2, 0.25))
+    for side: int in [-1, 1]:
+        _solid("SideWallCollision", Vector3(side * 10.4, 4.6, 0), Vector3(0.25, 9.2, 13.5))
+        for z: float in [-4.5, 0, 4.5]:
+            _native(WINDOW, Vector3(side * 10.4, 0, z), Vector3(4.5, 3.45, 0.22), side * -PI / 2.0)
+        _box("UpperSideHull", Vector3(side * 10.45, 6.3, 0), Vector3(0.2, 5.7, 13.5), Color("#355268"))
+    for ix: int in 5:
+        var x: float = -8.4 + ix * 4.2
+        _native(WALL, Vector3(x, 0, -6.65), Vector3(4.19, 3.45, 0.22))
+        if ix < 4:
+            _native(WALL, Vector3(x, 0, 6.65), Vector3(4.19, 3.45, 0.22), PI)
+        for iz: int in 3:
+            _native(FLOOR, Vector3(x, -0.08, -4.4 + iz * 4.4), Vector3(4.17, 0.08, 4.37))
+    for z: float in [-6.7, 6.7]:
+        _box("UpperHull", Vector3(0, 6.3, z), Vector3(21, 5.7, 0.2), Color("#355268"))
+        for y: float in [3.6, 6.6, 8.8]:
+            _box("HullStripe", Vector3(0, y, z * 0.98), Vector3(20.5, 0.08, 0.08), Color("#739eaa"), true)
+    _native(DOOR, Vector3(8.1, 0, 6.45), Vector3(3.65, 3.35, 0.45), PI)
+    _solid("CeilingCollision", Vector3(0, 9.3, 0), Vector3(21, 0.2, 13.5))
+    _box("Ceiling", Vector3(0, 9.4, 0), Vector3(21, 0.2, 13.5), Color("#263f57"))
+    for x: float in [-7, 0, 7]:
+        _box("CeilingLight", Vector3(x, 9.12, 0), Vector3(3.0, 0.06, 0.25), Color("#daf5ee"), true)
+        var light: OmniLight3D = OmniLight3D.new()
+        light.position = Vector3(x, 6.5, 0)
+        light.light_color = Color("#e3f5ef")
+        light.light_energy = 2.3
+        light.omni_range = 14.0
+        add_child(light)
+    _wall_poster("exit", Vector3(8.1, 3.95, 6.55), Vector2(2.4, 1.44), PI)
 
-    var ceiling_light := DirectionalLight3D.new()
-    ceiling_light.rotation_degrees = Vector3(-58.0, -24.0, 0.0)
-    ceiling_light.light_color = Color("#b5dfff")
-    ceiling_light.light_energy = 0.9
-    ceiling_light.shadow_enabled = true
-    add_child(ceiling_light)
+func _build_course() -> void:
+    _native(TABLE, Vector3(-7, 0, 3.8), Vector3(1.7, 0.9, 1.0))
+    _solid("OxygenRack", Vector3(-7, 0.45, 3.8), Vector3(1.7, 0.9, 1.0))
+    _wall_poster("equip", Vector3(-10.245, 1.95, 3.8), Vector2(3.2, 1.92), PI / 2.0)
+    _platform("Hop", HOP_POINT, Vector2(2.4, 2.4), Color("#669eaa"))
+    _platform("Boost", BOOST_POINT, Vector2(3.3, 3.2), Color("#64bfb1"))
+    _platform("Cross", CROSS_POINT, Vector2(3.2, 3.2), Color("#77b9cb"))
+    _platform("Finish", FINISH_POINT, Vector2(3.0, 2.8), Color("#dfae69"))
+    _wall_poster("jump", Vector3(-3.8, 1.85, 6.49), Vector2(3.2, 1.92), PI)
+    _wall_poster("boost", Vector3(-4.2, 4.45, -6.55), Vector2(3.6, 2.16))
+    _wall_poster("recharge", Vector3(2.2, 6.1, -6.55), Vector2(3.6, 2.16))
+    _wall_poster("cross", Vector3(10.245, 7.2, 2.5), Vector2(3.4, 2.04), -PI / 2.0)
+    for pair: Array in [[Vector3(-6, 0.035, 3.8), HOP_POINT], [HOP_POINT, BOOST_POINT], [BOOST_POINT, CROSS_POINT], [CROSS_POINT, FINISH_POINT]]:
+        var start: Vector3 = pair[0]
+        var end: Vector3 = pair[1]
+        for index: int in 7:
+            var point: Vector3 = start.lerp(end, float(index) / 7.0)
+            point.y = 0.02
+            _box("RouteDot", point, Vector3(0.16, 0.02, 0.16), Color("#b9eedb"), true)
 
-    var hull := StaticBody3D.new()
-    hull.name = "WalkableHull"
-    hull.collision_layer = 2
-    add_child(hull)
-    _box(hull, "Deck", Vector3(21.0, 0.25, 13.5), Vector3(0.0, -0.17, 0.0), Color("#193548"))
-    var floor_shape := CollisionShape3D.new()
-    var floor_box := BoxShape3D.new()
-    floor_box.size = Vector3(21.0, 0.25, 13.5)
-    floor_shape.shape = floor_box
-    floor_shape.position.y = -0.17
-    hull.add_child(floor_shape)
-    for wall in [
-        [Vector3(-10.5, 1.0, 0.0), Vector3(0.35, 2.0, 13.5)],
-        [Vector3(10.5, 1.0, 0.0), Vector3(0.35, 2.0, 13.5)],
-        [Vector3(0.0, 1.0, -6.75), Vector3(21.0, 2.0, 0.35)],
-        [Vector3(0.0, 1.0, 6.75), Vector3(21.0, 2.0, 0.35)],
-    ]:
-        _box(hull, "HullWall", wall[1], wall[0], Color("#315367"))
-        var wall_shape := CollisionShape3D.new()
-        var wall_box := BoxShape3D.new()
-        wall_box.size = wall[1]
-        wall_shape.shape = wall_box
-        wall_shape.position = wall[0]
-        hull.add_child(wall_shape)
+func _platform(title: String, top: Vector3, footprint: Vector2, color: Color) -> void:
+    var thickness: float = minf(top.y, 0.28)
+    var center: Vector3 = Vector3(top.x, top.y - thickness * 0.5, top.z)
+    var size: Vector3 = Vector3(footprint.x, thickness, footprint.y)
+    _solid(title + "PlatformCollision", center, size)
+    _box(title + "Platform", center, size, color.darkened(0.25))
+    _box(title + "LandingPad", top + Vector3.UP * 0.015, Vector3(footprint.x, 0.035, footprint.y), color)
+    _markers.append(_box(title + "LandingStripe", top + Vector3(0, 0.04, footprint.y * 0.5 - 0.12), Vector3(footprint.x - 0.2, 0.035, 0.12), Color("#eeb663"), true))
+    for x: float in [-footprint.x * 0.4, footprint.x * 0.4]:
+        for z: float in [-footprint.y * 0.4, footprint.y * 0.4]:
+            var leg: Vector3 = Vector3(top.x + x, (top.y - thickness) * 0.5, top.z + z)
+            var leg_size: Vector3 = Vector3(0.13, maxf(0.1, top.y - thickness), 0.13)
+            _box(title + "Support", leg, leg_size, color.lightened(0.15))
+            _solid(title + "SupportCollision", leg, leg_size)
 
-    for x in [-8.4, -4.2, 0.0, 4.2, 8.4]:
-        _box(self, "DeckStripe", Vector3(0.055, 0.012, 10.8), Vector3(x, 0.01, 0.0), Color("#31556a"))
-    _box(self, "CenterWalkway", Vector3(18.0, 0.018, 1.55), Vector3(0.0, 0.02, 0.0), Color("#274c60"))
-    for z in [-5.9, 5.9]:
-        for x in [-8.0, -3.0, 2.0, 7.0]:
-            _box(self, "ObservationWindow", Vector3(2.7, 0.8, 0.08), Vector3(x, 1.2, z), Color("#28708b"), Color("#3089aa"))
-    for x in [-8.6, 8.6]:
-        var lamp := OmniLight3D.new()
-        lamp.position = Vector3(x, 3.0, 0.0)
-        lamp.light_color = Color("#6dd8e6")
-        lamp.light_energy = 1.3
-        lamp.omni_range = 8.0
-        add_child(lamp)
+func _wall_poster(poster_id: String, point: Vector3, size: Vector2, yaw: float = 0.0) -> void:
+    var frame: MeshInstance3D = _box("WallPoster_" + poster_id, point, Vector3(size.x + 0.12, size.y + 0.12, 0.08), Color("#243e4e"))
+    frame.rotation.y = yaw
+    var image: MeshInstance3D = MeshInstance3D.new()
+    image.name = "PrintedImage"
+    var plane: QuadMesh = QuadMesh.new()
+    plane.size = size
+    image.mesh = plane
+    image.position.z = 0.045
+    var material: StandardMaterial3D = StandardMaterial3D.new()
+    material.albedo_texture = POSTERS[poster_id] as Texture2D
+    material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+    material.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC
+    image.material_override = material
+    frame.add_child(image)
 
-func _build_stations() -> void:
-    for index in STATION_POSITIONS.size():
-        var station := Node3D.new()
-        station.name = "TrainingStation_%d" % (index + 1)
-        station.position = STATION_POSITIONS[index]
-        add_child(station)
-        _box(station, "StationBase", Vector3(1.4, 0.24, 1.25), Vector3(0, 0.12, 0), Color("#416078"))
-        _box(station, "ControlPanel", Vector3(0.9, 0.7, 0.55), Vector3(0, 0.62, -0.15), STATION_COLORS[index], STATION_COLORS[index])
-        var light := OmniLight3D.new()
-        light.position = Vector3(0, 1.4, 0)
-        light.light_color = STATION_COLORS[index]
-        light.omni_range = 3.3
-        station.add_child(light)
-        _station_lights.append(light)
-        var label := Label3D.new()
-        label.text = STATION_NAMES[index]
-        label.position = Vector3(0, 1.65, 0)
-        label.font_size = 36
-        label.pixel_size = 0.011
-        label.outline_size = 8
-        label.outline_modulate = Color("#06111b")
-        label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-        station.add_child(label)
-        _station_labels.append(label)
-        if index == 2:
-            _battery = _box(station, "PracticeBattery", Vector3(0.44, 0.55, 0.4), Vector3(0, 1.18, 0.22), Color("#6fe6a1"), Color("#55db8e"))
-        elif index == 4:
-            _target = _box(station, "TargetHologram", Vector3(0.55, 1.1, 0.55), Vector3(0, 1.15, 0.2), Color("#ff858b"), Color("#ef4d64"))
-        elif index == 5:
-            _rescue_light = light
+func _native(scene: PackedScene, point: Vector3, size: Vector3, yaw: float = 0.0) -> void:
+    var root: Node3D = Node3D.new()
+    root.position = point
+    root.rotation.y = yaw
+    add_child(root)
+    var visual: Node3D = scene.instantiate() as Node3D
+    ItemProp3D.linear_materials(visual)
+    var bounds: AABB = ItemProp3D._bounds(visual, Transform3D.IDENTITY)
+    var fit: Vector3 = size / bounds.size
+    var normalizer: Node3D = Node3D.new()
+    normalizer.scale = fit
+    normalizer.position = -Vector3(bounds.get_center().x, bounds.position.y, bounds.get_center().z) * fit
+    root.add_child(normalizer)
+    normalizer.add_child(visual)
 
-func _box(parent: Node3D, node_name: String, size: Vector3, position: Vector3, color: Color, emission: Color = Color.BLACK) -> MeshInstance3D:
-    var node := MeshInstance3D.new()
-    node.name = node_name
-    var mesh := BoxMesh.new()
-    mesh.size = size
-    node.mesh = mesh
-    node.position = position
-    var material := StandardMaterial3D.new()
+func _solid(node_name: String, point: Vector3, size: Vector3) -> void:
+    var body: StaticBody3D = StaticBody3D.new()
+    body.name = node_name
+    body.position = point
+    body.collision_layer = 2
+    body.collision_mask = 0
+    var shape: CollisionShape3D = CollisionShape3D.new()
+    var box: BoxShape3D = BoxShape3D.new()
+    box.size = size
+    shape.shape = box
+    body.add_child(shape)
+    add_child(body)
+
+func _box(node_name: String, point: Vector3, size: Vector3, color: Color, emission: bool = false) -> MeshInstance3D:
+    var instance: MeshInstance3D = MeshInstance3D.new()
+    instance.name = node_name
+    instance.position = point
+    var box: BoxMesh = BoxMesh.new()
+    box.size = size
+    instance.mesh = box
+    instance.material_override = _material(color, emission)
+    add_child(instance)
+    return instance
+
+func _material(color: Color, emission: bool = false) -> StandardMaterial3D:
+    var material: StandardMaterial3D = StandardMaterial3D.new()
     material.albedo_color = color
-    material.roughness = 0.68
-    if emission != Color.BLACK:
-        material.emission_enabled = true
-        material.emission = emission
-        material.emission_energy_multiplier = 0.45
-    node.material_override = material
-    parent.add_child(node)
-    return node
+    material.roughness = 0.75
+    material.emission_enabled = emission
+    material.emission = color
+    material.emission_energy_multiplier = 0.35
+    return material

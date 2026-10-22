@@ -317,6 +317,8 @@ var _land_button: Button
 var _electro_land_button: Button
 var _screen_view := "home"
 
+var _items: CrewItems3D
+
 func _ready() -> void:
     _setup_key_bindings()
     multiplayer.peer_connected.connect(_on_peer_connected)
@@ -332,6 +334,9 @@ func _ready() -> void:
     _ship_session = ShipSession3D.new()
     _ship_session.name = "ShipSession"
     add_child(_ship_session)
+    _items = CrewItems3D.new()
+    _items.name = "CrewItems"
+    add_child(_items)
     _resonance_stage = RESONANCE_STAGE_SCENE.instantiate() as ResonanceStage3D
     add_child(_resonance_stage)
     _resonance_stage.setup(self)
@@ -343,6 +348,10 @@ func _input(event: InputEvent) -> void:
     if not key_event.pressed or key_event.echo:
         return
     var is_escape := key_event.keycode == KEY_ESCAPE or key_event.physical_keycode == KEY_ESCAPE
+    if _items != null and _items.choice_open and is_escape:
+        _items.close_choice()
+        get_viewport().set_input_as_handled()
+        return
     # 星际集市：只有在船上才能打开。
     if market_visible:
         if is_escape:
@@ -362,10 +371,6 @@ func _input(event: InputEvent) -> void:
             close_market()
             get_viewport().set_input_as_handled()
             return
-    elif key_event.keycode == KEY_B and ship_active and not _settings_visible:
-        open_market()
-        get_viewport().set_input_as_handled()
-        return
     if _settings_visible:
         if _rebinding_action != "":
             _handle_rebind_input(key_event)
@@ -380,11 +385,6 @@ func _input(event: InputEvent) -> void:
             _open_settings()
         get_viewport().set_input_as_handled()
         return
-    if game_started and not minigame_active and not is_journal_visible():
-        if key_event.physical_keycode == KEY_3 or key_event.keycode == KEY_3:
-            _ship_session.request("use_medical")
-        elif key_event.physical_keycode == KEY_4 or key_event.keycode == KEY_4:
-            _ship_session.request("use_oxygen")
     if _event_matches_action(key_event, "toggle_journal"):
         if game_started:
             _toggle_journal()
@@ -407,6 +407,8 @@ func _process(delta: float) -> void:
     if _ship_session != null:
         _ship_session.tick(delta)
     if ship_active:
+        if _goofy_items != null:
+            _goofy_items.tick(delta)
         return
     if not game_started:
         _menu_time += delta
@@ -585,14 +587,14 @@ func _build_ui() -> void:
     _place_hud(_journal_panel, Control.PRESET_CENTER, Vector2(-450, -260), Vector2(900, 520))
     _journal_panel.visible = false
     var journal_title := Label.new()
-    journal_title.text = "探索日志  /  FIELD NOTES"
+    journal_title.text = "探索日志"
     journal_title.position = Vector2(28, 22)
     journal_title.size = Vector2(840, 38)
     journal_title.add_theme_font_size_override("font_size", 26)
     journal_title.add_theme_color_override("font_color", Color("#f1fbff"))
     _journal_panel.add_child(journal_title)
     var journal_hint := Label.new()
-    journal_hint.text = "Tab 关闭 · M 地图 · Shift 加速 · H 标记热源 · C 标记线索 · V 清除最近标记 · 阅读时世界仍在运行"
+    journal_hint.text = "阅读时世界仍在运行"
     journal_hint.position = Vector2(30, 62)
     journal_hint.size = Vector2(820, 28)
     journal_hint.add_theme_font_size_override("font_size", 14)
@@ -708,27 +710,26 @@ func _build_settings_ui() -> void:
     _settings_backdrop.process_mode = Node.PROCESS_MODE_ALWAYS
     _settings_backdrop.visible = false
     _settings_layer.add_child(_settings_backdrop)
-    _settings_panel = _panel(_settings_layer, Vector2.ZERO, Vector2(640, 430), Color(0.018, 0.065, 0.105, 0.98), Color("#62e8dc"), 16)
+    _settings_panel = _panel(_settings_layer, Vector2.ZERO, Vector2(520, 350), Color(0.018, 0.065, 0.105, 0.98), Color("#62e8dc"), 16)
     _settings_panel.name = "SettingsPanel"
     _settings_panel.process_mode = Node.PROCESS_MODE_ALWAYS
-    _place_hud(_settings_panel, Control.PRESET_CENTER, Vector2(-320, -215), Vector2(640, 430))
-    var title := _ui_label(_settings_panel, "设置  /  CONTROLS", Vector2(32, 24), Vector2(576, 38), 26, Color("#f1fbff"))
+    _place_hud(_settings_panel, Control.PRESET_CENTER, Vector2(-260, -175), Vector2(520, 350))
+    var title := _ui_label(_settings_panel, "设置", Vector2(32, 18), Vector2(456, 38), 26, Color("#f1fbff"))
     title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-    var intro := _ui_label(_settings_panel, "按 Esc 暂停设置；选择按键后按下新的键位即可更改。", Vector2(32, 68), Vector2(576, 28), 15, Color("#8fb4c4"))
-    intro.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-    var row_y := 122.0
+    var row_y := 72.0
     for action in KEY_BINDING_ACTIONS:
-        var label := _ui_label(_settings_panel, String(KEY_BINDING_LABELS[action]), Vector2(58, row_y + 8.0), Vector2(160, 36), 20, Color("#d9eef4"))
+        var label := _ui_label(_settings_panel, String(KEY_BINDING_LABELS[action]), Vector2(40, row_y + 4.0), Vector2(160, 36), 20, Color("#d9eef4"))
         label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
         var rebind_action: String = action
-        var button := _ui_button(_settings_panel, "", Vector2(300, row_y), Vector2(270, 44), Callable(self, "_begin_rebind").bind(rebind_action), false)
+        var button := _ui_button(_settings_panel, "", Vector2(240, row_y), Vector2(240, 44), Callable(self, "_begin_rebind").bind(rebind_action), false)
+        button.tooltip_text = "点击改键"
         _settings_buttons[action] = button
-        row_y += 58.0
-    _settings_status = _ui_label(_settings_panel, "", Vector2(58, 298), Vector2(524, 34), 15, Color("#ffcf7a"))
+        row_y += 52.0
+    _settings_status = _ui_label(_settings_panel, "", Vector2(40, 232), Vector2(440, 30), 15, Color("#ffcf7a"))
     _settings_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
     _settings_status.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-    _ui_button(_settings_panel, "恢复默认键位", Vector2(58, 350), Vector2(210, 44), _reset_key_bindings, false)
-    _ui_button(_settings_panel, "继续游戏（Esc）", Vector2(372, 350), Vector2(210, 44), _close_settings, true)
+    _ui_button(_settings_panel, "默认", Vector2(40, 282), Vector2(190, 44), _reset_key_bindings, false)
+    _ui_button(_settings_panel, "继续", Vector2(290, 282), Vector2(190, 44), _close_settings, true).tooltip_text = "Esc"
     _settings_panel.visible = false
     _refresh_settings_ui()
 
@@ -736,16 +737,16 @@ func _refresh_settings_ui() -> void:
     for action in KEY_BINDING_ACTIONS:
         var button := _settings_buttons.get(action) as Button
         if button != null:
-            button.text = "%s：%s" % [String(KEY_BINDING_LABELS[action]), _key_name(int(_key_bindings.get(action, KEY_BINDING_DEFAULTS[action])))]
+            button.text = _key_name(int(_key_bindings.get(action, KEY_BINDING_DEFAULTS[action])))
     if _settings_status != null and _rebinding_action.is_empty():
-        _settings_status.text = "地图、日志和加速键可以分别设置。"
+        _settings_status.text = ""
 
 func _begin_rebind(action: String) -> void:
     if not _settings_visible or not KEY_BINDING_ACTIONS.has(action):
         return
     _rebinding_action = action
     if _settings_status != null:
-        _settings_status.text = "正在设置%s：请按下一个键（Esc 取消）" % String(KEY_BINDING_LABELS[action])
+        _settings_status.text = "按下新按键 · Esc 取消"
 
 func _handle_rebind_input(event: InputEventKey) -> void:
     if event.keycode == KEY_ESCAPE or event.physical_keycode == KEY_ESCAPE:
@@ -792,6 +793,7 @@ func _open_settings() -> void:
     _settings_backdrop.visible = true
     _settings_panel.visible = true
     _refresh_settings_ui()
+    _refresh_ship_pointer()
     get_tree().paused = true
 
 func _close_settings() -> void:
@@ -807,6 +809,14 @@ func _close_settings() -> void:
             child.process_mode = int(_settings_child_process_modes[child])
     process_mode = _settings_previous_process_mode
     _settings_child_process_modes.clear()
+    _refresh_ship_pointer()
+
+func _refresh_ship_pointer() -> void:
+    if not ship_active:
+        return
+    var local_player: SpacePlayer3D = players.get(multiplayer.get_unique_id()) as SpacePlayer3D
+    if local_player != null:
+        local_player.refresh_ship_mouse_mode()
 
 func _place_hud(control: Control, preset: int, offset: Vector2, dimensions: Vector2) -> void:
     control.set_anchors_and_offsets_preset(preset)
@@ -960,9 +970,7 @@ func _trade_request(item_id: String, action := "trade") -> void:
 func _show_trade() -> void:
     if not ship_active or not _ship_session.in_hub:
         return
-    _set_screen("trade")
-    _menu_layer.visible = true
-    _refresh_trade_buttons()
+    _ship_session.show_gameplay()
 
 func _refresh_trade_buttons() -> void:
     if _trade_status == null or _ship_session == null:
@@ -977,10 +985,13 @@ func _set_screen(view: String) -> void:
     _route_group.visible = view == "route"
     if _trade_group != null:
         _trade_group.visible = view == "trade"
+    _refresh_ship_pointer()
 
 func _show_home() -> void:
     if _settings_visible:
         _close_settings()
+    if is_host and _ship_session != null:
+        _ship_session.close_room()
     if multiplayer.multiplayer_peer is ENetMultiplayerPeer:
         multiplayer.multiplayer_peer.close()
     is_host = false
@@ -1003,6 +1014,9 @@ func _show_room() -> void:
         _room_status.text = "主机已创建，准备选择航线。"
 
 func _show_route() -> void:
+    if ship_active:
+        _ship_session.show_gameplay()
+        return
     _set_screen("route")
     _menu_layer.visible = true
     if _land_button != null:
@@ -1248,6 +1262,12 @@ func _on_peer_connected(peer_id: int) -> void:
 func _on_peer_disconnected(peer_id: int) -> void:
     if _resonance_stage != null:
         _resonance_stage.release_core_carrier(peer_id)
+    if is_host and game_started and current_planet_id == "demo" and players.has(peer_id):
+        var departing: SpacePlayer3D = players[peer_id] as SpacePlayer3D
+        for entry: Dictionary in _items.cargo_entries(peer_id):
+            departing.carrying = 1 if entry.kind == "battery" else 2
+            departing.carrying_id = int(entry.get("ref", -1))
+            _drop_carried_item(peer_id)
     connected_ids.erase(peer_id)
     _ship_session.remove_peer(peer_id)
     if players.has(peer_id):
@@ -1309,24 +1329,26 @@ func _save_planet_progress(failed: bool) -> void:
     _ship_session.set_planet_state(PLANET_ID, state)
 
 func _scatter_failed_resources() -> void:
-    var rng := RandomNumberGenerator.new()
+    var rng: RandomNumberGenerator = RandomNumberGenerator.new()
     rng.seed = int(route_seed) ^ (_planet_resource_epoch * 7919) ^ 0x5A17
-    for player_value in players.values():
-        var player := player_value as SpacePlayer3D
-        if player == null or player.carrying <= 0:
-            continue
-        var kind := player.carrying
-        var position := Vector2(rng.randf_range(-MAP_SIZE.x * 0.44, MAP_SIZE.x * 0.44), rng.randf_range(-MAP_SIZE.y * 0.44, MAP_SIZE.y * 0.44))
-        var updated := false
-        for cargo in lost_cargo:
-            if int(cargo.get("kind", 0)) == kind and int(cargo.get("id", -1)) == player.carrying_id:
-                cargo["position"] = [position.x, position.y]
-                cargo["source"] = "mission_failure"
-                updated = true
-                break
-        if not updated:
-            lost_cargo.append({"kind": kind, "position": [position.x, position.y], "source": "mission_failure"})
-        _record_journal("资源散落", "任务失败时携带的%s被风雪带到星球的另一处；下次登陆仍可重新寻找。" % ("热能电池" if kind == 1 else "异常冰样"))
+    for player_value: SpacePlayer3D in players.values():
+        var entries: Array = _items.cargo_entries(player_value.peer_id) if _items != null else []
+        if entries.is_empty() and player_value.carrying in [1, 2]:
+            entries.append({"kind": "battery" if player_value.carrying == 1 else "sample", "ref": player_value.carrying_id})
+        for entry: Dictionary in entries:
+            var kind: int = 1 if entry.kind == "battery" else 2
+            var reference: int = int(entry.get("ref", -1))
+            var position: Vector2 = Vector2(rng.randf_range(-MAP_SIZE.x * 0.44, MAP_SIZE.x * 0.44), rng.randf_range(-MAP_SIZE.y * 0.44, MAP_SIZE.y * 0.44))
+            var updated: bool = false
+            for cargo: Dictionary in lost_cargo:
+                if int(cargo.get("kind", 0)) == kind and int(cargo.get("id", -1)) == reference:
+                    cargo["position"] = [position.x, position.y]
+                    cargo["source"] = "mission_failure"
+                    updated = true
+                    break
+            if not updated:
+                lost_cargo.append({"kind": kind, "position": [position.x, position.y], "source": "mission_failure"})
+            _record_journal("资源散落", "任务失败时携带的%s被风雪带到星球的另一处；下次登陆仍可重新寻找。" % ("热能电池" if kind == 1 else "异常冰样"))
 
 func _append_lost_cargo_layout() -> void:
     var crate_count := crate_positions.size()
@@ -2331,115 +2353,24 @@ func _build_beacons() -> void:
         _object_tags.append({"node": beacon, "kind": "beacon", "id": index + 1, "label": "E  修复通讯塔"})
 
 func _build_crates() -> void:
-    for index in crate_positions.size():
-        var crate := Node3D.new()
+    for index: int in crate_positions.size():
+        var crate: ItemProp3D = ItemProp3D.create("battery")
         crate.name = "HeatBattery3D_%d" % (index + 1)
-        crate.position = Vector3(crate_positions[index].x, 0.3, crate_positions[index].y)
+        crate.position = Vector3(crate_positions[index].x, 0.03, crate_positions[index].y)
+        crate.scale = Vector3.ONE * 1.8
         _world_root.add_child(crate)
-        var base := MeshInstance3D.new()
-        var base_mesh := CylinderMesh.new()
-        base_mesh.top_radius = 0.45
-        base_mesh.bottom_radius = 0.48
-        base_mesh.height = 0.12
-        base_mesh.radial_segments = 16
-        base.mesh = base_mesh
-        base.position.y = -0.24
-        base.material_override = _material(Color("#3d7a68"), 0.5)
-        base.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
-        crate.add_child(base)
-        var mesh_node := MeshInstance3D.new()
-        var box := CylinderMesh.new()
-        box.top_radius = 0.38
-        box.bottom_radius = 0.38
-        box.height = 0.72
-        box.radial_segments = 16
-        mesh_node.mesh = box
-        mesh_node.material_override = _material(Color("#5ce8be"), 0.4)
-        mesh_node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
-        crate.add_child(mesh_node)
-        var battery_core := MeshInstance3D.new()
-        var core_mesh := CylinderMesh.new()
-        core_mesh.top_radius = 0.14
-        core_mesh.bottom_radius = 0.14
-        core_mesh.height = 0.82
-        battery_core.mesh = core_mesh
-        battery_core.position.y = 0.48
-        battery_core.material_override = _glow_material(Color("#b0fff0"), 1.8)
-        crate.add_child(battery_core)
-        var battery_handle := MeshInstance3D.new()
-        var handle_mesh := TorusMesh.new()
-        handle_mesh.inner_radius = 0.18
-        handle_mesh.outer_radius = 0.23
-        handle_mesh.rings = 20
-        handle_mesh.ring_segments = 8
-        battery_handle.mesh = handle_mesh
-        battery_handle.position.y = 0.90
-        battery_handle.rotation_degrees.x = 90.0
-        battery_handle.material_override = _glow_material(Color("#76f4dd"), 1.2)
-        crate.add_child(battery_handle)
-        var glow_light := OmniLight3D.new()
-        glow_light.name = "BatteryGlow"
-        glow_light.light_color = Color("#7effd8")
-        glow_light.light_energy = 2.5
-        glow_light.omni_range = 4.0
-        glow_light.position.y = 0.5
-        crate.add_child(glow_light)
-        var label := Label3D.new()
-        label.text = "【热能电池】\nF键拾取"
-        label.name = "ObjectLabel"
-        label.visible = false
-        label.position.y = 1.65
-        label.modulate = Color("#8bffd5")
-        label.font_size = 52
-        label.pixel_size = 0.010
-        label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-        label.outline_size = 12
-        label.outline_modulate = Color("#0a3d32")
-        label.shaded = false
-        crate.add_child(label)
         crates[index + 1] = crate
-        _object_tags.append({"node": crate, "kind": "crate", "id": index + 1, "label": "F  拾取热能电池"})
+        _object_tags.append({"node": crate, "kind": "crate", "id": index + 1, "label": "E 收纳热能电池"})
 
 func _build_samples() -> void:
-    for index in sample_positions.size():
-        var sample := Node3D.new()
+    for index: int in sample_positions.size():
+        var sample: ItemProp3D = ItemProp3D.create("sample")
         sample.name = "IceSample3D_%d" % (index + 1)
-        sample.position = Vector3(sample_positions[index].x, 0.16, sample_positions[index].y)
+        sample.position = Vector3(sample_positions[index].x, 0.03, sample_positions[index].y)
+        sample.scale = Vector3.ONE * 1.6
         _world_root.add_child(sample)
-        var shard := MeshInstance3D.new()
-        var shard_mesh := PrismMesh.new()
-        shard_mesh.size = Vector3(0.65, 0.9, 0.65)
-        shard.mesh = shard_mesh
-        shard.rotation_degrees = Vector3(0.0, float(index * 31), 15.0)
-        shard.position.y = 0.55
-        shard.material_override = _glow_material(Color("#b8a1ff"), 1.6)
-        shard.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
-        sample.add_child(shard)
-        var ring := MeshInstance3D.new()
-        var ring_mesh := TorusMesh.new()
-        ring_mesh.inner_radius = 0.46
-        ring_mesh.outer_radius = 0.54
-        ring_mesh.rings = 18
-        ring_mesh.ring_segments = 8
-        ring.mesh = ring_mesh
-        ring.position.y = 0.22
-        ring.material_override = _glow_material(Color("#8ed8ff"), 1.0)
-        sample.add_child(ring)
-        var label := Label3D.new()
-        label.text = "【异常冰样 · 可选回收】\nF拾取 / X丢下"
-        label.name = "ObjectLabel"
-        label.visible = false
-        label.position.y = 1.55
-        label.modulate = Color("#c8b6ff")
-        label.font_size = 52
-        label.pixel_size = 0.010
-        label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-        label.outline_size = 12
-        label.outline_modulate = Color("#17102c")
-        label.shaded = false
-        sample.add_child(label)
         samples[index + 1] = sample
-        _object_tags.append({"node": sample, "kind": "sample", "id": index + 1, "label": "F  拾取异常冰样"})
+        _object_tags.append({"node": sample, "kind": "sample", "id": index + 1, "label": "E 收纳异常冰样"})
 
 func _build_extraction() -> void:
     var pad := MeshInstance3D.new()
@@ -2684,7 +2615,11 @@ func _assign_kit(peer_id: int) -> void:
     var carrier: SpacePlayer3D = players.get(peer_id) as SpacePlayer3D
     if carrier != null:
         carrier.set_tool(tool)
-    show_feedback_rpc.rpc("你的专属工具：%s" % kit_tool_name(peer_id), Color("#8fe8ff"), 1.6)
+    if is_host:
+        if peer_id == 1:
+            show_feedback_rpc("你的专属工具：%s" % kit_tool_name(peer_id), Color("#8fe8ff"), 1.6)
+        elif multiplayer.get_peers().has(peer_id):
+            show_feedback_rpc.rpc_id(peer_id, "你的专属工具：%s" % kit_tool_name(peer_id), Color("#8fe8ff"), 1.6)
 
 func kit_tool_for(peer_id: int) -> String:
     return String(kit_assignments.get(peer_id, ""))
@@ -2764,7 +2699,7 @@ func _check_enemy_triggers() -> void:
     var sample_carried := false
     for player_value in players.values():
         var player := player_value as SpacePlayer3D
-        if player != null and player.carrying == 2:
+        if player != null and (player.carrying == 2 or (_items != null and _items.count_kind(player.peer_id, "sample") > 0)):
             sample_carried = true
             enemy_spawn_center = Vector2(player.global_position.x, player.global_position.z)
             break
@@ -3593,25 +3528,28 @@ func _drop_carried_item(peer_id: int) -> void:
         return
     var carrying_kind := player.carrying
     var carrying_id := player.carrying_id
-    var drop_position := player.global_position + Vector3(0.0, 0.0, 0.9)
+    var drop_position := _items.drop_position(player)
     if carrying_kind == 1 and crates.has(carrying_id):
         taken_crates.erase(carrying_id)
         crates[carrying_id].global_position = drop_position
         crates[carrying_id].visible = true
         _update_lost_cargo_position(1, carrying_id, drop_position)
         sync_dropped_item.rpc(1, carrying_id, drop_position)
-        show_feedback_rpc.rpc("已丢下热能电池，按 F 可重新拾取。", Color("#8be7ff"), 1.2)
+        show_feedback_rpc.rpc("已丢下热能电池，按 E 可重新拾取。", Color("#8be7ff"), 1.2)
     elif carrying_kind == 2 and samples.has(carrying_id):
         taken_samples.erase(carrying_id)
         samples[carrying_id].global_position = drop_position
         samples[carrying_id].visible = true
         _update_lost_cargo_position(2, carrying_id, drop_position)
         sync_dropped_item.rpc(2, carrying_id, drop_position)
-        show_feedback_rpc.rpc("已丢下异常冰样，按 F 可重新拾取。", Color("#c8b6ff"), 1.2)
+        show_feedback_rpc.rpc("已丢下异常冰样，按 E 可重新拾取。", Color("#c8b6ff"), 1.2)
     else:
         show_feedback_rpc.rpc("物品状态已失效，已清空手持栏。", Color("#ffbd75"), 1.2)
     player.carrying = 0
     player.carrying_id = 0
+    if _items != null:
+        _items.remove_item(peer_id, "battery" if carrying_kind == 1 else "sample", carrying_id)
+        _items.publish()
     _sync_state.rpc(_enemy_snapshot(), enemy_wave_index, enemy_wave_timer, activated_beacons, taken_crates, deposited_resources, _vitals_snapshot(), journal_entries, discovered_regions)
     sync_contract_state.rpc(mission_elapsed, salvage_value, knowledge_flags.keys(), taken_samples, scan_revealed_clues)
     sync_progress_state.rpc(side_quest_states, achievement_flags, lost_cargo)
@@ -3636,6 +3574,12 @@ func spawn_goofy_effect_rpc(item_id: String, origin: Vector3, direction: Vector3
         _goofy_items.spawn_local(item_id, origin, direction, caster_id, effect_id, duration)
 
 func handle_action(peer_id: int, action: String) -> void:
+    if action in ["interact", "item_use", "item_drop", "item_scan", "slot_1", "slot_2", "slot_next", "slot_previous"] or action.begins_with("choice_"):
+        if not is_host:
+            request_action.rpc_id(1, peer_id, action)
+        elif _items != null:
+            _items.handle_action(peer_id, action)
+        return
     if _ruin_planet != null and current_planet_id == "ruin" and _ruin_planet.handle_action(peer_id, action):
         return
     if current_planet_id == "electromagnetic" and _resonance_stage != null:
@@ -3643,7 +3587,13 @@ func handle_action(peer_id: int, action: String) -> void:
         if not is_host:
             _resonance_stage.request_coop_action.rpc_id(1, peer_id, action, String(target.get("puzzle_id", "")), target)
         elif not target.is_empty() or action in ["drop", "revive"]:
+            var carrier: SpacePlayer3D = players.get(peer_id) as SpacePlayer3D
+            if action == "pickup" and carrier != null and carrier.carrying < 3 and _items.occupied(peer_id) >= 2:
+                _ship_session._notify(peer_id, "物品栏已满，先空出一格再搬运设备。")
+                return
             _resonance_stage.handle_stage_action(peer_id, action, int(target.get("target_id", 0)))
+            if _items.sync_heavy(peer_id):
+                _items.publish()
         elif action == "repair" or action == "pickup":
             _resonance_stage.feedback_no_target(peer_id, action)
         return
@@ -3733,14 +3683,19 @@ func handle_action(peer_id: int, action: String) -> void:
     elif action == "pickup":
         if _retrieve_scan_device(peer_id):
             return
+        if _items != null and _items.occupied(peer_id) >= CrewItems3D.CAPACITY:
+            _ship_session._notify(peer_id, "物品栏已满（2 / 2）。使用或放下一件后再拾取。")
+            return
         for id in crates:
-            if taken_crates.has(id) or player.carrying > 0:
+            if taken_crates.has(id):
                 continue
-            if _flat_distance(player.global_position, crates[id].global_position) <= _pickup_reach(peer_id):
+            if _flat_distance(player.global_position, crates[id].global_position) <= _pickup_reach(peer_id) and _items.can_reach(player, crates[id].global_position, _pickup_reach(peer_id)):
                 taken_crates.append(id)
+                _items.add_item(peer_id, "battery", id)
                 player.carrying = 1
                 player.carrying_id = id
                 crates[id].visible = false
+                _items.publish()
                 _set_status("玩家 %d 拾取了热能电池。" % peer_id)
                 _record_journal("热能电池", "电池仍在发热，外壳上的编号属于已经注销的科考队。")
                 _spawn_particle_burst(crates[id].global_position + Vector3(0, 0.8, 0), Color("#6ee7b7"), 6)
@@ -3749,13 +3704,15 @@ func handle_action(peer_id: int, action: String) -> void:
                 _sync_state.rpc(_enemy_snapshot(), enemy_wave_index, enemy_wave_timer, activated_beacons, taken_crates, deposited_resources, _vitals_snapshot(), journal_entries, discovered_regions)
                 return
         for id in samples:
-            if taken_samples.has(id) or player.carrying > 0:
+            if taken_samples.has(id):
                 continue
-            if _flat_distance(player.global_position, samples[id].global_position) <= RESOURCE_INTERACTION_RADIUS:
+            if _flat_distance(player.global_position, samples[id].global_position) <= RESOURCE_INTERACTION_RADIUS and _items.can_reach(player, samples[id].global_position, RESOURCE_INTERACTION_RADIUS):
                 taken_samples.append(id)
+                _items.add_item(peer_id, "sample", id)
                 player.carrying = 2
                 player.carrying_id = id
                 samples[id].visible = false
+                _items.publish()
                 _set_status("玩家 %d 拾取了异常冰样。" % peer_id)
                 _record_journal("异常冰样", "样本内部仍在脉动：可选回收并带回 +20 价值，携带时会提前引来敌袭。")
                 _spawn_particle_burst(samples[id].global_position + Vector3(0, 0.8, 0), Color("#b8a1ff"), 8)
@@ -3774,6 +3731,8 @@ func handle_action(peer_id: int, action: String) -> void:
             var carried_id := player.carrying_id
             player.carrying = 0
             player.carrying_id = 0
+            _items.remove_item(peer_id, "battery" if carried_kind == 1 else "sample", carried_id)
+            _items.publish()
             _consume_lost_cargo(carried_kind, carried_id)
             if carried_kind == 2:
                 salvage_value += SAMPLE_VALUE
@@ -3805,7 +3764,7 @@ func handle_action(peer_id: int, action: String) -> void:
 
 @rpc("any_peer", "reliable")
 func request_action(peer_id: int, action: String) -> void:
-    if is_host:
+    if is_host and multiplayer.get_remote_sender_id() == peer_id:
         handle_action(peer_id, action)
 
 @rpc("any_peer", "reliable")
@@ -4146,6 +4105,7 @@ func return_to_ship(reason: String, final_vitals: Array = []) -> void:
     var returning_vitals := final_vitals if not final_vitals.is_empty() else _vitals_snapshot()
     if is_host:
         _save_planet_progress(mission_failed)
+        _items.clear_planet_cargo()
         _ship_session.settle(mission_completed, salvage_value, reason)
     game_started = false
     mission_completed = false
@@ -4240,6 +4200,7 @@ func return_to_ship(reason: String, final_vitals: Array = []) -> void:
 func _return_from_resonance(reason: String, final_vitals: Array = []) -> void:
     var returning_vitals := final_vitals if not final_vitals.is_empty() else _vitals_snapshot()
     if is_host:
+        _items.clear_planet_cargo()
         _ship_session.settle(mission_completed, 0, reason)
     if _resonance_stage != null:
         _resonance_stage.stop_stage()
@@ -4310,6 +4271,8 @@ func sync_vitals(snapshot: Array, in_ship := false) -> void:
         p.sprinting = bool(entry[7]) if entry.size() > 7 else false
         p.lava_dead = bool(entry[8]) if entry.size() > 8 else false
         p.falling_to_lava = bool(entry[9]) if entry.size() > 9 and not p.lava_dead else false
+        if not is_host and _items != null and _items.bags.has(int(entry[0])):
+            _items._sync_legacy(int(entry[0]))
 
 @rpc("authority", "call_local", "reliable")
 func sync_full_state(snapshot: Dictionary) -> void:
@@ -4574,30 +4537,29 @@ func _update_hud() -> void:
         phase = "确认撤离路线"
     var local := players.get(multiplayer.get_unique_id()) as SpacePlayer3D
     if local != null:
-        var carry_text := "背包空"
+        var carry_text := ""
         if local.carrying == 1:
-            carry_text = "携带电池 · 可选回收价值 +%d" % BATTERY_VALUE
+            carry_text = "电池 +%d" % BATTERY_VALUE
         elif local.carrying == 2:
-            carry_text = "携带异常冰样 · 可选回收价值 +%d" % SAMPLE_VALUE
+            carry_text = "冰样 +%d" % SAMPLE_VALUE
         var knowledge_count := 0
         for flag in REQUIRED_KNOWLEDGE:
             if knowledge_flags.has(flag):
                 knowledge_count += 1
-        var anomaly_text := "异常待处理" if not anomaly_resolved else ("异常已处理 · %s" % ("关闭信标" if ending_choice == "shutdown" else "稳定信标"))
         var signal_text := "中性"
         if signal_mode == "high":
             signal_text = "高频 · 探测/风暴"
         elif signal_mode == "low":
             signal_text = "低频 · 诱导"
-        _progress_label.text = "%s · %s\n调查 %d/%d   信标 %d/%d\n%s   信号：%s   %.0fs\n下一步：%s" % [phase, _region_hint(local.global_position), knowledge_count, REQUIRED_KNOWLEDGE.size(), activated_beacons.size(), beacon_positions.size(), anomaly_text, signal_text, mission_elapsed, _next_objective_text()]
+        _progress_label.text = "%s · %s\n调查 %d/%d · 信标 %d/%d · %s\n%s" % [phase, _region_hint(local.global_position), knowledge_count, REQUIRED_KNOWLEDGE.size(), activated_beacons.size(), beacon_positions.size(), signal_text, _next_objective_text()]
         _update_side_quest_tracker(local)
-        _vitals_label.text = "生命 %d/5   氧气 %d%%   体温 %d%%\n%s" % [local.health, int(local.oxygen), int(local.warmth * 100.0), carry_text]
+        _vitals_label.text = "生命 %d/5   氧气 %d%%   体温 %d%%" % [local.health, int(local.oxygen), int(local.warmth * 100.0)]
+        if not carry_text.is_empty():
+            _vitals_label.text += "\n" + carry_text
         var vital_color := Color("#ffad9f") if local.oxygen <= 25.0 or local.health <= 2 else Color("#d9eef4")
         _vitals_label.add_theme_color_override("font_color", vital_color)
         var cooldown := local.scan_cooldown_remaining
-        var scan_tip := "Q  扫描 %.0fs" % ceilf(cooldown) if cooldown > 0.0 else "Q  扫描"
-        var goofy_tip: String = _goofy_items.hint_text() if _goofy_items != null else ""
-        _hint_label.text = scan_tip + "    Shift  加速（更耗氧/体温）    F  拾取/回收    X  丢下    Tab  日志    M  地图    " + goofy_tip
+        _hint_label.text = "扫描 %.0fs" % ceilf(cooldown) if cooldown > 0.0 else ""
         _update_compass(local)
         if _journal_map_view != null:
             _journal_map_view.update_state(Vector2(local.global_position.x, local.global_position.z), discovered_regions, true)
@@ -4803,6 +4765,10 @@ func _update_interaction_hint() -> void:
         _interaction_panel.visible = false
         return
     var prompts: Array[Dictionary] = []
+    if _items != null:
+        var physical_hint: String = _items.item_hint(local.peer_id)
+        if not physical_hint.is_empty() and _items.context_planet_action(local.peer_id) not in ["revive", "deposit"]:
+            prompts.append({"distance": -0.3, "priority": 99, "text": physical_hint})
     var quest_prompt := _side_quest_prompt(local)
     if not quest_prompt.is_empty():
         prompts.append(quest_prompt)
@@ -4824,9 +4790,7 @@ func _update_interaction_hint() -> void:
     if scan_device_active:
         var scanner_distance := _flat_distance(local.global_position, scan_device_position)
         if scanner_distance <= RESOURCE_INTERACTION_RADIUS:
-            prompts.append({"distance": scanner_distance, "priority": 95, "text": "[F]  回收扫描器 · 扫描器会保留已锁定线索"})
-    if local.carrying > 0:
-        prompts.append({"distance": -0.5, "priority": 92, "text": "[X]  丢下携带物 · 之后可继续加速和拾取"})
+            prompts.append({"distance": scanner_distance, "priority": 95, "text": "[E]  回收扫描器 · 扫描器会保留已锁定线索"})
     for entry in _object_tags:
         var node := entry.get("node") as Node3D
         if not is_instance_valid(node) or not node.visible:
@@ -4847,18 +4811,18 @@ func _update_interaction_hint() -> void:
                     var block_reason := _beacon_block_reason()
                     text = "[E]  修复信标" if block_reason.is_empty() else "[E]  信标需要新的环境资料"
             "crate":
-                if local.carrying == 0 and distance <= RESOURCE_INTERACTION_RADIUS:
-                    text = "[F]  拾取热能电池"
+                if distance <= RESOURCE_INTERACTION_RADIUS:
+                    text = "[E]  收纳热能电池"
             "sample":
-                if local.carrying == 0 and distance <= RESOURCE_INTERACTION_RADIUS:
-                    text = "[F]  拾取异常冰样（可选）"
+                if distance <= RESOURCE_INTERACTION_RADIUS:
+                    text = "[E]  收纳异常冰样（可选）"
             "extraction":
                 if local.carrying > 0 and distance <= 2.4:
-                    text = "[G]  投送携带物"
+                    text = "[E]  投送携带物"
                 elif extraction_enabled:
                     text = "全队留在平台 · 起飞还需 %.1f 秒 · 无需清怪" % (3.0 - extraction_progress)
         if not text.is_empty():
-            prompts.append({"distance": distance, "priority": 50, "text": text})
+            prompts.append({"distance": distance, "priority": 80 if kind in ["crate", "sample", "extraction"] else 50, "text": text})
     for landmark in LANDMARK_DATA:
         var landmark_id := String(landmark.get("id", ""))
         var landmark_point := Vector2(landmark.get("position", Vector2.ZERO))
@@ -4867,7 +4831,7 @@ func _update_interaction_hint() -> void:
             continue
         var landmark_text := ""
         if landmark_id == "relay" and knowledge_flags.has("relay") and activated_beacons.size() >= beacon_positions.size() and not anomaly_resolved:
-            landmark_text = "[E] 稳定共振：保留网络数据    [G] 关闭网络：切断地下回声"
+            landmark_text = "[E] 选择稳定或关闭地下网络"
         elif not knowledge_flags.has(landmark_id):
             landmark_text = "[E] 调查" + String(landmark.get("name", "地标"))
         if not landmark_text.is_empty():
@@ -4880,7 +4844,7 @@ func _update_interaction_hint() -> void:
             prompts.append({"distance": rift_distance, "priority": 85, "text": rift_prompt})
     var signal_source := _signal_source(local)
     if signal_source != Vector3.INF:
-        var signal_prompt := "[1] 高频探测：揭示附近回波，但立刻引发风暴   [2] 低频诱导：把生物引向信号源"
+        var signal_prompt := "[E] 打开信号阵列，选择高频探测或低频诱导"
         if mission_elapsed < signal_cooldown_until:
             signal_prompt = "信号阵列冷却中 · %.1f 秒后可再次切频" % (signal_cooldown_until - mission_elapsed)
         prompts.append({"distance": 0.0, "priority": 65, "text": signal_prompt})
@@ -4894,9 +4858,9 @@ func _update_interaction_hint() -> void:
     for mate_value in players.values():
         var mate := mate_value as SpacePlayer3D
         if mate != null and mate.peer_id != local.peer_id and mate.downed and _flat_distance(local.global_position, mate.global_position) <= REVIVE_RANGE:
-            prompts.append({"distance": -1.0, "priority": 100, "text": "[R]  救援队友 · 保持 3 秒"})
+            prompts.append({"distance": -1.0, "priority": 100, "text": "[E]  救援队友 · 保持 3 秒"})
     if threat_distance <= SpacePlayer3D.ATTACK_RANGE:
-        prompts.append({"distance": threat_distance, "priority": 80, "text": "[空格]  按住攻击"})
+        prompts.append({"distance": threat_distance, "priority": 80, "text": "[左键]  空手时按住攻击"})
     prompts.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
         if int(a.priority) == int(b.priority):
             return float(a.distance) < float(b.distance)
@@ -5244,9 +5208,9 @@ func _spawn_particle_burst(position: Vector3, color: Color, count: int = 12) -> 
         var direction := Vector3(randf_range(-1, 1), randf_range(0.5, 1.2), randf_range(-1, 1)).normalized()
         var speed := randf_range(0.8, 1.8)
         var lifetime := randf_range(0.3, 0.5)
-        var tween := create_tween()
+        var tween := particle.create_tween()
         tween.set_parallel(true)
-        tween.tween_property(particle, "global_position", particle.global_position + direction * speed, lifetime)
+        tween.tween_property(particle, "position", particle.position + direction * speed, lifetime)
         tween.tween_property(particle, "scale", Vector3.ZERO, lifetime)
         tween.finished.connect(func(): particle.queue_free())
 
@@ -5321,11 +5285,13 @@ func open_market() -> void:
     market_selection = 0
     _build_market_ui()
     _refresh_market_ui()
+    _refresh_ship_pointer()
 
 func close_market() -> void:
     market_visible = false
     if market_layer != null:
         market_layer.visible = false
+    _refresh_ship_pointer()
 
 func market_move(step: int) -> void:
     market_selection = wrapi(market_selection + step, 0, SKIN_CATALOG.size())

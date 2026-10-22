@@ -105,25 +105,25 @@ func prompt(player: SpacePlayer3D) -> String:
             if state.get("used_by", []).has(player.peer_id):
                 return "补给已领取 · 给其他船员留一份"
             return "[E] 领取应急补给 · 剩余 %d 份" % int(state.get("charges", 0))
-        "radio": return "[E] 播放科考队录音    [G] 回应并转发给飞船"
+        "radio": return "[E] 回应并转发给飞船" if bool(state.get("heard", false)) and not bool(state.get("answered", false)) else "[E] 播放科考队录音"
         "heater":
             if not bool(state.get("repaired", false)):
                 return "[E] 修理供暖炉 · 留在附近 3 秒"
             if bool(state.get("boosted", false)):
                 return "[E] 查看供暖炉 · 强化热源已开启"
-            return "[E] 查看供暖炉    [G] 安装一枚手持电池，扩大热源"
+            return "[E] 安装电池，扩大热源" if controller._items.count_kind(player.peer_id, "battery") > 0 else "[E] 查看供暖炉 · 需要一枚电池才能强化"
         "scope": return "[E] 手动观测天气 · 留在附近 2 秒"
         "sample":
             if bool(state.get("sealed", false)):
                 return "[E] 查看已封存的冰样"
-            if player.carrying != 2:
-                return "[E] 查看检测报告 · 紫色冰样按 F 拾取，带来后按 G 封存"
-            return "[E] 查看检测报告    [G] 封存手持冰样，回收 +20"
+            if controller._items.count_kind(player.peer_id, "sample") == 0:
+                return "[E] 查看检测报告 · 紫色冰样按 E 拾取，带来后按 E 封存"
+            return "[E] 封存冰样，回收 +20"
         "winch":
             if bool(state.get("opened", false)):
                 return "[E] 重读运输舱货单"
             return "[E] 操作绞盘回收货物 · 留在附近 3 秒"
-        "helmet": return "[E] 查看队员头盔    [G] 把姓名与留言送回飞船"
+        "helmet": return "[E] 把姓名与留言送回飞船" if bool(state.get("heard", false)) and not bool(state.get("answered", false)) else "[E] 查看队员头盔"
         "sign":
             return "[E] 查看路标与下一段路线" if bool(state.get("repaired", false)) else "[E] 扶正反光路标 · 留在附近 1.2 秒"
     return ""
@@ -189,7 +189,7 @@ func handle_action(peer_id: int, action: String) -> bool:
                 _begin_job(peer_id, site, 2.0, "对准气象观测镜")
         "sample":
             state["heard"] = true
-            controller._record_journal("样本检测报告", "所谓晶体回波就是异常冰样的扫描信号。样本是可选回收物，取出后会招来生物；带到这张隔离台按 G 封存可回收 +20，也可以去撤离平台投送。")
+            controller._record_journal("样本检测报告", "所谓晶体回波就是异常冰样的扫描信号。样本是可选回收物，取出后会招来生物；带到这张隔离台按 E 封存可回收 +20，也可以去撤离平台投送。")
             _story("检测台：冰样仍在发出热脉。带走它会引来生物；封进隔离舱，才能把它作为研究资料安全回收。")
         "winch":
             if not bool(state.opened):
@@ -230,11 +230,10 @@ func _secondary_action(site: Dictionary, player: SpacePlayer3D) -> void:
                 _feedback("供暖炉已装有电池，无需继续投入。")
                 return
             if not _valid_carried_item(player, 1):
-                _feedback("先按 F 拾取一枚热能电池，再来按 G 安装；电池会用于供暖。")
+                _feedback("先按 E 拾取一枚热能电池，再来按 E 安装；电池会用于供暖。")
                 return
             state["boosted"] = true
-            player.carrying = 0
-            player.carrying_id = 0
+            _consume_inventory_cargo(player, "battery", 1)
             controller._record_journal("野外供暖炉", "一枚回收电池被留在供暖炉里，换成了更宽的热源。留在这里的能源，能让队伍往返时多一个避风点。")
             _feedback("电池已安装 · 热源扩大到 8.5m · 这枚电池已用于供暖", Color("#ffc883"))
             _pulse(site, Color("#ffbd61"))
@@ -243,15 +242,22 @@ func _secondary_action(site: Dictionary, player: SpacePlayer3D) -> void:
                 _feedback("隔离舱已经装满；其他冰样请带到撤离平台投送。")
                 return
             if not _valid_carried_item(player, 2):
-                _feedback("手里没有异常冰样。找到紫色冰样，按 F 拾取后再来封存。")
+                _feedback("手里没有异常冰样。找到紫色冰样，按 E 拾取后再来封存。")
                 return
             state["sealed"] = true
-            player.carrying = 0
-            player.carrying_id = 0
+            _consume_inventory_cargo(player, "sample", 2)
             controller.salvage_value += controller.SAMPLE_VALUE
             controller._record_journal("现场封存", "冰样封进科考队留下的隔离舱，脉冲被挡在舱壁内。回收 +20，队员不必继续背着它引来敌人。")
             _feedback("冰样已封存 · 回收价值 +20 · 双手已腾出", Color("#c4b5ff"))
             _pulse(site, Color("#b8a1ff"))
+
+func _consume_inventory_cargo(player: SpacePlayer3D, item: String, kind: int) -> void:
+    var reference: int = player.carrying_id
+    player.carrying = 0
+    player.carrying_id = 0
+    controller._items.remove_item(player.peer_id, item, reference)
+    controller._consume_lost_cargo(kind, reference)
+    controller._items.publish()
 
 func _valid_carried_item(player: SpacePlayer3D, kind: int) -> bool:
     if player.carrying != kind or player.carrying_id <= 0:
@@ -343,7 +349,7 @@ func _complete_job(id: String, player: SpacePlayer3D) -> void:
             _feedback("补给箱已打开 · 需要时按 E 领取，每名船员一份", Color("#9fe8cf"))
         "heater":
             state["repaired"] = true
-            controller._record_journal("野外供暖炉", "断开的线路接上了，冰湖西侧恢复一个 5m 热源。手持电池可按 G 加入炉子，换取 8.5m 的供暖范围。")
+            controller._record_journal("野外供暖炉", "断开的线路接上了，冰湖西侧恢复一个 5m 热源。手持电池可按 E 加入炉子，换取 8.5m 的供暖范围。")
             _story("暖风又吹出来了。炉壳上有一行划痕：回来时，不要把最后一个人落在冷风里。")
             _feedback("供暖炉已修复 · 新热源可补氧回温", Color("#ffc883"))
         "scope":
@@ -490,11 +496,11 @@ func _apply_visuals() -> void:
                 core.material_override = controller._glow_material(color, 1.7 if bool(state.repaired) else 0.05)
                 var battery := node.get_node("InstalledBattery") as Node3D
                 battery.visible = bool(state.boosted)
-                status_text = "强化供暖中" if bool(state.boosted) else ("供暖中 · G 安装电池" if bool(state.repaired) else "线路断开 · E 修理")
+                status_text = "强化供暖中" if bool(state.boosted) else ("供暖中 · E 安装电池" if bool(state.repaired) else "线路断开 · E 修理")
             "sample":
                 var crystal := node.get_node("ContainedSample") as Node3D
                 crystal.visible = bool(state.sealed)
-                status_text = "冰样已封存" if bool(state.sealed) else "E 检测报告 / G 封存"
+                status_text = "冰样已封存" if bool(state.sealed) else "E 查看报告 / 有冰样时封存"
             "winch":
                 var cargo := node.get_node("Cargo") as Node3D
                 cargo.position.y = 1.1 if bool(state.opened) else 0.3
@@ -504,7 +510,7 @@ func _apply_visuals() -> void:
                 sign_mesh.rotation_degrees.z = 0.0 if bool(state.repaired) else 65.0
                 status_text = "路线已登记" if bool(state.repaired) else "E 扶正路标"
             "radio", "helmet":
-                status_text = "已传回飞船 · E 重听" if bool(state.answered) else "E 聆听 / G 回应"
+                status_text = "已传回飞船 · E 重听" if bool(state.answered) else "E 聆听 / 再按 E 回应"
         var light := node.get_node_or_null("StatusLight") as OmniLight3D
         if light != null:
             light.light_color = Color("#b8e6bb") if active else color

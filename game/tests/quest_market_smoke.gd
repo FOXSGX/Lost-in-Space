@@ -16,19 +16,23 @@ func run() -> void:
     main._create_host()
     await physics_frame
     ship.tick(0.0)
-    check(ship._market_button.visible and main._screen_view == "ship", "主舱 HUD 没有显示星际集市入口")
-    main._show_trade()
-    check(main._screen_view == "trade" and main._trade_group.visible and ship.has_panel(), "主舱右上角/航线图无法打开集市")
+    check(ship.device_room() != null and main._screen_view == "ship", "主舱没有实体集市终端")
+    var player: SpacePlayer3D = main.players[1] as SpacePlayer3D
+    player.teleport_to(ShipDevices3D.point_for("gear_thermal_suit") + Vector3(0, 0, 1.3))
+    player.rotation.y = 0.0
+    check(ship.device_room().nearby(1).get("kind", "") == "gear" and not ship.has_panel(), "集市仍依赖按钮")
     ship.credits = 100
-    main._trade_request("thermal_suit")
+    main.handle_action(1, "interact")
     check(ship.gear_stock.thermal_suit == 1 and ship.credits == 55, "集市购买没有进入共享装备仓")
     ship.close_panel()
     main._show_room()
     main._confirm_land()
+    player.teleport_to(Vector3(ShipDevices3D.PILOT_X[0], 0, -12.2))
+    player.rotation.y = 0.0
     ship.request("ready")
     main._confirm_land()
     await physics_frame
-    var player := main.players[1] as SpacePlayer3D
+    player = main.players[1] as SpacePlayer3D
     main._update_hud()
     check(main._side_quest_label.text.contains("金色") and main._side_quest_label.text.contains("按 E"), "登陆后没有显示支线线索入口提示")
     player.teleport_to(Vector3(-157, 0, 98))

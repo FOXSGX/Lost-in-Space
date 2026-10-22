@@ -3,9 +3,10 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://bjt4pblnxdue6"
-path="res://.godot/imported/resonance_energy_core_industrial_panel.png-bf4b871490168bc1e61efdc7148c4156.ctex"
+path.s3tc="res://.godot/imported/resonance_energy_core_industrial_panel.png-bf4b871490168bc1e61efdc7148c4156.s3tc.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "bc67a3b0c33b4d79e0a556204d68b67f"
@@ -14,11 +15,11 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/resonance/models/resonance_energy_core_industrial_panel.png"
-dest_files=["res://.godot/imported/resonance_energy_core_industrial_panel.png-bf4b871490168bc1e61efdc7148c4156.ctex"]
+dest_files=["res://.godot/imported/resonance_energy_core_industrial_panel.png-bf4b871490168bc1e61efdc7148c4156.s3tc.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0
@@ -40,4 +41,4 @@ process/normal_map_invert_y=false
 process/hdr_as_srgb=false
 process/hdr_clamp_exposure=false
 process/size_limit=0
-detect_3d/compress_to=1
+detect_3d/compress_to=0

@@ -1,5 +1,7 @@
 # 飞船主枢纽舱 3D 源模型
 
+最新美术迭代（2026-10-22）：[Kenney 原生模块排布与实机图](kenney-layout/README.md)。[上一轮 Blender 原生工程与重建说明](blender-v2/README.md)及本页旧版生成脚本继续保留。以下为早期模型记录；当前主舱采用第一人称，气闸门完整显示。
+
 这是根据 `art-source/ai-generated/spaceship-cabin/concepts/ship-hub-v2.png` 制作的第一版可编辑、可导入的低多边形舱室模型。它保留了概念图的功能区和配色，但为游戏视角简化了小零件。
 
 ## 文件

@@ -2639,7 +2639,7 @@ func feedback_no_target(peer_id: int, action: String) -> void:
         else:
             _feedback_peer(peer_id, "请靠近当前高亮模块接口后再按 E", Color("#ffd28a"), 1.0)
     elif action == "pickup":
-        _feedback_peer(peer_id, "请靠近黄色货箱、冷却单元或中央核心后再按 F", Color("#ffd28a"), 1.0)
+        _feedback_peer(peer_id, "请靠近黄色货箱、冷却单元或中央核心后再按 E", Color("#ffd28a"), 1.0)
 
 func stage_tick(delta: float) -> void:
     tick(delta)
@@ -3006,7 +3006,7 @@ func _handle_reactor_repair(peer_id: int, player: SpacePlayer3D) -> bool:
     var challenge_id: String = String(target["challenge_id"])
     var kind: String = String(target["kind"])
     if challenge_id == "coolant" and (kind == "coolant" or kind == "coolant_socket"):
-        _feedback_peer(peer_id, "这里使用 F 搬运冷却单元", Color("#ffd28a"), 0.9)
+        _feedback_peer(peer_id, "这里使用 E 搬运冷却单元", Color("#ffd28a"), 0.9)
         return true
     if challenge_id == "coolant" and kind == "stabilizer":
         if reactor_carrier == peer_id:
@@ -3059,7 +3059,7 @@ func _try_reactor_coolant_action(peer_id: int, player: SpacePlayer3D) -> bool:
     var socket_position: Vector3 = Vector3(challenge["coolant_socket_position"])
     if reactor_carrier == peer_id:
         if controller._flat_distance(player.global_position, socket_position) > MODULE_RADIUS:
-            _feedback_peer(peer_id, "把冷却单元护送到反应堆接收座再按 F", Color("#ffd28a"), 1.0)
+            _feedback_peer(peer_id, "把冷却单元护送到反应堆接收座再按 E", Color("#ffd28a"), 1.0)
             return true
         var stabilizer_ready: bool = false
         if controller.connected_ids.size() == 1:
@@ -3067,7 +3067,7 @@ func _try_reactor_coolant_action(peer_id: int, player: SpacePlayer3D) -> bool:
         else:
             stabilizer_ready = reactor_stabilizer != 0 and reactor_stabilizer != peer_id
         if not stabilizer_ready:
-            _feedback_peer(peer_id, "需要队友先稳定冷却接收座，再按 F 放入单元", Color("#ffd28a"), 1.2)
+            _feedback_peer(peer_id, "需要队友先稳定冷却接收座，再按 E 放入单元", Color("#ffd28a"), 1.2)
             return true
         challenge["coolant_loaded"] = true
         player.carrying = 0
@@ -3213,7 +3213,7 @@ func _handle_repair(peer_id: int, player: SpacePlayer3D) -> void:
         controller.show_feedback_rpc.rpc("模块 %d 尚未开放，请先完成前一段轨道任务" % module_id, Color("#ffd28a"), 1.0)
         return
     if kind == "freight":
-        _feedback_peer(peer_id, "按 F 接入磁力货箱，再搬到绿色插槽", Color("#ffd28a"), 1.0)
+        _feedback_peer(peer_id, "按 E 接入磁力货箱，再搬到绿色插槽", Color("#ffd28a"), 1.0)
         return
     if kind == "route":
         if String(module.get("mechanic", "switch")) == "beam":
@@ -3477,7 +3477,7 @@ func _try_freight_action(peer_id: int, player: SpacePlayer3D) -> bool:
     var support_position: Vector3 = Vector3(module["support_position"])
     if freight_carrier == peer_id:
         if controller._flat_distance(player.global_position, support_position) > MODULE_RADIUS:
-            _feedback_peer(peer_id, "把磁力货箱带到绿色插槽再按 F", Color("#ffd28a"), 1.0)
+            _feedback_peer(peer_id, "把磁力货箱带到绿色插槽再按 E", Color("#ffd28a"), 1.0)
             return true
         var stabilizer_ready: bool = false
         if controller.connected_ids.size() == 1:
@@ -3486,7 +3486,7 @@ func _try_freight_action(peer_id: int, player: SpacePlayer3D) -> bool:
             var stabilizer_peer: int = int(module.get("support_peer", 0))
             stabilizer_ready = stabilizer_peer != 0 and stabilizer_peer != peer_id and _operator_valid(module, "support_peer", support_position)
         if not stabilizer_ready:
-            _feedback_peer(peer_id, "需要队友先按 E 稳住绿色插槽，再按 F 放入货箱", Color("#ffd28a"), 1.2)
+            _feedback_peer(peer_id, "需要队友先按 E 稳住绿色插槽，再按 E 放入货箱", Color("#ffd28a"), 1.2)
             return true
         module["cargo_loaded"] = true
         module["mechanic_progress"] = 1.0
@@ -3895,7 +3895,7 @@ func get_hint(local: SpacePlayer3D) -> String:
     if local == null:
         return ""
     if local.downed:
-        return "你已倒地 · 等待队友按 R 救援"
+        return "你已倒地 · 等待队友按 E 救援"
     if extraction_enabled:
         return "全队进入绿色返航对接平台 · 保持 %.1f / 3 秒" % extraction_progress
     if checkpoint == 1 and not shortcut_unlocked:
@@ -3916,20 +3916,20 @@ func get_hint(local: SpacePlayer3D) -> String:
             if reactor_carrier == local.peer_id:
                 if controller._flat_distance(local.global_position, Vector3(challenge["coolant_socket_position"])) <= MODULE_RADIUS:
                     if controller.connected_ids.size() > 1 and reactor_stabilizer == 0:
-                        return "队友先按 E 稳定冷却接收座，再由你按 F"
-                    return "[F] 将冷却单元放入接收座"
+                        return "队友先按 E 稳定冷却接收座，再由你按 E"
+                    return "[E] 将冷却单元放入接收座"
                 return "携带冷却单元 · 护送到反应堆接收座"
             if reactor_carrier != 0:
                 return "冷却单元由队友护送 · 负责清理安保"
             if controller.connected_ids.size() > 1 and reactor_stabilizer == 0:
                 return "[E] 稳定冷却接收座 · 等待搬运者"
-            return "[F] 接入冷却单元 · 搬到接收座"
+            return "[E] 接入冷却单元 · 搬到接收座"
         var sequence: Array = challenge.get("sequence", [])
         var step: int = int(challenge.get("step", 0))
         var expected_kind: String = String(sequence[step]) if step < sequence.size() else ""
         return "[E] 反应堆%s · 节点 %d/%d" % [_reactor_kind_name(expected_kind), step + 1, sequence.size()]
     if core_node != null and core_node.visible and controller._flat_distance(local.global_position, core_node.global_position) <= CORE_RADIUS:
-        return "[F] 接入中央能源核心 · 需要两名搬运者"
+        return "[E] 接入中央能源核心 · 需要两名搬运者"
     var module: Dictionary = _current_module()
     if module.is_empty():
         return "轨道模块全部对接 · " + ("完成反应堆甲板任务" if reactor_deck_active else "前往中央能源核心")
@@ -3937,8 +3937,8 @@ func get_hint(local: SpacePlayer3D) -> String:
         if freight_carrier == local.peer_id:
             if controller._flat_distance(local.global_position, Vector3(module["support_position"])) <= MODULE_RADIUS:
                 if controller.connected_ids.size() > 1 and int(module.get("support_peer", 0)) == 0:
-                    return "队友先按 E 稳住绿色插槽，再由你按 F 放入货箱"
-                return "[F] 将磁力货箱插入绿色插槽"
+                    return "队友先按 E 稳住绿色插槽，再由你按 E 放入货箱"
+                return "[E] 将磁力货箱插入绿色插槽"
             return "携带磁力货箱 · 沿黄色标记前往绿色插槽"
         if freight_carrier != 0:
             return "磁力货箱由队友搬运 · 负责护送到绿色插槽"
@@ -3946,7 +3946,7 @@ func get_hint(local: SpacePlayer3D) -> String:
     if not target.is_empty():
         var kind: String = String(target["kind"])
         if kind == "freight":
-            return "[F] 接入磁力货箱 · 搬到绿色插槽"
+            return "[E] 接入磁力货箱 · 搬到绿色插槽"
         if String(module.get("mechanic", "switch")) == "beam" and (kind == "support" or kind == "route" or kind == "safety"):
             return "[E] 激活光束节点 %s · 必须按顺序" % _beam_node_name(kind)
         if kind == "route":
@@ -4025,9 +4025,9 @@ func update_hud(local: SpacePlayer3D) -> void:
     controller._vitals_label.text = "生命 %d/5   氧气 %d%%\n%s" % [
         local.health,
         int(local.oxygen),
-        "辅助无人机 %.0fs" % float(drone_state["remaining"]) if bool(drone_state["active"]) else "E 设备/稳定 · F 货箱/核心 · R 救援"
+        "辅助无人机 %.0fs" % float(drone_state["remaining"]) if bool(drone_state["active"]) else "E 设备/稳定 · E 货箱/核心 · E 救援"
     ]
-    controller._hint_label.text = "E 设备/路线/稳定    F 搬运货箱/连接核心    Z 无人机    空格 攻击    R 救援    Shift 加速"
+    controller._hint_label.text = "E 设备/路线/稳定    E 搬运货箱/连接核心    Z 无人机    左键 攻击 / 空格 跳跃    E 救援    Shift 加速"
     var warning: String = ""
     if storm_active:
         warning = "轨道压力中 · 低位快线过载更快 · 视线稳定"
@@ -4063,9 +4063,9 @@ func _guide_step(module: Dictionary) -> String:
     if mechanic == "freight" and not bool(module.get("cargo_loaded", false)):
         if freight_carrier != 0:
             if controller.connected_ids.size() > 1 and int(module.get("support_peer", 0)) == 0:
-                return "第 1 步：队友先按 E 稳住绿色插槽，搬运者再按 F"
+                return "第 1 步：队友先按 E 稳住绿色插槽，搬运者再按 E"
             return "第 1 步：把磁力货箱搬到绿色插槽"
-        return "第 1 步：先到橙色货箱按 F，再搬到绿色插槽"
+        return "第 1 步：先到橙色货箱按 E，再搬到绿色插槽"
     if mechanic == "beam" and int(module.get("beam_step", 0)) < 3:
         var beam_step: int = int(module.get("beam_step", 0))
         var beam_labels: Array[String] = ["A", "B", "C"]
