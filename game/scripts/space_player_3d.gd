@@ -27,6 +27,7 @@ const THIRD_PERSON_CAMERA_SMOOTHNESS := 20.0
 const THIRD_PERSON_PITCH_MIN := -0.58
 const THIRD_PERSON_PITCH_MAX := 0.30
 # 共振星洞窟安全范围：镜头超出这个盒子会穿进岩壁或洞顶。
+const RESONANCE_ZONE_CAMERA_RADIUS := 30.0
 const RESONANCE_CAMERA_BOUNDS_MIN := Vector3(-76.0, 2.4, -44.0)
 const RESONANCE_CAMERA_BOUNDS_MAX := Vector3(76.0, 22.0, 44.0)
 const RESONANCE_FALL_DURATION := 0.82
@@ -357,10 +358,20 @@ func _update_planet_camera(resonance: bool, delta: float = 0.016) -> void:
         _camera.fov = 62.0
         var target: Vector3 = global_position + Vector3(0.0, 0.9, 0.0)
         var desired_position: Vector3 = _third_person_camera_position(target)
-        desired_position = _resolve_third_person_camera_position(target, desired_position)
+        # Follow first, then constrain the desired point to the cave volume,
+        # and only then resolve solid geometry.  The previous order clamped a
+        # raycast result by room index, which could push the camera through a
+        # wall and pin it at the corridor entrance.
         desired_position = _clamp_resonance_camera(desired_position)
+        desired_position = _resolve_third_person_camera_position(target, desired_position)
         _camera.global_position = _camera.global_position.lerp(desired_position, 1.0 - exp(-THIRD_PERSON_CAMERA_SMOOTHNESS * delta))
         _camera.look_at(target, Vector3.UP)
+        var camera_controller := get_parent() as Main3D
+        var camera_stage: Node = null
+        if camera_controller != null:
+            camera_stage = camera_controller._resonance_stage
+        if _camera.current and camera_stage != null and camera_stage.has_method("update_camera_occlusion"):
+            camera_stage.update_camera_occlusion(_camera.global_position, target)
     elif _resonance_camera_mode:
         _resonance_camera_mode = false
         _camera.projection = Camera3D.PROJECTION_ORTHOGONAL
@@ -385,13 +396,32 @@ func _third_person_camera_position(target: Vector3) -> Vector3:
     return target - forward * horizontal_distance + right * THIRD_PERSON_SHOULDER + Vector3.UP * vertical_offset
 
 func _clamp_resonance_camera(position: Vector3) -> Vector3:
-    # 远景镜头不再依赖透明淡出，因此必须把镜头限制在洞窟体积内，
-    # 否则贴着岩壁站位时相机会穿到山体外面。
-    return Vector3(
+    # Broad fallback volume for non-cave resonance stages.
+    var clamped := Vector3(
         clampf(position.x, RESONANCE_CAMERA_BOUNDS_MIN.x, RESONANCE_CAMERA_BOUNDS_MAX.x),
         clampf(position.y, RESONANCE_CAMERA_BOUNDS_MIN.y, RESONANCE_CAMERA_BOUNDS_MAX.y),
         clampf(position.z, RESONANCE_CAMERA_BOUNDS_MIN.z, RESONANCE_CAMERA_BOUNDS_MAX.z)
     )
+    var controller := get_parent() as Main3D
+    if controller == null or controller._resonance_stage == null:
+        return clamped
+    var stage := controller._resonance_stage
+    if stage.has_method("clamp_cave_camera_position"):
+        # The cave chapter derives a continuous cross-section volume from the
+        # camera's own x.  It deliberately does not use cave_room/checkpoint:
+        # those values advance with tasks while the players are still standing
+        # in the previous room and must never yank the camera to another room.
+        return stage.clamp_cave_camera_position(clamped)
+    # Legacy factory stage: keep the per-zone radius envelope unchanged.
+    var focus: Vector3 = stage.zone_camera_focus()
+    if focus != Vector3.ZERO:
+        var offset := Vector2(clamped.x - focus.x, clamped.z - focus.z)
+        var distance := offset.length()
+        if distance > RESONANCE_ZONE_CAMERA_RADIUS:
+            var ratio := RESONANCE_ZONE_CAMERA_RADIUS / distance
+            clamped.x = focus.x + offset.x * ratio
+            clamped.z = focus.z + offset.y * ratio
+    return clamped
 
 func _resolve_third_person_camera_position(target: Vector3, desired_position: Vector3) -> Vector3:
     var controller := get_parent() as Main3D
@@ -405,7 +435,14 @@ func _resolve_third_person_camera_position(target: Vector3, desired_position: Ve
         return desired_position
     var hit_position: Vector3 = hit.get("position", desired_position)
     var direction := (desired_position - target).normalized()
-    var safe_distance := maxf(THIRD_PERSON_MIN_DISTANCE, target.distance_to(hit_position) - THIRD_PERSON_COLLISION_MARGIN)
+    # A collision may legitimately be closer than THIRD_PERSON_MIN_DISTANCE in
+    # a tight cave throat.  Never keep the old minimum by pushing the camera
+    # through the hit; instead pull in to the hit point with a small margin.
+    var hit_distance := target.distance_to(hit_position)
+    var safe_distance := minf(
+        target.distance_to(desired_position),
+        maxf(0.8, hit_distance - THIRD_PERSON_COLLISION_MARGIN)
+    )
     return target + direction * safe_distance
 
 func _choose_resonance_camera_position(target: Vector3) -> Vector3:

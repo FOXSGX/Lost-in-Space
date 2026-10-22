@@ -22,6 +22,10 @@ const RESONANCE_SUPPORT_GATE_PATH: String = "res://assets/resonance/models/reson
 const RESONANCE_MAINTENANCE_FACILITY_PATH: String = "res://assets/resonance/models/resonance_maintenance_facility.glb"
 const RESONANCE_CAVERN_SHELL_PATH: String = "res://assets/resonance/models/resonance_cavern_shell.glb"
 const RESONANCE_FACTORY_SPINE_PATH: String = "res://assets/resonance/models/resonance_factory_spine.glb"
+const CAVE_ROCK_WALL_PATH: String = "res://assets/resonance/models/cave_rock_wall.glb"
+const CAVE_STALACTITE_PATH: String = "res://assets/resonance/models/cave_stalactite.glb"
+const CAVE_ORE_PATH: String = "res://assets/resonance/models/cave_ore_crystal.glb"
+const CAVE_FLOOR_TILE_PATH: String = "res://assets/resonance/models/cave_floor_tile.glb"
 const RESONANCE_MASTER_SCENE_PATH: String = "res://assets/resonance/models/resonance_master_scene.glb"
 const USE_BLENDER_MASTER_VISUALS: bool = true
 const USE_RESONANCE_MODULE_HERO: bool = true
@@ -60,17 +64,17 @@ const SAFE_DECK_RECTS: Array[Rect2] = [
     Rect2(-44.0, 8.0, 18.0, 20.0),   # 第一节模块
     Rect2(-14.0, -10.0, 30.0, 24.0), # 升降分流区
     Rect2(22.0, -25.0, 27.0, 25.0),  # 第三节模块
-    Rect2(40.0, -29.0, 36.0, 32.0),  # 反应堆甲板与返航台
+    Rect2(40.0, -32.0, 36.0, 35.0),  # 反应堆甲板与返航台
     Rect2(14.0, 20.0, 14.0, 12.0),   # 支援安全闸
     Rect2(-69.0, -36.0, 20.0, 16.0), # 废弃维修仓
     Rect2(-53.0, -17.0, 14.0, 10.0)  # 中层观景桥西侧坡道落地平台
 ]
 const SAFE_PATH_SEGMENTS: Array = [
-    [Vector2(-24.0, 28.0), Vector2(-34.0, 18.0)],
-    [Vector2(-34.0, 18.0), Vector2(0.0, 2.0)],
-    [Vector2(0.0, 2.0), Vector2(34.0, -14.0)],
-    [Vector2(34.0, -14.0), Vector2(55.0, -17.0)],
-    [Vector2(55.0, -17.0), Vector2(66.0, -14.0)]
+    [Vector2(-24.0, 28.0), Vector2(-42.0, 28.0)],
+    [Vector2(-42.0, 28.0), Vector2(-52.0, 26.0)],
+    [Vector2(-52.0, 26.0), Vector2(0.0, 2.0)],
+    [Vector2(0.0, 2.0), Vector2(52.0, -22.0)],
+    [Vector2(52.0, -22.0), Vector2(60.0, -24.0)]
 ]
 const ELEVATED_PLATFORM_POINTS: Array[Vector2] = [
     Vector2(-28.0, -12.0),
@@ -299,9 +303,9 @@ func _build_modules_data() -> void:
     modules.clear()
     stations.clear()
     var positions: Array[Vector3] = [
-        Vector3(-34.0, 0.0, 18.0),
+        Vector3(-52.0, 0.0, 26.0),
         Vector3(0.0, 0.0, 2.0),
-        Vector3(34.0, 0.0, -14.0)
+        Vector3(52.0, 0.0, -22.0)
     ]
     var names: Array[String] = ["进料对接段", "升降分流段", "反应堆接驳段"]
     var route_labels: Array[String] = ["安全检修轨", "低位快线", "安全检修轨"]
@@ -576,6 +580,8 @@ func _build_world() -> void:
     _build_objective_guide()
     # 等所有交互锚点生成后再补视觉碰撞，保证碰撞盒不会盖住玩法位置。
     _build_visual_collision()
+    _build_zone_barriers()
+    _set_active_zone(0)
 
 func _build_environment() -> void:
     var environment: WorldEnvironment = WorldEnvironment.new()
@@ -3450,6 +3456,7 @@ func _reset_module(module: Dictionary, reason: String) -> void:
     _sync_now()
 
 func _on_module_docked(module_id: int) -> void:
+    _set_active_zone(module_id)
     var module: Dictionary = modules[module_id - 1]
     if String(drone_state.get("target", "")).begins_with("module:%d:" % module_id):
         drone_state["target"] = ""
@@ -4315,3 +4322,184 @@ func _clear_stage_enemies() -> void:
         if is_instance_valid(enemy):
             enemy.queue_free()
         controller.enemies.erase(id)
+
+# ── 分区包裹：每段区域被岩壁和闸门围住，镜头只留在当前区 ─────────
+const ZONE_GATE_WIDTH := 10.0
+const ZONE_CHAMBER_RADIUS := 34.0
+# 这些位置是跨区通道（坡道、桥、竖井），洞壁要给它们让路。
+const CAVE_CORRIDOR_KEEP: Array[Vector2] = [
+    Vector2(42.0, -26.0), Vector2(52.0, -26.0), Vector2(70.0, -26.0),
+    Vector2(-46.0, -12.0), Vector2(-30.0, -12.0), Vector2(34.0, -12.0),
+    Vector2(46.0, -8.0), Vector2(63.0, -14.0)
+]
+const ZONE_TUNNEL_WIDTH := 10.0
+const ZONE_TUNNEL_HEIGHT := 9.0
+const ZONE_WALL_SPAN := 62.0
+const ZONE_WALL_HEIGHT := 34.0
+const ZONE_WALL_THICKNESS := 6.0
+
+var active_zone: int = 0
+var zone_gates: Array[Node3D] = []
+
+func zone_anchor(index: int) -> Vector3:
+    if modules.is_empty():
+        return Vector3.ZERO
+    var clamped_index: int = clampi(index, 0, modules.size() - 1)
+    return Vector3(modules[clamped_index]["start_position"])
+
+func zone_camera_focus() -> Vector3:
+    return zone_anchor(active_zone)
+
+func _build_zone_barriers() -> void:
+    # 每个模块对应一座洞厅，相邻洞厅之间用隧洞连接：一步一步往里走。
+    for index in modules.size():
+        _build_cave_chamber(index, zone_anchor(index))
+    for index in maxi(modules.size() - 1, 0):
+        _build_cave_tunnel(index, zone_anchor(index), zone_anchor(index + 1))
+
+func _build_cave_chamber(index: int, anchor: Vector3) -> void:
+    var root: Node3D = Node3D.new()
+    root.name = "CaveChamber%d" % (index + 1)
+    root.position = Vector3(anchor.x, 0.0, anchor.z)
+    world_root.add_child(root)
+    var previous_direction: float = 0.0
+    var next_direction: float = 0.0
+    if index > 0:
+        var previous: Vector3 = zone_anchor(index - 1) - anchor
+        previous_direction = atan2(previous.x, previous.z)
+    if index < modules.size() - 1:
+        var next_point: Vector3 = zone_anchor(index + 1) - anchor
+        next_direction = atan2(next_point.x, next_point.z)
+    var segments: int = 20
+    for segment in segments:
+        var angle: float = TAU * float(segment) / float(segments)
+        # 朝相邻洞厅的方向留出洞口
+        if index > 0 and absf(wrapf(angle - previous_direction, -PI, PI)) < deg_to_rad(26.0):
+            continue
+        if index < modules.size() - 1 and absf(wrapf(angle - next_direction, -PI, PI)) < deg_to_rad(26.0):
+            continue
+        var radius: float = ZONE_CHAMBER_RADIUS + sin(float(segment) * 2.7) * 1.6
+        var point := Vector3(sin(angle) * radius, 0.0, cos(angle) * radius)
+        var blocked := false
+        for corridor in CAVE_CORRIDOR_KEEP:
+            if Vector2(point.x + anchor.x, point.z + anchor.z).distance_to(corridor) < 12.0:
+                blocked = true
+                break
+        if blocked:
+            continue
+        # 岩壁来自 Blender 资产（cave_rock_wall.glb），这里只负责摆放与碰撞。
+        var wall_root: Node3D = Node3D.new()
+        wall_root.name = "CaveWall%d_%d" % [index + 1, segment]
+        wall_root.position = point
+        wall_root.rotation.y = angle
+        root.add_child(wall_root)
+        _instance_cave_asset(CAVE_ROCK_WALL_PATH, wall_root, "RockWall", Vector3.ZERO, 0.0, 0.30 + float(segment % 3) * 0.04)
+        _add_zone_collider(root, Vector3(point.x, ZONE_WALL_HEIGHT * 0.5, point.z), Vector3(radius * 0.46, ZONE_WALL_HEIGHT, 3.2))
+        if segment % 4 == 1:
+            _instance_cave_asset(CAVE_STALACTITE_PATH, wall_root, "Stalactite",
+                Vector3(0.0, ZONE_WALL_HEIGHT - 5.0, 0.0), 0.0, 0.9)
+        if segment % 3 == 1:
+            var ore_position := Vector3(point.x * 0.86, 0.2, point.z * 0.86)
+            _instance_cave_asset(CAVE_ORE_PATH, root, "CaveOre%d_%d" % [index + 1, segment], ore_position, angle, 1.0)
+            var lamp: OmniLight3D = OmniLight3D.new()
+            lamp.name = "OreLight%d_%d" % [index + 1, segment]
+            lamp.position = ore_position + Vector3(0.0, 4.0, 0.0)
+            lamp.light_color = Color("#7fe6ff") if segment % 12 == 2 else Color("#ffb066")
+            lamp.light_energy = 3.4
+            lamp.omni_range = 22.0
+            root.add_child(lamp)
+    # 洞厅地面：只在甲板外围铺岩石瓦片，中央留给模块与站台
+    for tile_x in 5:
+        for tile_z in 5:
+            var tile_offset := Vector3(-20.0 + float(tile_x) * 10.0, 0.02, -20.0 + float(tile_z) * 10.0)
+            if Vector2(tile_offset.x, tile_offset.z).length() < 14.0:
+                continue
+            _instance_cave_asset(CAVE_FLOOR_TILE_PATH, root, "CaveFloor%d_%d_%d" % [index + 1, tile_x, tile_z],
+                tile_offset, 0.0, 0.5)
+
+func _build_cave_tunnel(index: int, from_point: Vector3, to_point: Vector3) -> void:
+    var direction: Vector3 = to_point - from_point
+    # 洞厅挨得很近时也要留一段隧洞，否则闸门无处安放。
+    var length: float = maxf(direction.length() - ZONE_CHAMBER_RADIUS * 2.0, 6.0)
+    var middle: Vector3 = (from_point + to_point) * 0.5
+    var yaw: float = atan2(direction.x, direction.z)
+    var root: Node3D = Node3D.new()
+    root.name = "CaveTunnel%d" % (index + 1)
+    root.position = Vector3(middle.x, 0.0, middle.z)
+    root.rotation.y = yaw
+    world_root.add_child(root)
+    for side in [-1.0, 1.0]:
+        var wall_point := Vector3(side * (ZONE_TUNNEL_WIDTH * 0.5 + 1.2), ZONE_TUNNEL_HEIGHT * 0.5, 0.0)
+        var wall: MeshInstance3D = _add_decor_box(
+            root,
+            wall_point,
+            Vector3(2.4, ZONE_TUNNEL_HEIGHT, length),
+            Color("#2c2224"),
+            Color("#5e3a30"),
+            0.12
+        )
+        wall.name = "TunnelWall%d%s" % [index + 1, "L" if side < 0.0 else "R"]
+        _add_zone_collider(root, wall_point, Vector3(2.4, ZONE_TUNNEL_HEIGHT, length))
+    # 隧洞顶：只封顶部，留出通行高度
+    var ceiling_point := Vector3(0.0, ZONE_TUNNEL_HEIGHT + 0.6, 0.0)
+    _add_decor_box(root, ceiling_point, Vector3(ZONE_TUNNEL_WIDTH + 4.8, 1.2, length), Color("#241b1d"), Color("#4a3026"), 0.05)
+    _add_zone_collider(root, ceiling_point, Vector3(ZONE_TUNNEL_WIDTH + 4.8, 1.2, length))
+    # 隧洞中段的闸门：模块对接后沉入地面
+    var gate: Node3D = Node3D.new()
+    gate.name = "ZoneGate%d" % (index + 1)
+    root.add_child(gate)
+    var door_point := Vector3(0.0, ZONE_TUNNEL_HEIGHT * 0.5, 0.0)
+    var door: MeshInstance3D = _add_decor_box(
+        gate,
+        door_point,
+        Vector3(ZONE_TUNNEL_WIDTH, ZONE_TUNNEL_HEIGHT, 1.6),
+        Color("#3a2a2a"),
+        Color("#ff8a4c"),
+        0.45
+    )
+    door.name = "ZoneDoor"
+    _add_zone_collider(gate, door_point, Vector3(ZONE_TUNNEL_WIDTH, ZONE_TUNNEL_HEIGHT, 1.6))
+    _add_decor_box(gate, Vector3(-ZONE_TUNNEL_WIDTH * 0.5 + 0.6, 1.2, -1.2), Vector3(1.0, 2.4, 0.5), Color("#593f3a"), Color("#ffbd65"), 0.7)
+    _add_decor_box(gate, Vector3(ZONE_TUNNEL_WIDTH * 0.5 - 0.6, 1.2, -1.2), Vector3(1.0, 2.4, 0.5), Color("#593f3a"), Color("#ffbd65"), 0.7)
+    gate.add_child(_label3d("区域闸门 %d\n模块对接后开启" % (index + 1), Vector3(0.0, ZONE_TUNNEL_HEIGHT - 1.4, -2.2), Color("#ffd2a8")))
+    zone_gates.append(gate)
+
+func _add_zone_collider(parent: Node3D, at: Vector3, size: Vector3) -> void:
+    var body: StaticBody3D = StaticBody3D.new()
+    body.collision_layer = 2
+    body.collision_mask = 1
+    var shape: CollisionShape3D = CollisionShape3D.new()
+    var box: BoxShape3D = BoxShape3D.new()
+    box.size = size
+    shape.shape = box
+    shape.position = at
+    body.add_child(shape)
+    parent.add_child(body)
+
+func _set_active_zone(index: int) -> void:
+    active_zone = clampi(index, 0, maxi(modules.size() - 1, 0))
+    # 已通过的边界把闸门收起来，形成通道
+    for gate_index in zone_gates.size():
+        if gate_index < active_zone:
+            var gate: Node3D = zone_gates[gate_index]
+            if is_instance_valid(gate) and gate.visible:
+                gate.visible = false
+                for body in gate.get_children():
+                    var static_body: StaticBody3D = body as StaticBody3D
+                    if static_body != null:
+                        static_body.collision_layer = 0
+func _instance_cave_asset(path: String, parent: Node3D, node_name: String, at: Vector3, yaw: float, scale_value: float) -> Node3D:
+    if not ResourceLoader.exists(path):
+        return null
+    var packed: PackedScene = ResourceLoader.load(path) as PackedScene
+    if packed == null:
+        return null
+    var instance: Node3D = packed.instantiate() as Node3D
+    if instance == null:
+        return null
+    instance.name = node_name
+    instance.position = at
+    instance.rotation.y = yaw
+    instance.scale = Vector3.ONE * scale_value
+    parent.add_child(instance)
+    return instance
