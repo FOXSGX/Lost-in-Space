@@ -133,9 +133,9 @@ const SIGNAL_LURE_DURATION := 8.0
 const SIGNAL_STORM_DURATION := 8.0
 const SIGNAL_COOLDOWN := 10.0
 const KEY_BINDINGS_PATH := "user://controls.cfg"
-const KEY_BINDING_ACTIONS := ["sprint", "toggle_map", "toggle_journal"]
-const KEY_BINDING_LABELS := {"sprint": "加速", "toggle_map": "地图", "toggle_journal": "日志"}
-const KEY_BINDING_DEFAULTS := {"sprint": KEY_SHIFT, "toggle_map": KEY_M, "toggle_journal": KEY_TAB}
+const KEY_BINDING_ACTIONS := ["sprint", "toggle_map", "toggle_journal", "toggle_equipment"]
+const KEY_BINDING_LABELS := {"sprint": "加速", "toggle_map": "地图", "toggle_journal": "日志", "toggle_equipment": "切换装备栏"}
+const KEY_BINDING_DEFAULTS := {"sprint": KEY_SHIFT, "toggle_map": KEY_M, "toggle_journal": KEY_J, "toggle_equipment": KEY_TAB}
 const LANDMARK_DATA := [
     {"id": "weather_station", "position": Vector2(-130.0, -88.0), "name": "旧气象站", "region": "西北·静默台地", "thought": "天线还在转，但所有记录都被人为删过。有人不想让后来者知道这里发生了什么。", "entry": "旧气象站的日志被分段擦除，只留下一个反复出现的坐标：冰层下方。"},
     {"id": "ice_rift", "position": Vector2(132.0, -94.0), "name": "冰层裂谷", "region": "东北·热脉裂谷", "thought": "裂缝里有热气，温度变化却像呼吸。这里的东西可能还活着。", "entry": "冰层裂谷下方存在规律性的热脉冲，间隔与信标失联时间一致。"},
@@ -318,6 +318,7 @@ var _electro_land_button: Button
 var _screen_view := "home"
 
 var _items: CrewItems3D
+var _health_hud: HealthHUD3D
 
 func _ready() -> void:
     _setup_key_bindings()
@@ -337,6 +338,9 @@ func _ready() -> void:
     _items = CrewItems3D.new()
     _items.name = "CrewItems"
     add_child(_items)
+    _health_hud = HealthHUD3D.new()
+    _health_hud.name = "HealthHUD"
+    add_child(_health_hud)
     _resonance_stage = RESONANCE_STAGE_SCENE.instantiate() as ResonanceStage3D
     add_child(_resonance_stage)
     _resonance_stage.setup(self)
@@ -383,6 +387,10 @@ func _input(event: InputEvent) -> void:
             _ship_session.close_panel()
         elif game_started or ship_active:
             _open_settings()
+        get_viewport().set_input_as_handled()
+        return
+    if _event_matches_action(key_event, "toggle_equipment") and (ship_active or game_started) and not minigame_active and not is_journal_visible() and not _items.choice_open and not _ship_session.has_panel():
+        handle_action(multiplayer.get_unique_id(), "toggle_equipment")
         get_viewport().set_input_as_handled()
         return
     if _event_matches_action(key_event, "toggle_journal"):
@@ -534,9 +542,9 @@ func _build_ui() -> void:
     vision_material.shader = vision_shader
     _vision_overlay.material = vision_material
     _game_layer.add_child(_vision_overlay)
-    _objective_panel = _panel(_game_layer, Vector2(24, 22), Vector2(410, 126), Color(0.025, 0.08, 0.13, 0.82), Color("#254d62"), 12)
+    _objective_panel = _panel(_game_layer, Vector2(24, 84), Vector2(410, 126), Color(0.025, 0.08, 0.13, 0.82), Color("#254d62"), 12)
     _progress_label = _ui_label(_objective_panel, "", Vector2(16, 12), Vector2(378, 102), 16, Color("#d9eef4"))
-    _side_quest_panel = _panel(_game_layer, Vector2(24, 158), Vector2(410, 76), Color(0.08, 0.055, 0.14, 0.88), Color("#9b79d6"), 12)
+    _side_quest_panel = _panel(_game_layer, Vector2(24, 220), Vector2(410, 76), Color(0.08, 0.055, 0.14, 0.88), Color("#9b79d6"), 12)
     _side_quest_label = _ui_label(_side_quest_panel, "", Vector2(14, 9), Vector2(382, 58), 15, Color("#eadfff"))
     _compass_panel = _panel(_game_layer, Vector2.ZERO, Vector2(390, 54), Color(0.025, 0.08, 0.13, 0.86), Color("#62e8dc"), 12)
     _place_hud(_compass_panel, Control.PRESET_CENTER_TOP, Vector2(-195, 22), Vector2(390, 54))
@@ -662,6 +670,8 @@ func _setup_key_bindings() -> void:
             code = int(config.get_value("keys", action, code))
         if code <= 0:
             code = int(KEY_BINDING_DEFAULTS[action])
+        if action == "toggle_journal" and code == KEY_TAB:
+            code = KEY_J
         _key_bindings[action] = code
         _apply_key_binding(action, code)
 
@@ -710,10 +720,10 @@ func _build_settings_ui() -> void:
     _settings_backdrop.process_mode = Node.PROCESS_MODE_ALWAYS
     _settings_backdrop.visible = false
     _settings_layer.add_child(_settings_backdrop)
-    _settings_panel = _panel(_settings_layer, Vector2.ZERO, Vector2(520, 350), Color(0.018, 0.065, 0.105, 0.98), Color("#62e8dc"), 16)
+    _settings_panel = _panel(_settings_layer, Vector2.ZERO, Vector2(520, 402), Color(0.018, 0.065, 0.105, 0.98), Color("#62e8dc"), 16)
     _settings_panel.name = "SettingsPanel"
     _settings_panel.process_mode = Node.PROCESS_MODE_ALWAYS
-    _place_hud(_settings_panel, Control.PRESET_CENTER, Vector2(-260, -175), Vector2(520, 350))
+    _place_hud(_settings_panel, Control.PRESET_CENTER, Vector2(-260, -201), Vector2(520, 402))
     var title := _ui_label(_settings_panel, "设置", Vector2(32, 18), Vector2(456, 38), 26, Color("#f1fbff"))
     title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
     var row_y := 72.0
@@ -725,11 +735,11 @@ func _build_settings_ui() -> void:
         button.tooltip_text = "点击改键"
         _settings_buttons[action] = button
         row_y += 52.0
-    _settings_status = _ui_label(_settings_panel, "", Vector2(40, 232), Vector2(440, 30), 15, Color("#ffcf7a"))
+    _settings_status = _ui_label(_settings_panel, "", Vector2(40, 284), Vector2(440, 30), 15, Color("#ffcf7a"))
     _settings_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
     _settings_status.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-    _ui_button(_settings_panel, "默认", Vector2(40, 282), Vector2(190, 44), _reset_key_bindings, false)
-    _ui_button(_settings_panel, "继续", Vector2(290, 282), Vector2(190, 44), _close_settings, true).tooltip_text = "Esc"
+    _ui_button(_settings_panel, "默认", Vector2(40, 334), Vector2(190, 44), _reset_key_bindings, false)
+    _ui_button(_settings_panel, "继续", Vector2(290, 334), Vector2(190, 44), _close_settings, true).tooltip_text = "Esc"
     _settings_panel.visible = false
     _refresh_settings_ui()
 
@@ -780,6 +790,8 @@ func _open_settings() -> void:
     if _settings_visible or not (game_started or ship_active):
         return
     _settings_visible = true
+    if _health_hud != null:
+        _health_hud.visible = false
     _rebinding_action = ""
     _settings_previous_paused = get_tree().paused
     _settings_previous_process_mode = process_mode
@@ -2882,7 +2894,7 @@ func _handle_side_quest_interaction(peer_id: int, player: SpacePlayer3D) -> bool
         var state := _ensure_side_quest_state(quest_id)
         if site_stage == 0:
             _discover_side_quest(quest_id)
-            _record_journal("支线已接取", "沿着地图上新出现的金色目标继续探索；按 Tab 查看当前目标。")
+            _record_journal("支线已接取", "沿着地图上新出现的金色目标继续探索；按 J 查看当前目标。")
             show_feedback_rpc.rpc("支线已接取：%s" % String(SIDE_QUEST_DATA[quest_id].get("title", quest_id)), Color("#f3c77b"), 2.5)
             _sync_state.rpc(_enemy_snapshot(), enemy_wave_index, enemy_wave_timer, activated_beacons, taken_crates, deposited_resources, _vitals_snapshot(), journal_entries, discovered_regions)
             return true
@@ -3574,7 +3586,7 @@ func spawn_goofy_effect_rpc(item_id: String, origin: Vector3, direction: Vector3
         _goofy_items.spawn_local(item_id, origin, direction, caster_id, effect_id, duration)
 
 func handle_action(peer_id: int, action: String) -> void:
-    if action in ["interact", "item_use", "item_drop", "item_scan", "slot_1", "slot_2", "slot_next", "slot_previous"] or action.begins_with("choice_"):
+    if action in ["interact", "item_use", "item_drop", "item_scan", "slot_1", "slot_2", "slot_next", "slot_previous", "toggle_equipment"] or action.begins_with("choice_"):
         if not is_host:
             request_action.rpc_id(1, peer_id, action)
         elif _items != null:
@@ -3691,7 +3703,7 @@ func handle_action(peer_id: int, action: String) -> void:
                 continue
             if _flat_distance(player.global_position, crates[id].global_position) <= _pickup_reach(peer_id) and _items.can_reach(player, crates[id].global_position, _pickup_reach(peer_id)):
                 taken_crates.append(id)
-                _items.add_item(peer_id, "battery", id)
+                _items.add_item(peer_id, "battery", id, {}, true)
                 player.carrying = 1
                 player.carrying_id = id
                 crates[id].visible = false
@@ -3708,7 +3720,7 @@ func handle_action(peer_id: int, action: String) -> void:
                 continue
             if _flat_distance(player.global_position, samples[id].global_position) <= RESOURCE_INTERACTION_RADIUS and _items.can_reach(player, samples[id].global_position, RESOURCE_INTERACTION_RADIUS):
                 taken_samples.append(id)
-                _items.add_item(peer_id, "sample", id)
+                _items.add_item(peer_id, "sample", id, {}, true)
                 player.carrying = 2
                 player.carrying_id = id
                 samples[id].visible = false
@@ -3954,6 +3966,8 @@ func request_attack(peer_id: int) -> void:
         attack_from_peer(peer_id)
 
 func damage_player(peer_id: int, amount: int) -> void:
+    if not is_host or amount <= 0:
+        return
     var player := players.get(peer_id) as SpacePlayer3D
     if player == null or player.downed:
         return
@@ -3965,18 +3979,20 @@ func damage_player(peer_id: int, amount: int) -> void:
     player.health = maxi(player.health - effective, 0)
     _spawn_particle_burst(player.global_position + Vector3(0, 0.8, 0), Color("#ff6b6b"), 8)
     camera_shake_rpc.rpc(peer_id, 0.13, 0.18)
-    floating_feedback_rpc.rpc(player.global_position + Vector3(0, 1.45, 0), "-%d HP" % effective, Color("#ff8f88"))
-    show_feedback_rpc.rpc("受伤 -%d HP" % effective, Color("#ff6b6b"), 0.8)
     if player.health <= 0:
         player.downed = true
         player.velocity = Vector3.ZERO
+        player.sprinting = false
+        player.stop_jet()
         if _resonance_stage != null:
             _resonance_stage.release_core_carrier(peer_id, player.global_position)
-        _set_status("玩家 %d 倒地，等待队友靠近按 R 救援。" % peer_id)
+        _set_status("玩家 %d 倒地。" % peer_id)
         _spawn_particle_burst(player.global_position + Vector3(0, 1.0, 0), Color("#ff3333"), 15)
         camera_shake_rpc.rpc(peer_id, 0.2, 0.28)
         show_feedback_rpc.rpc("倒地", Color("#ff3333"), 2.0)
-        _check_all_downed()
+        if game_started and not ship_active:
+            _check_all_downed()
+    sync_health_state.rpc(_vitals_snapshot(), ship_active)
 
 func kill_player_in_lava(peer_id: int) -> void:
     var player: SpacePlayer3D = players.get(peer_id) as SpacePlayer3D
@@ -3996,6 +4012,8 @@ func kill_player_in_lava(peer_id: int) -> void:
     show_feedback_rpc.rpc("熔岩阵亡：队友无法复活", Color("#ff4b3e"), 2.2)
     _spawn_particle_burst(player.global_position + Vector3(0.0, 0.4, 0.0), Color("#ff3b1f"), 18)
     _check_all_downed()
+    if is_host:
+        sync_health_state.rpc(_vitals_snapshot(), ship_active)
 
 func _tick_survival(delta: float) -> void:
     for player in players.values():
@@ -4250,8 +4268,12 @@ func _vitals_snapshot() -> Array:
     for id in players:
         var p := players[id] as SpacePlayer3D
         if p != null:
-            snapshot.append([id, p.health, p.oxygen, p.warmth, p.carrying, p.downed, p.carrying_id, p.sprinting, p.lava_dead, p.falling_to_lava])
+            snapshot.append([id, p.health, p.oxygen, p.warmth, p.carrying, p.downed, p.carrying_id, p.sprinting, p.lava_dead, p.falling_to_lava, p.capture_health_revision()])
     return snapshot
+
+@rpc("authority", "call_local", "reliable")
+func sync_health_state(snapshot: Array, in_ship: bool) -> void:
+    sync_vitals(snapshot, in_ship)
 
 @rpc("authority", "call_local", "unreliable")
 func sync_vitals(snapshot: Array, in_ship := false) -> void:
@@ -4262,15 +4284,22 @@ func sync_vitals(snapshot: Array, in_ship := false) -> void:
         var p := players.get(int(entry[0])) as SpacePlayer3D
         if p == null:
             continue
-        p.health = int(entry[1])
+        var revision: int = int(entry[10]) if entry.size() > 10 else 0
+        if revision >= p.health_revision:
+            p.health_revision = revision
+            p.health = int(entry[1])
+            p.downed = bool(entry[5])
         p.oxygen = float(entry[2])
         p.warmth = float(entry[3])
         p.carrying = int(entry[4])
-        p.downed = bool(entry[5])
         p.carrying_id = int(entry[6]) if entry.size() > 6 else 0
         p.sprinting = bool(entry[7]) if entry.size() > 7 else false
         p.lava_dead = bool(entry[8]) if entry.size() > 8 else false
         p.falling_to_lava = bool(entry[9]) if entry.size() > 9 and not p.lava_dead else false
+        if p.downed:
+            p.velocity = Vector3.ZERO
+            p.sprinting = false
+            p.stop_jet()
         if not is_host and _items != null and _items.bags.has(int(entry[0])):
             _items._sync_legacy(int(entry[0]))
 
@@ -4553,7 +4582,7 @@ func _update_hud() -> void:
             signal_text = "低频 · 诱导"
         _progress_label.text = "%s · %s\n调查 %d/%d · 信标 %d/%d · %s\n%s" % [phase, _region_hint(local.global_position), knowledge_count, REQUIRED_KNOWLEDGE.size(), activated_beacons.size(), beacon_positions.size(), signal_text, _next_objective_text()]
         _update_side_quest_tracker(local)
-        _vitals_label.text = "生命 %d/5   氧气 %d%%   体温 %d%%" % [local.health, int(local.oxygen), int(local.warmth * 100.0)]
+        _vitals_label.text = "氧气 %d%%   体温 %d%%" % [int(local.oxygen), int(local.warmth * 100.0)]
         if not carry_text.is_empty():
             _vitals_label.text += "\n" + carry_text
         var vital_color := Color("#ffad9f") if local.oxygen <= 25.0 or local.health <= 2 else Color("#d9eef4")
@@ -4604,7 +4633,7 @@ func _update_side_quest_tracker(local: SpacePlayer3D) -> void:
             selected_stage = int(state.get("stage", 1))
             break
     if selected_id.is_empty():
-        _side_quest_label.text = "支线探索\n金色线索按 E 接取 · 青色自由活动可随时完成 · Tab 查看日志"
+        _side_quest_label.text = "支线探索\n金色线索按 E 接取 · 青色自由活动可随时完成 · J 查看日志"
         return
     var steps: Array = SIDE_QUEST_STEPS[selected_id]
     selected_stage = clampi(selected_stage, 1, steps.size() - 1)

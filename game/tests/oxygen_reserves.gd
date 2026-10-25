@@ -74,6 +74,7 @@ func run() -> void:
     check(items.tank_oxygen(1) < before - 1.8, "第二次充气没有再次损耗瓶内氧气")
     var bag: Dictionary = items.ensure_bag(1)
     bag.jet_reserve = 0.0
+    bag.equipment[0].jet_reserve = 0.0
     bag.jet_idle = 0.0
     player.jet_charge = 0.0
     player.teleport_to(Vector3(0, 2.7, 5))
@@ -96,14 +97,18 @@ func run() -> void:
     await wait_charge()
     var reserve: float = items.jet_reserve(1)
     var old_oxygen: float = items.tank_oxygen(1)
+    # With no free equipment slot, a new bottle still hot-swaps the installed one.
+    bag.equipment[1] = {"kind": "thermal_suit"}
     items.add_item(1, "oxygen", -1, {"oxygen": 17.0})
     main.handle_action(1, "item_use")
     check(absf(items.tank_oxygen(1) - 17.0) < 0.01 and absf(float(items.selected(1).get("oxygen", -1)) - old_oxygen) < 0.01, "换瓶没有保留新旧瓶内余量")
-    check(absf(items.jet_reserve(1) - reserve) < 0.01, "换瓶免费重置喷气储备")
+    check(items.jet_reserve(1) <= reserve, "换瓶免费增加喷气储备")
     main.handle_action(1, "slot_2")
+    main.handle_action(1, "toggle_equipment")
     main.handle_action(1, "item_drop")
     await frames(140)
     check(items.drops.size() == 1 and absf(float(items.drops[0].oxygen) - 17.0) < 0.01, "卸下道具丢失氧气余量")
+    main.handle_action(1, "toggle_equipment")
     main.handle_action(1, "interact")
     main.handle_action(1, "item_use")
     check(absf(items.tank_oxygen(1) - 17.0) < 0.01, "放下再拾取免费补满了氧气瓶")

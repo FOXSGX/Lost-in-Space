@@ -28,7 +28,7 @@ func setup(id: int, player_count: int = 1) -> void:
     max_health = 4 + maxi((player_count - 1) / 2, 0)
     health = max_health
     move_speed = 3.05 + maxi(player_count - 1, 0) * 0.15
-    attack_damage = 2 if player_count >= 4 else 1
+    attack_damage = 1
     _build_visual()
 
 func _enter_tree() -> void:
@@ -216,7 +216,7 @@ func server_tick(delta: float, players: Dictionary, lure_position := Vector3.ZER
             attack_timer = 0.72 if storm_active else 1.0
             var controller := get_parent() as Main3D
             if controller != null:
-                controller.damage_player(nearest.peer_id, attack_damage + (1 if storm_active else 0))
+                controller.damage_player(nearest.peer_id, attack_damage)
     if Engine.get_physics_frames() % 2 == 0:
         sync_transform.rpc(global_position)
         return {"sync": true}

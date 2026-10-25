@@ -41,7 +41,6 @@ var save_path := SAVE_PATH
 var _layer: CanvasLayer
 var _ship_panel: Panel
 var _ship_title: Label
-var _crew_label: Label
 var _hint: Label
 var _hint_panel: Panel
 var _panel: Panel
@@ -54,6 +53,8 @@ var _notice_remaining := 0.0
 var _menu_environment: Environment
 var _menu_light_energy: Dictionary = {}
 var _aim_dot: Label
+var _computer: ShipComputerUI
+var _opened_computers: Dictionary = {}
 
 func _ready() -> void:
     controller = get_parent() as Main3D
@@ -77,9 +78,11 @@ func _build_ui() -> void:
     controller._place_hud(_aim_dot, Control.PRESET_CENTER, Vector2(-6, -10), Vector2(12, 20))
     _aim_dot.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
     _aim_dot.mouse_filter = Control.MOUSE_FILTER_IGNORE
-    _ship_panel = controller._panel(_layer, Vector2(22, 18), Vector2(288, 72), Color(0.12, 0.24, 0.29, 0.93), Color("#93c1be"), 18)
-    _ship_title = controller._ui_label(_ship_panel, "主舱", Vector2(16, 8), Vector2(256, 26), 20, Color("#f4ebd6"))
-    _crew_label = controller._ui_label(_ship_panel, "", Vector2(16, 38), Vector2(256, 24), 14, Color("#c8e1d6"))
+    _ship_panel = controller._panel(_layer, Vector2.ZERO, Vector2(112, 40), Color(0.06, 0.15, 0.18, 0.94), Color("#a2d8d3"), 14)
+    controller._place_hud(_ship_panel, Control.PRESET_CENTER_TOP, Vector2(-56, 18), Vector2(112, 40))
+    _ship_title = controller._ui_label(_ship_panel, "主舱", Vector2(8, 5), Vector2(96, 30), 20, Color("#f4ebd6"))
+    _ship_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+    _ship_title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
     _hint_panel = controller._panel(_layer, Vector2(225, 634), Vector2(830, 62), Color(0.12, 0.24, 0.29, 0.94), Color("#93c1be"), 18)
     _hint = controller._ui_label(_hint_panel, "", Vector2(16, 8), Vector2(800, 48), 17, Color("#e6f9ff"))
     _hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -89,22 +92,26 @@ func _build_ui() -> void:
     _title = controller._ui_label(_panel, "", Vector2(28, 22), Vector2(554, 42), 29, Color("#294d5b"))
     _body = controller._ui_label(_panel, "", Vector2(28, 80), Vector2(554, 100), 17, Color("#466b74"))
     _message = controller._ui_label(_panel, "", Vector2(28, 420), Vector2(300, 66), 15, Color("#a55e37"))
+    _computer = preload("res://scripts/ship_computer_ui.gd").new() as ShipComputerUI
+    _layer.add_child(_computer)
+    _computer.setup(self)
 
 func tick(delta: float) -> void:
     _notice_remaining = maxf(_notice_remaining - delta, 0.0)
     _layer.visible = active or controller.game_started
     _ship_panel.visible = active and controller._screen_view == "ship"
-    _ship_title.text = "主舱 · " + String({"demo": "霜烬星", "electromagnetic": "共振星", "ruin": "废墟星"}.get(selected_destination, "霜烬星")) if in_hub else "训练舱"
-    _hint_panel.visible = active and not _panel.visible and controller._screen_view == "ship"
+    _ship_title.text = "主舱" if in_hub else "训练舱"
+    _hint_panel.visible = active and not has_panel() and controller._screen_view == "ship"
     _aim_dot.visible = active and controller._screen_view == "ship" and not controller.market_visible and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED
     var peer_id := multiplayer.get_unique_id()
     if not active:
         return
-    _crew_label.text = "舰体 %d%% · 就位 %d/%d" % [hull, ready_peers.size(), controller.connected_ids.size()]
+    if _computer.visible:
+        _computer.refresh()
     var player := controller.players.get(peer_id) as SpacePlayer3D
     if player != null:
-        if not in_hub:
-            _crew_label.text = "推进练习 · %d/3" % clampi(int(training.get(peer_id, 0)) - 2, 0, 3)
+        _aim_dot.visible = _aim_dot.visible and not player.downed
+        _hint_panel.visible = _hint_panel.visible and not player.downed
         _hint.text = _notice if _notice_remaining > 0.0 and not _notice.is_empty() else interaction_hint(player.global_position)
         _hint_panel.visible = _hint_panel.visible and not _hint.text.is_empty()
         if _hint_panel.visible:
@@ -227,6 +234,7 @@ func leave() -> void:
     active = false
     _clear_departure()
     _exit_armed.clear()
+    _opened_computers.clear()
     _hub_training_arrival = false
     close_panel(false)
     if room != null:
@@ -240,6 +248,7 @@ func show_gameplay() -> void:
         return
     _facility = ""
     _panel.visible = false
+    _computer.visible = false
     controller._set_screen("ship")
     controller._menu_layer.visible = false
     var focused := get_viewport().gui_get_focus_owner()
@@ -247,13 +256,16 @@ func show_gameplay() -> void:
         focused.release_focus()
 
 func close_panel(resume := true) -> void:
+    if _computer.visible and active:
+        request("computer_close")
+    _computer.visible = false
     _panel.visible = false
     _facility = ""
     if active and resume:
         show_gameplay()
 
 func has_panel() -> bool:
-    return _panel.visible or (active and controller._screen_view in ["route", "trade"])
+    return _computer.visible or _panel.visible or (active and controller._screen_view in ["route", "trade"])
 
 func device_room() -> ShipDevices3D:
     return room.get_node_or_null("ShipDevices") as ShipDevices3D if room != null and in_hub else null
@@ -328,6 +340,27 @@ func _tick_launch(delta: float) -> void:
         broadcast()
 
 func _operate_device(peer_id: int, device: Dictionary) -> void:
+    if device.kind == "pilot":
+        _execute_device(peer_id, device)
+        return
+    _opened_computers[peer_id] = String(device.id)
+    if peer_id == 1:
+        show_computer(String(device.id))
+    else:
+        show_computer.rpc_id(peer_id, String(device.id))
+
+@rpc("authority", "call_remote", "reliable")
+func show_computer(id: String) -> void:
+    var device: Dictionary = ShipDevices3D.entry_for(id)
+    if not active or not in_hub or device.is_empty() or device.kind == "pilot":
+        return
+    _facility = id
+    _notice = ""
+    _panel.visible = false
+    _computer.open(device)
+    controller._set_screen("facility")
+
+func _execute_device(peer_id: int, device: Dictionary) -> void:
     var item: String = String(device.item)
     match String(device.kind):
         "pilot": _toggle_station(peer_id, int(item))
@@ -341,24 +374,36 @@ func _operate_device(peer_id: int, device: Dictionary) -> void:
         "craft": handle_request(peer_id, "craft", item)
         "toy": handle_request(peer_id, "assign_goofy", item)
         "gear":
+            var held: bool = controller._items.selected(peer_id).get("kind", "") == item
+            if has_gear(peer_id, item) and not held and controller._items.available_gear(item) <= 0:
+                return
+            if not controller._items.can_equip(peer_id, item):
+                _notify(peer_id, "装备栏已满 · Tab 选择装备后 G 卸下")
+                return
+            if held:
+                controller._items.equip_gear(peer_id, item, true)
+                return
             if int(gear_stock.get(item, 0)) <= 0:
                 _trade_at_market(peer_id, item)
-            if int(gear_stock.get(item, 0)) > 0:
-                gear_assignments[peer_id] = item
+            if controller._items.equip_gear(peer_id, item):
                 _notify(peer_id, "已装备 " + String(GEAR_NAMES[item]))
-                broadcast()
+            elif int(gear_stock.get(item, 0)) > 0:
+                _notify(peer_id, "装备正在使用或已放在地上")
         "skin": controller.request_purchase_skin(peer_id, item)
         "store":
+            if item in ["0", "1"]:
+                controller._items.ensure_bag(peer_id).selected = int(item)
             var held: Dictionary = controller._items.selected(peer_id)
             var kind: String = String(held.get("kind", ""))
-            if kind in ["medical", "oxygen"]:
-                if controller._items.remove_item(peer_id, kind):
+            if kind in ["medical", "oxygen"] or GOOFY_ITEMS.has(kind):
+                var amount: float = float(held.get("oxygen", 100.0))
+                controller._items.take_selected(peer_id)
+                if kind in ["medical", "oxygen"]:
                     stock[kind] = int(stock[kind]) + 1
-                    broadcast()
-                    _notify(peer_id, "已存回 " + String(ITEM_NAMES[kind]))
-            elif GOOFY_ITEMS.has(kind):
-                controller._items.remove_item(peer_id, kind)
+                    if kind == "oxygen":
+                        keep_oxygen_levels([amount])
                 broadcast()
+                _notify(peer_id, "已存回 " + controller._items.item_name(kind))
             else:
                 _notify(peer_id, "选中需要存回的物资")
         "mission": _show_for_peer(peer_id, "mission")
@@ -371,7 +416,7 @@ func _operate_device(peer_id: int, device: Dictionary) -> void:
                     leave_to_menu.rpc_id(peer_id)
             else:
                 _exit_armed[peer_id] = Time.get_ticks_msec() + 3000
-                _notify(peer_id, "再次 E 离开房间")
+                _notify(peer_id, "再次点击确认离开")
 
 @rpc("authority", "call_remote", "reliable")
 func leave_to_menu() -> void:
@@ -418,6 +463,30 @@ func handle_request(peer_id: int, action: String, item := "") -> void:
         return
     if not active:
         return
+    if action == "computer_close":
+        _opened_computers.erase(peer_id)
+        _exit_armed.erase(peer_id)
+        return
+    if action == "computer_action":
+        if not in_hub or player.downed:
+            return
+        var opened: String = String(_opened_computers.get(peer_id, ""))
+        var computers: ShipDevices3D = device_room()
+        var current: Dictionary = computers.nearby(peer_id) if computers != null else {}
+        if opened.is_empty() or current.get("id", "") != opened:
+            _notify(peer_id, "请靠近电脑")
+            return
+        var option: Dictionary = {}
+        for candidate: Dictionary in ShipDevices3D.options_for(current):
+            if candidate.id == item:
+                option = candidate
+                break
+        if current.kind == "store" and item in ["store_0", "store_1"]:
+            option = current.duplicate()
+            option.item = item.trim_prefix("store_")
+        if not option.is_empty():
+            _execute_device(peer_id, option)
+        return
     if action == "training_exit" and not in_hub:
         if controller._flat_distance(player.position, ShipTutorial3D.ENTRY_POINT) < 1.8:
             switch_area.rpc(true)
@@ -451,7 +520,7 @@ func handle_request(peer_id: int, action: String, item := "") -> void:
     if action in ["take", "store"] and near == "storage" and item in ["medical", "oxygen"]:
         var bag: Dictionary = packs.get(peer_id, {"medical": 0, "oxygen": 0})
         var held := int(bag.get(item, 0))
-        if action == "take" and int(stock[item]) > 0 and controller._items.add_item(peer_id, item, -1, {"oxygen": stock_oxygen_level()}):
+        if action == "take" and int(stock[item]) > 0 and controller._items.add_item(peer_id, item, -1, {"oxygen": stock_oxygen_level()}, true):
             stock[item] = int(stock[item]) - 1
             if item == "oxygen":
                 take_stock_oxygen_level()
@@ -470,7 +539,7 @@ func handle_request(peer_id: int, action: String, item := "") -> void:
             _notify(peer_id, "库存不足、物品栏已满（共 2 格），或没有可存回的物品。")
             return
         result_message = ("已领取 1 件" if action == "take" else "已存回 1 件") + String(ITEM_NAMES[item]) + "。"
-    elif action == "craft" and ITEM_COSTS.has(item) and near_device.get("kind", "") == "craft" and near_device.get("item", "") == item:
+    elif action == "craft" and ITEM_COSTS.has(item) and near_device.get("kind", "") == "craft":
         var cost := int(ITEM_COSTS[item])
         if credits < cost:
             _notify(peer_id, "回收点数不足。远征投送电池或冰样，返航后可用于制作。")
@@ -478,14 +547,16 @@ func handle_request(peer_id: int, action: String, item := "") -> void:
         credits -= cost
         stock[item] = int(stock[item]) + 1
         result_message = "已制作 1 件" + String(ITEM_NAMES[item]) + "，存入共享库存。"
-    elif action == "assign_goofy" and GOOFY_ITEMS.has(item) and near_device.get("kind", "") == "toy" and near_device.get("item", "") == item:
-        if not controller._items.add_item(peer_id, item):
+    elif action == "assign_goofy" and GOOFY_ITEMS.has(item) and near_device.get("kind", "") == "toy":
+        if not controller._items.add_item(peer_id, item, -1, {}, true):
             _notify(peer_id, "物品栏已满，先使用或放下一件物品。")
             return
         goofy_assignments[peer_id] = item
         result_message = "已将%s分配给玩家 %d；道具箱仍归全队共享，可随时改分配。" % [goofy_item_name(item), peer_id]
-    elif action == "assign_gear" and GEAR_ITEMS.has(item) and int(gear_stock.get(item, 0)) > 0 and near_device.get("kind", "") == "gear" and near_device.get("item", "") == item:
-        gear_assignments[peer_id] = item
+    elif action == "assign_gear" and GEAR_ITEMS.has(item) and int(gear_stock.get(item, 0)) > 0 and near_device.get("kind", "") == "gear":
+        if not controller._items.equip_gear(peer_id, item):
+            _notify(peer_id, "装备位不足或装备正在使用")
+            return
         result_message = "已将%s分配给玩家 %d；装备属于团队共享仓。" % [GEAR_NAMES[item], peer_id]
     elif action == "repair" and near_device.get("kind", "") == "repair":
         if hull >= 100 or int(stock["parts"]) <= 0:
@@ -538,7 +609,7 @@ func _trade_at_market(peer_id: int, item: String) -> void:
         return
     var devices: ShipDevices3D = device_room()
     var device: Dictionary = devices.nearby(peer_id) if devices != null else {}
-    if device.get("kind", "") != "gear" or device.get("item", "") != item:
+    if device.get("kind", "") != "gear" or not GEAR_COSTS.has(item):
         return
     if GEAR_COSTS.has(item):
         var cost := int(GEAR_COSTS[item])
@@ -548,9 +619,6 @@ func _trade_at_market(peer_id: int, item: String) -> void:
         credits -= cost
         gear_stock[item] = int(gear_stock.get(item, 0)) + 1
         _notify(peer_id, "星际集市交易完成：%s 已加入共享装备仓。" % GEAR_NAMES[item])
-    elif GOOFY_ITEMS.has(item):
-        goofy_stock[item] = int(goofy_stock.get(item, 0)) + 1
-        _notify(peer_id, "星际集市补充了%s；它可以在星球内无限连按。" % goofy_item_name(item))
     broadcast()
 
 func _show_for_peer(peer_id: int, facility: String) -> void:
@@ -563,13 +631,11 @@ func _show_for_peer(peer_id: int, facility: String) -> void:
 func show_facility(facility: String) -> void:
     if not active or facility != "mission":
         return
-    _facility = facility
-    _panel.visible = true
-    _notice = ""
-    controller._set_screen("facility")
-    _refresh_panel()
+    show_computer("mission")
 
 func _refresh_panel() -> void:
+    if _computer != null and _computer.visible:
+        _computer.refresh()
     if not _panel.visible:
         return
     _title.text = "航行记录"
@@ -604,6 +670,7 @@ func switch_area(to_hub: bool) -> void:
             else:
                 controller._items.start_training(peer_id)
     in_hub = to_hub
+    _opened_computers.clear()
     _hub_training_arrival = to_hub
     _notice = ""
     _notice_remaining = 0.0
@@ -668,6 +735,7 @@ func remove_peer(peer_id: int) -> void:
         training.erase(peer_id)
         _clear_departure()
         _exit_armed.erase(peer_id)
+        _opened_computers.erase(peer_id)
         broadcast()
 
 func settle(success: bool, value: int, report: String) -> void:
@@ -825,7 +893,7 @@ func gear_inventory_text() -> String:
     return "、".join(labels)
 
 func has_gear(peer_id: int, item_id: String) -> bool:
-    return String(gear_assignments.get(peer_id, "")) == item_id
+    return controller._items.equipment_index(peer_id, item_id) >= 0 if controller._items != null else false
 
 func planet_state(planet_id: String) -> Dictionary:
     var raw: Dictionary = planet_states.get(planet_id, {})

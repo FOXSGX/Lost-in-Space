@@ -32,18 +32,26 @@ class Probe extends Node:
     func operate(id: String, step: String) -> void:
         var peer_id: int = multiplayer.get_unique_id()
         var player: SpacePlayer3D = main.players[peer_id] as SpacePlayer3D
-        var point: Vector3 = ShipDevices3D.point_for(id)
+        var physical: String = "store" if id.begins_with("store_") else id
+        var point: Vector3 = ShipDevices3D.point_for(physical)
         point.y = 0
-        point.z += 1.6 if id.begins_with("pilot_") else 1.3
+        point += Vector3(1.6, 0, 0) if physical == "store" else Vector3(0, 0, 1.6 if id.begins_with("pilot_") else 1.3)
+        var yaw: float = PI / 2.0 if physical == "store" else 0.0
         player.teleport_to(point)
-        player._camera_yaw = 0.0
-        player._camera_yaw_target = 0.0
-        player.rotation.y = 0.0
+        player._camera_yaw = yaw
+        player._camera_yaw_target = yaw
+        player.rotation.y = yaw
         if role != 0:
-            player.sync_transform.rpc(player.position, false, 0.0)
+            player.sync_transform.rpc(player.position, false, yaw)
         await get_tree().create_timer(0.18).timeout
         main.handle_action(peer_id, "interact")
         await get_tree().create_timer(0.18).timeout
+        if not id.begins_with("pilot_"):
+            check(main._ship_session.has_panel(), "客户端未打开自己的电脑界面")
+            main._ship_session.request("computer_action", id)
+            await get_tree().create_timer(0.18).timeout
+            main._ship_session.close_panel()
+            await get_tree().create_timer(0.1).timeout
         if role == 0:
             acknowledgements[step + "0"] = true
         else:
@@ -68,7 +76,7 @@ class Probe extends Node:
     func verify_departure() -> void:
         check(await wait_for(func(): return main.game_started), "四人客户端没有自动登陆")
         check(main.players.size() == 4 and main.current_planet_id == "demo", "四人客户端登陆快照错误")
-        check(main._ship_session._layer.find_children("*", "BaseButton", true, false).is_empty(), "客户端仍有主舱按钮")
+        check(not main._ship_session.has_panel(), "登陆后仍显示电脑界面")
         acknowledge.rpc_id(1, role, "departed")
 
     @rpc("authority", "call_remote", "reliable")
@@ -98,6 +106,32 @@ class Probe extends Node:
         if peers.size() != 3:
             finish()
             return
+        main._ship_session.credits = 100
+        main.credits = 1300
+        main.sync_market_state.rpc(main.credits, main.owned_skins, main.player_skins)
+        main._ship_session.broadcast()
+        var medical: int = int(main._ship_session.stock.medical)
+        var oxygen: int = int(main._ship_session.stock.oxygen)
+        await send(1, "craft_medical", "craftmedical")
+        await send(2, "craft_oxygen", "craftoxygen")
+        check(main._ship_session.credits == 85 and main._ship_session.stock.medical == medical + 1 and main._ship_session.stock.oxygen == oxygen + 1, "客户端电脑制作扣款或库存错误")
+        await send(3, "gear_thermal_suit", "buygear")
+        await send(3, "gear_thermal_suit", "equipagain")
+        check(main._ship_session.credits == 40 and main._ship_session.gear_assignments.get(int(peers[3]), "") == "thermal_suit", "客户端购买装备或重复装备扣款错误")
+        await send(2, "gear_wide_scanner", "notenough")
+        check(main._ship_session.credits == 40 and main._ship_session.gear_stock.wide_scanner == 0, "客户端余额不足仍扣款或获得装备")
+        await send(1, "skin_gala", "buyskin")
+        check(main.credits == 100 and main.player_skins.get(int(peers[1]), "") == "gala", "客户端电脑换装未同步")
+        var first_client: int = int(peers[1])
+        main._items.add_item(first_client, "oxygen", -1, {"oxygen": 9.5})
+        main._items.add_item(first_client, "oxygen", -1, {"oxygen": 37.5})
+        main._ship_session.broadcast()
+        await send(1, "store_1", "returnsecond")
+        var kept: Dictionary = main._items.ensure_bag(first_client).slots[0]
+        check(is_equal_approx(float(kept.get("oxygen", -1)), 9.5) and main._ship_session.oxygen_levels.has(37.5), "客户端归还第二格移除了错误瓶子或丢失余量")
+        await send(1, "store_0", "returnfirst")
+        check(main._items.occupied(first_client) == 0 and main._ship_session.oxygen_levels.has(9.5), "客户端归还第一格未清空或丢失余量")
+        check(main._ship_session._opened_computers.is_empty(), "客户端关闭电脑后服务端会话未清理")
         await send(0, "pilot_0", "first")
         await send(1, "pilot_0", "occupied")
         check(main._ship_session.station_owners.get(0, 0) == 1 and main._ship_session.ready_peers.size() == 1, "他人抢占驾驶台")

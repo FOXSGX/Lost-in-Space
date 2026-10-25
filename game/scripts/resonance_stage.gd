@@ -4029,8 +4029,7 @@ func update_hud(local: SpacePlayer3D) -> void:
         _guide_step(module),
         _next_objective()
     ]
-    controller._vitals_label.text = "生命 %d/5   氧气 %d%%\n%s" % [
-        local.health,
+    controller._vitals_label.text = "氧气 %d%%\n%s" % [
         int(local.oxygen),
         "辅助无人机 %.0fs" % float(drone_state["remaining"]) if bool(drone_state["active"]) else "E 设备/稳定 · E 货箱/核心 · E 救援"
     ]

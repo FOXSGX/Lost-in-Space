@@ -33,7 +33,19 @@ const RESONANCE_CAMERA_BOUNDS_MAX := Vector3(76.0, 22.0, 44.0)
 const RESONANCE_FALL_DURATION := 0.82
 const RESONANCE_CHARACTER_VISUAL_SCALE := 0.78
 var peer_id := 1
-var health := 5
+const MAX_HEALTH: int = 5
+signal health_changed(current: int)
+
+var health: int = MAX_HEALTH:
+    set(value):
+        var next: int = clampi(value, 0, MAX_HEALTH)
+        if health == next:
+            return
+        health = next
+        health_changed.emit(health)
+var health_revision: int = 0
+var _captured_health: Vector2i = Vector2i(MAX_HEALTH, 0)
+var _ship_eye_height: float = SHIP_EYE_HEIGHT
 var oxygen := 100.0
 var warmth := 1.0
 var carrying := 0
@@ -80,6 +92,7 @@ var jet_button_held: bool = false
 var _jump_held: float = 0.0
 var _jet_pack: Node3D
 var _jet_flames: Array[MeshInstance3D] = []
+var _jet_bottles: Array[ItemProp3D] = []
 var _jet_audio: AudioStreamPlayer3D
 
 func setup(id: int, color: Color) -> void:
@@ -216,8 +229,9 @@ func _update_ship_first_person(delta: float) -> void:
     _camera_yaw = lerp_angle(_camera_yaw, _camera_yaw_target, 1.0 - exp(-THIRD_PERSON_ROTATION_SMOOTHNESS * delta))
     _camera_pitch = lerpf(_camera_pitch, _camera_pitch_target, 1.0 - exp(-THIRD_PERSON_ROTATION_SMOOTHNESS * delta))
     rotation.y = _camera_yaw
-    _camera.global_position = global_position + Vector3.UP * SHIP_EYE_HEIGHT
-    _camera.global_rotation = Vector3(-_camera_pitch, _camera_yaw, 0.0)
+    _ship_eye_height = lerpf(_ship_eye_height, 0.55 if downed else SHIP_EYE_HEIGHT, 1.0 - exp(-8.0 * delta))
+    _camera.global_position = global_position + Vector3.UP * _ship_eye_height
+    _camera.global_rotation = Vector3(-_camera_pitch, _camera_yaw, -0.12 if downed else 0.0)
     refresh_ship_mouse_mode()
 
 func _apply_mouse_look(relative: Vector2) -> void:
@@ -527,6 +541,12 @@ func begin_scan(startup: float, cooldown: float, origin: Vector3) -> void:
     velocity = Vector3.ZERO
 
 func _physics_process(delta: float) -> void:
+    if downed or lava_dead:
+        stop_jet()
+        sprinting = false
+        velocity = Vector3.ZERO
+        _has_target_position = false
+        return
     if is_multiplayer_authority():
         jet_active = false
     scan_lock_remaining = maxf(scan_lock_remaining - delta, 0.0)
@@ -657,6 +677,12 @@ func _spawn_footstep_particle() -> void:
 
 @rpc("authority", "unreliable_ordered", "call_remote")
 func sync_transform(next_position: Vector3, next_sprinting: bool = false, next_rotation_y: float = -999.0, next_falling: bool = false, view_pitch: float = 0.0, next_jet: bool = false, next_jet_held: bool = false) -> void:
+    if downed or lava_dead:
+        stop_jet()
+        sprinting = false
+        velocity = Vector3.ZERO
+        _has_target_position = false
+        return
     var controller: Main3D = get_parent() as Main3D
     jet_button_held = next_jet_held
     jet_active = next_jet and jet_charge > 0.0 and not downed and not lava_dead and controller != null and controller._items.has_jet(peer_id)
@@ -721,13 +747,20 @@ func _jump_velocity(current: float, delta: float) -> float:
     if jet_active:
         next = minf(next + JET_ACCELERATION * delta, JET_SPEED)
         if not controller.is_host:
-            jet_charge = maxf(jet_charge - delta / JET_DURATION, 0.0)
+            jet_charge = controller._items.spend_jet_reserve(peer_id, delta)
     return next
 
 func stop_jet() -> void:
     jet_active = false
     jet_button_held = false
     _jump_held = 0.0
+
+func capture_health_revision() -> int:
+    var state: Vector2i = Vector2i(health, int(downed))
+    if state != _captured_health:
+        health_revision += 1
+        _captured_health = state
+    return health_revision
 
 func _update_jet_visual(controller: Main3D) -> void:
     var mounted: bool = controller != null and controller._items != null and controller._items.has_jet(peer_id)
@@ -736,8 +769,10 @@ func _update_jet_visual(controller: Main3D) -> void:
         _jet_pack.name = "SuitOxygenPack"
         _jet_pack.position = Vector3(0, 0.55, 0.4)
         add_child(_jet_pack)
-        var bottle: ItemProp3D = ItemProp3D.create("oxygen")
-        _jet_pack.add_child(bottle)
+        for index: int in CrewItems3D.EQUIPMENT_CAPACITY:
+            var bottle: ItemProp3D = ItemProp3D.create("oxygen")
+            _jet_pack.add_child(bottle)
+            _jet_bottles.append(bottle)
         for side: float in [-0.13, 0.13]:
             var flame: MeshInstance3D = MeshInstance3D.new()
             var cone: CylinderMesh = CylinderMesh.new()
@@ -756,6 +791,10 @@ func _update_jet_visual(controller: Main3D) -> void:
         _jet_pack.add_child(_jet_audio)
     if is_instance_valid(_jet_pack):
         _jet_pack.visible = mounted
+        var count: int = controller._items.oxygen_count(peer_id) if mounted else 0
+        for index: int in _jet_bottles.size():
+            _jet_bottles[index].visible = index < count
+            _jet_bottles[index].position.x = (index - 0.5) * 0.31 if count == 2 else 0.0
         var firing: bool = mounted and jet_active and not downed and not lava_dead
         for flame: MeshInstance3D in _jet_flames:
             flame.visible = firing

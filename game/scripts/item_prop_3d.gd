@@ -23,7 +23,18 @@ func _build(kind: String) -> void:
     else:
         _native(WIDE_CASE if kind == "battery" else CASE, Vector3(0.42, 0.38, 0.3))
         _detail(Vector3(0, 0.24, 0.155), Vector3(0.28, 0.2, 0.025), color)
-        if kind == "medical":
+        if ShipSession3D.GEAR_ITEMS.has(kind):
+            var badge: MeshInstance3D = MeshInstance3D.new()
+            var face: QuadMesh = QuadMesh.new()
+            face.size = Vector2(0.29, 0.27)
+            badge.mesh = face
+            badge.position = Vector3(0, 0.24, 0.176)
+            var picture: StandardMaterial3D = _material(Color.WHITE)
+            picture.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+            picture.albedo_texture = CrewItems3D.ICONS[kind] as Texture2D
+            badge.material_override = picture
+            add_child(badge)
+        elif kind == "medical":
             _detail(Vector3(0, 0.24, 0.174), Vector3(0.17, 0.045, 0.018), Color.WHITE)
             _detail(Vector3(0, 0.24, 0.174), Vector3(0.045, 0.15, 0.018), Color.WHITE)
         elif kind == "battery":

@@ -25,6 +25,12 @@ func stand(id: String) -> void:
     await physics_frame
     await physics_frame
 
+func confirm(option_id: String) -> void:
+    main.handle_action(1, "interact")
+    check(main._ship_session.has_panel(), "电脑没有先打开界面")
+    main._ship_session.request("computer_action", option_id)
+    main._ship_session.close_panel()
+
 func run() -> void:
     main = load("res://scenes/main_3d.tscn").instantiate() as Main3D
     root.add_child(main)
@@ -36,7 +42,7 @@ func run() -> void:
     var ship: ShipSession3D = main._ship_session
     var player: SpacePlayer3D = main.players[1] as SpacePlayer3D
     var devices: ShipDevices3D = ship.device_room()
-    check(devices != null and devices.screens.size() == 28, "实体设备或屏幕缺失")
+    check(devices != null and devices.screens.size() == 14, "功能区电脑或屏幕缺失")
     check(ship._layer.find_children("*", "BaseButton", true, false).is_empty(), "主舱仍依赖鼠标按钮")
     var count: int = 0
     for device: Dictionary in devices.devices:
@@ -66,29 +72,29 @@ func run() -> void:
     await stand("pilot_1")
     main.handle_action(1, "interact")
     await stand("route_electromagnetic")
-    main.handle_action(1, "interact")
+    confirm("route_electromagnetic")
     check(ship.selected_destination == "electromagnetic" and ship.station_owners.is_empty(), "换航线未取消旧就位")
     await stand("route_demo")
-    main.handle_action(1, "interact")
+    confirm("route_demo")
     ship.credits = 100
     await stand("craft_oxygen")
     var stock: int = int(ship.stock.oxygen)
-    main.handle_action(1, "interact")
+    confirm("craft_oxygen")
     check(ship.credits == 95 and ship.stock.oxygen == stock + 1, "实体制作机未按原费用入库")
     await stand("gear_thermal_suit")
-    main.handle_action(1, "interact")
+    confirm("gear_thermal_suit")
     check(ship.credits == 50 and ship.gear_assignments.get(1, "") == "thermal_suit", "实体集市未购买并装备")
-    main.handle_action(1, "interact")
+    confirm("gear_thermal_suit")
     check(ship.credits == 50, "已购装备重复扣费")
     await stand("refill")
     player.health = 2
     player.oxygen = 20.0
-    main.handle_action(1, "interact")
-    check(player.health == 5 and player.oxygen == 100.0 and not ship.has_panel(), "补给设备没有直接恢复")
+    confirm("refill")
+    check(player.health == 5 and player.oxygen == 100.0 and not ship.has_panel(), "补给电脑确认后未恢复")
     await stand("repair")
     var parts: int = int(ship.stock.parts)
-    main.handle_action(1, "interact")
-    check(ship.hull == 100 and ship.stock.parts == parts - 1 and not ship.has_panel(), "维修设备未直接执行")
+    confirm("repair")
+    check(ship.hull == 100 and ship.stock.parts == parts - 1 and not ship.has_panel(), "维修电脑确认后未执行")
     await stand("pilot_3")
     main.handle_action(1, "interact")
     ship.tick(0.0)

@@ -14,6 +14,8 @@ const REPAIR := Vector3(16.6, 0.0, -2.98)
 const SUPPLY := Vector3(16.75, 0.0, 10.18)
 const MISSION := Vector3(-16.7, 0.0, -9.5)
 const AIRLOCK := Vector3(0.0, 0.0, 14.15)
+const CREW_BERTH_Z: Array[float] = [8.0, -6.5]
+const CREW_SIDE_TABLE_Z: float = 8.0
 
 
 func _ready() -> void:
@@ -59,19 +61,21 @@ func _ready() -> void:
             var corner := _solid("CornerHull", Vector3(0.6, 1.1, 4.67), Vector3(side_x * 19.35, 0.55, side_z * 14.85))
             corner.rotation_degrees.y = -45.0 * side_x * side_z
     _solid("BridgeCollision", Vector3(15.8, 0.66, 2.95), Vector3(0, 0.27, -14.38))
-    _solid("CargoShelvesCollision", Vector3(1.45, 1.8, 6.15), Vector3(-18.3, 0.9, 4.5))
-    _solid("CargoCrateOneCollision", Vector3(0.86, 0.66, 0.84), Vector3(-16.88, 0.33, 3.4))
-    _solid("CargoCrateTwoCollision", Vector3(0.86, 0.66, 0.84), Vector3(-16.88, 0.33, 5.45))
+    # Match the empty rack frame so the shelf supplies remain reachable.
+    _solid("CargoRackBackCollision", Vector3(0.12, 1.85, 6.1), Vector3(-18.8, 1.0, 4.5))
+    for shelf_y: float in [0.06, 0.97]:
+        _solid("CargoShelfCollision", Vector3(1.35, 0.09, 6.1), Vector3(-18.3, shelf_y, 4.5))
+    for post_z: float in [1.48, 7.5]:
+        for post_x: float in [-18.88, -17.72]:
+            _solid("CargoRackPostCollision", Vector3(0.09, 1.9, 0.09), Vector3(post_x, 0.95, post_z))
     _solid("RepairBenchCollision", Vector3(2.15, 1.04, 1.09), Vector3(18.08, 0.52, -2.98))
     _solid("RechargeCollision", Vector3(0.96, 1.8, 0.96), Vector3(18.51, 0.9, 10.26))
-    _solid("RechargeControlCollision", Vector3(0.4, 1.03, 0.42), Vector3(17.37, 0.515, 10.25))
-    _solid("MissionTerminalCollision", Vector3(0.55, 1.15, 0.6), Vector3(-17.53, 0.57, -10.09))
     _solid("StarMapCollision", Vector3(2.9, 1.1, 2.9), Vector3(0, 0.55, -0.34))
     for side in [-1, 1]:
-        for seat_z in [5.2, -4.8]:
+        for seat_z: float in CREW_BERTH_Z:
             _solid("CrewBench", Vector3(3.35, 1.35, 1.15), Vector3(side * 8.7, 0.675, seat_z))
         _solid("Planter", Vector3(1.16, 1.0, 1.16), Vector3(side * 11.7, 0.5, 0.7))
-        _solid("SideTable", Vector3(1.1, 0.8, 1.1), Vector3(side * 11.3, 0.4, 5.2))
+        _solid("SideTable", Vector3(1.1, 0.8, 1.1), Vector3(side * 11.3, 0.4, CREW_SIDE_TABLE_Z))
     _deck_label("归 航 号", Vector3(0, 0.03, 10.4), 58, Color("#dae6db"))
     _deck_label("01  舰 桥", Vector3(0, 0.03, -10.6), 36, Color("#c1e1d6"))
     _deck_label("02  储 物", Vector3(-14.8, 0.03, 4.45), 36, Color("#eed6ad"), 90.0)

@@ -11,32 +11,50 @@ static func catalog() -> Array:
     var entries: Array = []
     for index: int in 4:
         entries.append({"id": "pilot_%d" % index, "kind": "pilot", "item": str(index), "position": Vector3(PILOT_X[index], 0.61, -13.8), "title": "驾驶 %02d" % (index + 1), "existing": true, "radius": 2.35})
-    var routes: Array[String] = ["demo", "electromagnetic", "ruin"]
-    var titles: Array[String] = ["霜烬星", "共振星", "废墟星"]
-    var points: Array[Vector3] = [Vector3(-2.05, 0, 1.75), Vector3(0, 0, 1.75), Vector3(2.05, 0, 1.75)]
-    for index: int in 3:
-        entries.append({"id": "route_" + routes[index], "kind": "route", "item": routes[index], "position": points[index], "title": titles[index]})
+    entries.append({"id": "routes", "kind": "route", "item": "", "position": Vector3(0, 0, 1.75), "title": "航线"})
     entries.append({"id": "repair", "kind": "repair", "item": "", "position": ShipHub3D.REPAIR, "title": "舰体维修"})
     entries.append({"id": "refill", "kind": "refill", "item": "", "position": ShipHub3D.SUPPLY, "title": "生命补给"})
-    entries.append({"id": "store", "kind": "store", "item": "", "position": Vector3(-15.0, 0, 7.3), "title": "物资归还"})
+    entries.append({"id": "store", "kind": "store", "item": "", "position": Vector3(-18.85, 0, 8.8), "yaw": PI / 2.0, "title": "物资归还"})
     entries.append({"id": "mission", "kind": "mission", "item": "", "position": ShipHub3D.MISSION, "title": "航行记录"})
     entries.append({"id": "exit", "kind": "exit", "item": "", "position": Vector3(-3.8, 0, 13.7), "title": "离舰终端"})
-    for index: int in 3:
-        var kind: String = ["medical", "oxygen", "parts"][index]
-        entries.append({"id": "craft_" + kind, "kind": "craft", "item": kind, "position": Vector3(14.4 + index * 2.0, 0, -6.2), "title": ShipSession3D.ITEM_NAMES[kind]})
-        var gear: String = ShipSession3D.GEAR_ITEMS[index]
-        entries.append({"id": "gear_" + gear, "kind": "gear", "item": gear, "position": Vector3(-16.5 + index * 2.1, 0, -12.0), "title": ShipSession3D.GEAR_NAMES[gear]})
-    for index: int in 5:
-        var toy: String = ShipSession3D.GOOFY_ITEMS[index]
-        entries.append({"id": "toy_" + toy, "kind": "toy", "item": toy, "position": Vector3(14.2, 0, 1.0 + index * 1.7), "title": CrewItems3D.NAMES[toy]})
-        var skin: Dictionary = Main3D.SKIN_CATALOG[index]
-        entries.append({"id": "skin_" + String(skin.id), "kind": "skin", "item": skin.id, "position": Vector3(10.0 + index * 2.0, 0, 13.8), "title": String(skin.name).split(" · ")[0]})
+    entries.append({"id": "craft", "kind": "craft", "item": "", "position": Vector3(16.4, 0, -6.2), "title": "制作"})
+    entries.append({"id": "gear", "kind": "gear", "item": "", "position": Vector3(-14.4, 0, -12.0), "title": "装备"})
+    entries.append({"id": "toy", "kind": "toy", "item": "", "position": Vector3(14.2, 0, 4.4), "title": "道具"})
+    entries.append({"id": "skin", "kind": "skin", "item": "", "position": Vector3(14.0, 0, 13.8), "title": "换装"})
     return entries
+
+static func options_for(device: Dictionary) -> Array:
+    var result: Array = []
+    var kind: String = String(device.kind)
+    var items: Array = []
+    match kind:
+        "route": items = ["demo", "electromagnetic", "ruin"]
+        "craft": items = ["medical", "oxygen", "parts"]
+        "gear": items = ShipSession3D.GEAR_ITEMS
+        "toy": items = ShipSession3D.GOOFY_ITEMS
+        "skin":
+            for skin: Dictionary in Main3D.SKIN_CATALOG:
+                result.append({"id": "skin_" + String(skin.id), "kind": kind, "item": skin.id, "title": String(skin.name).split(" · ")[0]})
+            return result
+        _: return [device.duplicate()]
+    for value: String in items:
+        var title: String = String({"demo": "霜烬星", "electromagnetic": "共振星", "ruin": "废墟星"}.get(value, ShipSession3D.ITEM_NAMES.get(value, ShipSession3D.GEAR_NAMES.get(value, CrewItems3D.NAMES.get(value, value)))))
+        result.append({"id": kind + "_" + value, "kind": kind, "item": value, "title": title})
+    return result
+
+static func entry_for(id: String) -> Dictionary:
+    for device: Dictionary in catalog():
+        if device.id == id:
+            return device
+    return {}
 
 static func point_for(id: String) -> Vector3:
     for device: Dictionary in catalog():
         if device.id == id:
             return device.position
+        for option: Dictionary in options_for(device):
+            if option.id == id:
+                return device.position
     return Vector3.INF
 
 func _ready() -> void:
@@ -65,53 +83,25 @@ func hint(peer_id: int, device: Dictionary) -> String:
         if owner == peer_id:
             return "E 取消就位" if session.launch_remaining < 0 else "出发 %d · E 取消" % ceili(session.launch_remaining)
         return "已占用" if owner != 0 else "E 就位"
-    if kind == "route":
-        return "已选 " + String(device.title) if session.selected_destination == device.item else "E 前往 " + String(device.title)
-    if kind == "gear":
-        return "E 装备 " + String(device.title) if int(session.gear_stock.get(device.item, 0)) > 0 else "E 购买 %s · %d" % [device.title, int(ShipSession3D.GEAR_COSTS[device.item])]
-    if kind == "craft":
-        return "E 制作 %s · %d" % [device.title, int(ShipSession3D.ITEM_COSTS[device.item])]
-    if kind == "skin":
-        return "E 换装 " + String(device.title) if session.controller.owns_skin(device.item) else "E 购买 %s · %d 星币" % [device.title, session.controller.skin_price(device.item)]
-    return {"repair": "E 维修", "refill": "E 恢复", "store": "E 存回所选物资", "mission": "E 查看记录", "exit": "E 离开房间", "toy": "E 领取 " + String(device.title)}.get(kind, "E 操作")
+    return "E 打开 · " + String(device.title)
 
 func _process(_delta: float) -> void:
     if session == null:
         return
     for device: Dictionary in devices:
-        var state: String = "E 操作"
-        var lit: bool = false
-        match String(device.kind):
-            "pilot":
-                var owner: int = int(session.station_owners.get(int(device.item), 0))
-                state = "待机" if owner == 0 else "船员 %d · 就位" % (session.controller.connected_ids.find(owner) + 1)
-                lit = owner != 0
-            "route":
-                lit = session.selected_destination == device.item
-                state = "已选择" if lit else "E 选择"
-            "craft":
-                state = "%d 回收点" % int(ShipSession3D.ITEM_COSTS[device.item])
-            "gear":
-                lit = int(session.gear_stock.get(device.item, 0)) > 0
-                state = "E 装备" if lit else "%d 回收点" % int(ShipSession3D.GEAR_COSTS[device.item])
-            "skin":
-                lit = session.controller.owns_skin(device.item)
-                state = "E 换装" if lit else "%d 星币" % session.controller.skin_price(device.item)
-            "repair":
-                state = "%d%% · 零件 %d" % [session.hull, session.stock.parts]
-            "refill": state = "E 恢复"
-            "store": state = "E 存回"
-            "mission": state = "E 查看"
-            "exit": state = "E 离舰"
-            "toy": state = "E 领取"
+        if device.kind != "pilot":
+            continue
+        var owner: int = int(session.station_owners.get(int(device.item), 0))
+        var state: String = "待机" if owner == 0 else "船员 %d · 就位" % (session.controller.connected_ids.find(owner) + 1)
         var label: Label3D = screens[device.id] as Label3D
         label.text = String(device.title) + "\n" + state
-        label.modulate = Color("#9af0cc") if lit else Color("#c2e0e5")
+        label.modulate = Color("#9af0cc") if owner != 0 else Color("#c2e0e5")
 
 func _build(device: Dictionary) -> void:
     var terminal: Node3D = Node3D.new()
     terminal.name = String(device.id)
     terminal.position = device.position
+    terminal.rotation.y = float(device.get("yaw", 0.0))
     add_child(terminal)
     if not bool(device.get("existing", false)):
         var model: Node3D = CONSOLE.instantiate() as Node3D
@@ -133,13 +123,27 @@ func _build(device: Dictionary) -> void:
         terminal.add_child(body)
     var monitor: MeshInstance3D = MeshInstance3D.new()
     var mesh: BoxMesh = BoxMesh.new()
-    mesh.size = Vector3(1.18, 0.54, 0.08)
+    mesh.size = Vector3(1.18, 0.54, 0.08) if device.kind == "pilot" else Vector3(0.86, 0.62, 0.10)
     monitor.mesh = mesh
     var material: StandardMaterial3D = StandardMaterial3D.new()
     material.albedo_color = Color("#102733")
     monitor.material_override = material
     monitor.position = Vector3(0, 1.23, -0.45 if device.kind == "pilot" else 0.36)
     terminal.add_child(monitor)
+    if device.kind != "pilot":
+        var display: MeshInstance3D = MeshInstance3D.new()
+        var face: QuadMesh = QuadMesh.new()
+        face.size = Vector2(0.50, 0.50)
+        display.mesh = face
+        var picture: StandardMaterial3D = StandardMaterial3D.new()
+        picture.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+        picture.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+        picture.albedo_texture = load("res://assets/ship-hub/computer-icons/" + String(device.kind) + ".svg") as Texture2D
+        display.material_override = picture
+        display.position = monitor.position + Vector3(0, 0, 0.052)
+        terminal.add_child(display)
+        screens[device.id] = display
+        return
     var label: Label3D = Label3D.new()
     label.position = monitor.position + Vector3(0, 0, 0.041)
     label.font_size = 32

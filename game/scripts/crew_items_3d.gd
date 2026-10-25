@@ -2,10 +2,12 @@ extends Node
 class_name CrewItems3D
 
 const CAPACITY: int = 2
+const EQUIPMENT_CAPACITY: int = 2
 const JET_REFILL_DELAY: float = 0.3
 const JET_REFILL_RATE: float = 1.0
 const JET_OXYGEN_COST: float = 2.0
-const NAMES: Dictionary = {"medical": "医疗包", "oxygen": "氧气瓶", "battery": "热能电池", "sample": "异常冰样", "penguin": "回声企鹅", "bubble": "反重力泡", "board": "雪地滑板", "hologram": "全息替身", "smoke": "彩色信号烟"}
+const NAMES: Dictionary = {"medical": "医疗包", "oxygen": "氧气瓶", "battery": "热能电池", "sample": "异常冰样", "penguin": "回声企鹅", "bubble": "反重力泡", "board": "雪地滑板", "hologram": "全息替身", "smoke": "彩色信号烟", "thermal_suit": "恒温外套", "wide_scanner": "广域扫描器", "signal_stabilizer": "信号稳压器"}
+const EQUIPPABLE: Array[String] = ["oxygen", "thermal_suit", "wide_scanner", "signal_stabilizer"]
 const SUPPLIES: Array[String] = ["medical", "oxygen"]
 const CARGO: Array[String] = ["battery", "sample"]
 const HEAVY: Dictionary = {3: "core", 4: "freight", 5: "coolant"}
@@ -22,6 +24,9 @@ const ICONS: Dictionary = {
     "core": preload("res://assets/items/icons/core.svg"),
     "freight": preload("res://assets/items/icons/freight.svg"),
     "coolant": preload("res://assets/items/icons/coolant.svg"),
+    "thermal_suit": preload("res://assets/ship-hub/computer-icons/thermal_suit.svg"),
+    "wide_scanner": preload("res://assets/ship-hub/computer-icons/wide_scanner.svg"),
+    "signal_stabilizer": preload("res://assets/ship-hub/computer-icons/signal_stabilizer.svg"),
 }
 const TRAINING_POSITIONS: Dictionary = {"oxygen": Vector3(-7.0, 0.96, 3.8)}
 
@@ -53,6 +58,11 @@ var _equipment_panel: Panel
 var _equipment_icon: TextureRect
 var _equipment_percent: Label
 var _slot_levels: Array[Label] = []
+var _equipment_cells: Array[Panel] = []
+var _equipment_icons: Array[TextureRect] = []
+var _equipment_levels: Array[Label] = []
+var _equipment_jets: Array[ProgressBar] = []
+var _last_focus: String = ""
 
 func _ready() -> void:
     controller = get_parent() as Main3D
@@ -95,8 +105,16 @@ func _build_equipment_ui() -> void:
     _equipment_column = VBoxContainer.new()
     _equipment_column.add_theme_constant_override("separation", 12)
     _equipment_column.mouse_filter = Control.MOUSE_FILTER_IGNORE
-    controller._place_hud(_equipment_column, Control.PRESET_CENTER_LEFT, Vector2(24, -34), Vector2(68, 68))
+    controller._place_hud(_equipment_column, Control.PRESET_CENTER_LEFT, Vector2(24, -74), Vector2(68, 148))
     _layer.add_child(_equipment_column)
+    for index: int in EQUIPMENT_CAPACITY:
+        _build_equipment_cell()
+    _equipment_panel = _equipment_cells[0]
+    _equipment_icon = _equipment_icons[0]
+    _equipment_percent = _equipment_levels[0]
+    _jet_bar = _equipment_jets[0]
+
+func _build_equipment_cell() -> void:
     _equipment_panel = controller._panel(_equipment_column, Vector2.ZERO, Vector2(68, 68), Color("#9d5728"), Color("#f2ad60"), 10)
     _equipment_panel.custom_minimum_size = Vector2(68, 68)
     _equipment_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -135,6 +153,10 @@ func _build_equipment_ui() -> void:
     _jet_bar.position = Vector2(60, 8)
     _jet_bar.size = Vector2(4, 42)
     _equipment_panel.add_child(_jet_bar)
+    _equipment_cells.append(_equipment_panel)
+    _equipment_icons.append(_equipment_icon)
+    _equipment_levels.append(_equipment_percent)
+    _equipment_jets.append(_jet_bar)
 
 func _process(_delta: float) -> void:
     if controller == null:
@@ -152,27 +174,42 @@ func _process(_delta: float) -> void:
         _clear_held()
         return
     var peer_id: int = multiplayer.get_unique_id()
-    var local: SpacePlayer3D = controller.players.get(peer_id) as SpacePlayer3D
-    var equipped: bool = has_jet(peer_id)
-    _equipment_icon.visible = equipped
-    _equipment_percent.visible = equipped
-    _jet_bar.visible = equipped
-    if local != null and equipped:
-        _equipment_percent.text = "%d%%" % ceili(tank_oxygen(peer_id))
-        _jet_bar.value = local.jet_charge * 100.0
     var bag: Dictionary = ensure_bag(peer_id)
+    var focus: String = "%s:%d:%d" % [str(bag.equipment_active), int(bag.selected), int(bag.equipment_selected)]
+    for index: int in EQUIPMENT_CAPACITY:
+        var worn: Dictionary = bag.equipment[index]
+        var kind: String = String(worn.get("kind", ""))
+        _equipment_icons[index].texture = ICONS.get(kind) as Texture2D
+        _equipment_icons[index].visible = not kind.is_empty()
+        _equipment_levels[index].visible = kind == "oxygen"
+        _equipment_jets[index].visible = kind == "oxygen"
+        if kind == "oxygen":
+            _equipment_levels[index].text = "%d%%" % ceili(tank_oxygen(peer_id, index) - 0.0001)
+            _equipment_jets[index].value = float(worn.get("jet_reserve", 0.0)) * 100.0
+            _equipment_panel = _equipment_cells[index]
+            _equipment_icon = _equipment_icons[index]
+            _equipment_percent = _equipment_levels[index]
+            _jet_bar = _equipment_jets[index]
+        if _last_focus != focus:
+            var style: StyleBoxFlat = (_equipment_cells[index].get_theme_stylebox("panel") as StyleBoxFlat).duplicate() as StyleBoxFlat
+            var chosen: bool = bool(bag.equipment_active) and int(bag.equipment_selected) == index
+            style.border_color = Color("#ffe6a8") if chosen else Color("#f2ad60")
+            style.set_border_width_all(3 if chosen else 1)
+            _equipment_cells[index].add_theme_stylebox_override("panel", style)
     var slots: Array = bag.slots
     for index: int in CAPACITY:
         var kind: String = String((slots[index] as Dictionary).get("kind", ""))
         _icons[index].texture = ICONS.get(kind) as Texture2D
         _slot_levels[index].visible = kind == "oxygen"
         _slot_levels[index].text = "%d%%" % ceili(float((slots[index] as Dictionary).get("oxygen", 100.0))) if kind == "oxygen" else ""
-        if _last_selected != int(bag.selected):
+        if _last_focus != focus:
             var style: StyleBoxFlat = (_cells[index].get_theme_stylebox("panel") as StyleBoxFlat).duplicate() as StyleBoxFlat
-            style.border_color = Color("#a4f3e0") if int(bag.selected) == index else Color("#56727c")
-            style.set_border_width_all(3 if int(bag.selected) == index else 1)
+            var chosen: bool = not bool(bag.equipment_active) and int(bag.selected) == index
+            style.border_color = Color("#a4f3e0") if chosen else Color("#56727c")
+            style.set_border_width_all(3 if chosen else 1)
             _cells[index].add_theme_stylebox_override("panel", style)
     _last_selected = int(bag.selected)
+    _last_focus = focus
     _refresh_world()
     _refresh_held()
 
@@ -187,7 +224,82 @@ func ensure_bag(peer_id: int) -> Dictionary:
                     slots[cursor] = {"kind": kind}
                     cursor += 1
         bags[peer_id] = {"slots": slots, "selected": 0}
-    return bags[peer_id]
+    var bag: Dictionary = bags[peer_id]
+    if not bag.has("equipment"):
+        bag.equipment = [{}, {}]
+        if bool(bag.get("oxygen_mounted", false)):
+            bag.equipment[0] = {"kind": "oxygen"}
+        var previous_gear: String = String(controller._ship_session.gear_assignments.get(peer_id, ""))
+        if ShipSession3D.GEAR_ITEMS.has(previous_gear) and not training_saved.has(peer_id) and available_gear(previous_gear) > 0:
+            var index: int = 1 if bool(bag.get("oxygen_mounted", false)) else 0
+            bag.equipment[index] = {"kind": previous_gear}
+    if not bag.has("equipment_active"):
+        bag.equipment_active = false
+    if not bag.has("equipment_selected"):
+        bag.equipment_selected = 0
+    var mounted: bool = false
+    for item: Dictionary in bag.equipment:
+        if item.get("kind", "") == "oxygen":
+            if not item.has("oxygen"):
+                item.oxygen = clampf(float(bag.get("tank_oxygen", 100.0)), 0.0, 100.0)
+            if not item.has("jet_reserve"):
+                item.jet_reserve = clampf(float(bag.get("jet_reserve", 0.0)), 0.0, 1.0)
+            if not mounted:
+                bag.tank_oxygen = float(item.oxygen)
+            mounted = true
+    bag.oxygen_mounted = mounted
+    return bag
+
+func equipment_index(peer_id: int, kind: String) -> int:
+    var equipment: Array = ensure_bag(peer_id).equipment
+    for index: int in EQUIPMENT_CAPACITY:
+        if (equipment[index] as Dictionary).get("kind", "") == kind:
+            return index
+    return -1
+
+func can_equip(peer_id: int, kind: String) -> bool:
+    return EQUIPPABLE.has(kind) and equipment_target(peer_id, kind) >= 0
+
+func equipment_target(peer_id: int, kind: String) -> int:
+    var bag: Dictionary = ensure_bag(peer_id)
+    for index: int in EQUIPMENT_CAPACITY:
+        var item: Dictionary = bag.equipment[index]
+        if item.is_empty():
+            return index
+    var selected_index: int = int(bag.equipment_selected)
+    if bag.equipment[selected_index].get("kind", "") == kind:
+        return selected_index
+    return equipment_index(peer_id, kind)
+
+func available_gear(kind: String) -> int:
+    var used: int = 0
+    for peer_id: int in bags:
+        var bag: Dictionary = training_saved.get(peer_id, {}).get("bag", bags[peer_id])
+        for item: Dictionary in bag.get("equipment", []):
+            used += 1 if item.get("kind", "") == kind else 0
+        for item: Dictionary in bag.slots:
+            used += 1 if item.get("kind", "") == kind else 0
+    for item: Dictionary in drops:
+        if item.get("area", "") != "training" and item.get("kind", "") == kind:
+            used += 1
+    return maxi(0, int(controller._ship_session.gear_stock.get(kind, 0)) - used)
+
+func equip_gear(peer_id: int, kind: String, from_hand: bool = false) -> bool:
+    if not ShipSession3D.GEAR_ITEMS.has(kind) or not can_equip(peer_id, kind):
+        return false
+    if from_hand and selected(peer_id).get("kind", "") != kind:
+        return false
+    if not from_hand and available_gear(kind) <= 0:
+        return false
+    var bag: Dictionary = ensure_bag(peer_id)
+    var index: int = equipment_target(peer_id, kind)
+    var old: Dictionary = (bag.equipment[index] as Dictionary).duplicate(true)
+    bag.equipment[index] = selected(peer_id).duplicate(true) if from_hand else {"kind": kind}
+    bag.equipment_selected = index
+    if from_hand:
+        bag.slots[int(bag.selected)] = old
+    publish()
+    return true
 
 func occupied(peer_id: int) -> int:
     var total: int = 0
@@ -197,13 +309,64 @@ func occupied(peer_id: int) -> int:
     return total
 
 func has_jet(peer_id: int) -> bool:
-    return bool(ensure_bag(peer_id).get("oxygen_mounted", false))
+    return oxygen_count(peer_id) > 0
 
-func tank_oxygen(peer_id: int) -> float:
-    return clampf(float(ensure_bag(peer_id).get("tank_oxygen", 100.0)), 0.0, 100.0) if has_jet(peer_id) else 0.0
+func oxygen_count(peer_id: int) -> int:
+    var count: int = 0
+    for item: Dictionary in ensure_bag(peer_id).equipment:
+        count += 1 if item.get("kind", "") == "oxygen" else 0
+    return count
+
+func jet_duration(peer_id: int) -> float:
+    return SpacePlayer3D.JET_DURATION * maxi(1, oxygen_count(peer_id))
+
+func needs_oxygen_refill(peer_id: int) -> bool:
+    for level: float in _tank_levels(ensure_bag(peer_id)):
+        if level >= 0.0 and level < 99.99:
+            return true
+    return false
+
+func tank_oxygen(peer_id: int, equipment_slot: int = -1) -> float:
+    var bag: Dictionary = ensure_bag(peer_id)
+    var index: int = equipment_index(peer_id, "oxygen") if equipment_slot < 0 else equipment_slot
+    if index < 0 or index >= EQUIPMENT_CAPACITY or bag.equipment[index].get("kind", "") != "oxygen":
+        return 0.0
+    return clampf(float(bag.equipment[index].get("oxygen", 100.0)), 0.0, 100.0)
+
+func _tank_levels(bag: Dictionary) -> Array:
+    var levels: Array = []
+    for item: Dictionary in bag.equipment:
+        levels.append(float(item.get("oxygen", 100.0)) if item.get("kind", "") == "oxygen" else -1.0)
+    return levels
+
+func _jet_levels(bag: Dictionary) -> Array:
+    var levels: Array = []
+    for item: Dictionary in bag.equipment:
+        levels.append(float(item.get("jet_reserve", 0.0)) if item.get("kind", "") == "oxygen" else -1.0)
+    return levels
 
 func jet_reserve(peer_id: int) -> float:
-    return clampf(float(ensure_bag(peer_id).get("jet_reserve", 0.0)), 0.0, 1.0)
+    var bag: Dictionary = ensure_bag(peer_id)
+    var total: float = 0.0
+    for level: float in _jet_levels(bag):
+        total += maxf(level, 0.0)
+    bag.jet_reserve = total / maxi(1, oxygen_count(peer_id))
+    return float(bag.jet_reserve)
+
+func spend_jet_reserve(peer_id: int, delta: float) -> float:
+    var remaining: float = delta / SpacePlayer3D.JET_DURATION
+    # Exhaust the earlier equipment slot before advancing to the next bottle.
+    for item: Dictionary in ensure_bag(peer_id).equipment:
+        if item.get("kind", "") != "oxygen":
+            continue
+        var used: float = minf(float(item.jet_reserve), remaining)
+        item.jet_reserve = maxf(float(item.jet_reserve) - used, 0.0)
+        if float(item.jet_reserve) < 0.0001:
+            item.jet_reserve = 0.0
+        remaining -= used
+        if remaining <= 0.0:
+            break
+    return jet_reserve(peer_id)
 
 func _new_tank_serial(bag: Dictionary) -> void:
     bag.tank_serial = next_uid
@@ -216,10 +379,14 @@ func mount_oxygen(peer_id: int, slot_index: int = -1) -> void:
     var item: Dictionary = bag.slots[index]
     if item.get("kind", "") != "oxygen":
         return
-    var replacement: Dictionary = {"kind": "oxygen", "ref": -1, "oxygen": tank_oxygen(peer_id)} if has_jet(peer_id) else {}
+    if not can_equip(peer_id, "oxygen"):
+        controller._ship_session._notify(peer_id, "装备栏已满 · Tab 选择装备后 G 卸下")
+        return
+    var target: int = equipment_target(peer_id, "oxygen")
+    var replacement: Dictionary = (bag.equipment[target] as Dictionary).duplicate(true)
     bag.slots[index] = replacement
-    bag.oxygen_mounted = true
-    bag.tank_oxygen = clampf(float(item.get("oxygen", 100.0)), 0.0, 100.0)
+    bag.equipment[target] = {"kind": "oxygen", "oxygen": clampf(float(item.get("oxygen", 100.0)), 0.0, 100.0), "jet_reserve": clampf(float(item.get("jet_reserve", 0.0)), 0.0, 1.0)}
+    bag.equipment_selected = target
     bag.jet_reserve = jet_reserve(peer_id)
     bag.jet_idle = 0.0
     _new_tank_serial(bag)
@@ -234,6 +401,9 @@ func mount_oxygen(peer_id: int, slot_index: int = -1) -> void:
 func refill_oxygen(peer_id: int) -> void:
     var bag: Dictionary = ensure_bag(peer_id)
     if has_jet(peer_id):
+        for item: Dictionary in bag.equipment:
+            if item.get("kind", "") == "oxygen":
+                item.oxygen = 100.0
         bag.tank_oxygen = 100.0
         _new_tank_serial(bag)
     for item: Dictionary in bag.slots:
@@ -252,29 +422,28 @@ func _tick_jet_resources(delta: float) -> Array:
         if not has_jet(peer_id) or player == null:
             continue
         var reserve: float = jet_reserve(peer_id)
-        var oxygen: float = tank_oxygen(peer_id)
         var blocked: bool = player.downed or player.lava_dead or player.falling_to_lava
         if player.is_multiplayer_authority():
             blocked = blocked or controller._settings_visible or controller.market_visible or choice_open or controller.is_journal_visible()
         if player.jet_active and not blocked:
-            reserve = maxf(reserve - delta / SpacePlayer3D.JET_DURATION, 0.0)
-            if reserve < 0.0001:
-                reserve = 0.0
+            reserve = spend_jet_reserve(peer_id, delta)
         if player.jet_button_held or player.jet_active or blocked or not _grounded_for_refill(player):
             bag.jet_idle = 0.0
         else:
             bag.jet_idle = float(bag.get("jet_idle", 0.0)) + delta
             if float(bag.jet_idle) >= JET_REFILL_DELAY:
-                var fill: float = minf(JET_REFILL_RATE * delta, minf(1.0 - reserve, oxygen / JET_OXYGEN_COST))
-                reserve += fill
-                oxygen = maxf(oxygen - fill * JET_OXYGEN_COST, 0.0)
-        bag.jet_reserve = reserve
-        bag.tank_oxygen = oxygen
+                for item: Dictionary in bag.equipment:
+                    if item.get("kind", "") == "oxygen":
+                        var fill: float = minf(JET_REFILL_RATE * delta, minf(1.0 - float(item.jet_reserve), float(item.oxygen) / JET_OXYGEN_COST))
+                        item.jet_reserve = minf(float(item.jet_reserve) + fill, 1.0)
+                        item.oxygen = maxf(float(item.oxygen) - fill * JET_OXYGEN_COST, 0.0)
+                reserve = jet_reserve(peer_id)
+        bag.tank_oxygen = tank_oxygen(peer_id)
         bag.jet_revision = int(bag.get("jet_revision", 0)) + 1
         player.jet_charge = reserve
         if reserve <= 0.0:
             player.jet_active = false
-        states.append([peer_id, int(bag.get("tank_serial", 0)), int(bag.jet_revision), oxygen, reserve, float(bag.get("jet_idle", 0.0))])
+        states.append([peer_id, int(bag.get("tank_serial", 0)), int(bag.jet_revision), float(bag.tank_oxygen), reserve, float(bag.get("jet_idle", 0.0)), _tank_levels(bag), _jet_levels(bag)])
     return states
 
 @rpc("authority", "call_remote", "unreliable_ordered")
@@ -287,6 +456,12 @@ func sync_jet_resources(states: Array) -> void:
         if int(state[1]) != int(bag.get("tank_serial", 0)) or int(state[2]) < int(bag.get("jet_revision", 0)):
             continue
         bag.jet_revision = int(state[2])
+        var levels: Array = state[6] if state.size() > 6 else []
+        var charges: Array = state[7] if state.size() > 7 else []
+        for index: int in EQUIPMENT_CAPACITY:
+            if bag.equipment[index].get("kind", "") == "oxygen":
+                bag.equipment[index].oxygen = float(levels[index]) if levels.size() == EQUIPMENT_CAPACITY else float(state[3])
+                bag.equipment[index].jet_reserve = float(charges[index]) if charges.size() == EQUIPMENT_CAPACITY else float(state[4])
         bag.tank_oxygen = float(state[3])
         bag.jet_reserve = float(state[4])
         bag.jet_idle = float(state[5])
@@ -298,6 +473,13 @@ func selected(peer_id: int) -> Dictionary:
     var bag: Dictionary = ensure_bag(peer_id)
     return bag.slots[int(bag.selected)]
 
+func take_selected(peer_id: int) -> Dictionary:
+    var bag: Dictionary = ensure_bag(peer_id)
+    var item: Dictionary = (bag.slots[int(bag.selected)] as Dictionary).duplicate(true)
+    bag.slots[int(bag.selected)] = {}
+    _sync_legacy(peer_id)
+    return item
+
 func count_kind(peer_id: int, kind: String) -> int:
     var count: int = 0
     for entry: Dictionary in ensure_bag(peer_id).slots:
@@ -305,7 +487,7 @@ func count_kind(peer_id: int, kind: String) -> int:
             count += 1
     return count
 
-func add_item(peer_id: int, kind: String, reference: int = -1, data: Dictionary = {}) -> bool:
+func add_item(peer_id: int, kind: String, reference: int = -1, data: Dictionary = {}, activate: bool = false) -> bool:
     if not NAMES.has(kind) and not HEAVY.values().has(kind):
         return false
     var bag: Dictionary = ensure_bag(peer_id)
@@ -314,6 +496,10 @@ func add_item(peer_id: int, kind: String, reference: int = -1, data: Dictionary 
             bag.slots[index] = {"kind": kind, "ref": reference}
             if kind == "oxygen":
                 bag.slots[index]["oxygen"] = clampf(float(data.get("oxygen", 100.0)), 0.0, 100.0)
+                bag.slots[index]["jet_reserve"] = clampf(float(data.get("jet_reserve", 0.0)), 0.0, 1.0)
+            if activate:
+                bag.equipment_active = false
+                bag.selected = index
             _sync_legacy(peer_id)
             return true
     return false
@@ -351,7 +537,7 @@ func sync_heavy(peer_id: int) -> bool:
             bag.slots[index] = {}
             changed = true
     if not wanted.is_empty() and count_kind(peer_id, wanted) == 0:
-        if add_item(peer_id, wanted, player.carrying_id):
+        if add_item(peer_id, wanted, player.carrying_id, {}, true):
             changed = true
         else:
             controller._resonance_stage.handle_action(peer_id, "drop")
@@ -371,6 +557,12 @@ func move_multiplier(peer_id: int) -> float:
     return 0.58 if count_kind(peer_id, "sample") > 0 else (0.72 if count_kind(peer_id, "battery") > 0 else 1.0)
 
 func _sync_legacy(peer_id: int) -> void:
+    var bag: Dictionary = ensure_bag(peer_id)
+    controller._ship_session.gear_assignments.erase(peer_id)
+    for worn: Dictionary in bag.equipment:
+        if ShipSession3D.GEAR_ITEMS.has(worn.get("kind", "")):
+            controller._ship_session.gear_assignments[peer_id] = worn.kind
+            break
     controller._ship_session.packs[peer_id] = {"medical": count_kind(peer_id, "medical"), "oxygen": count_kind(peer_id, "oxygen")}
     var player: SpacePlayer3D = controller.players.get(peer_id) as SpacePlayer3D
     if player != null and (controller.ship_active or controller.current_planet_id == "demo"):
@@ -394,6 +586,10 @@ func apply_state(state: Dictionary) -> void:
             for key: String in ["tank_oxygen", "jet_reserve", "jet_revision", "jet_idle"]:
                 if old.has(key):
                     incoming[key] = old[key]
+            for index: int in EQUIPMENT_CAPACITY:
+                if incoming.get("equipment", []).size() > index and old.get("equipment", []).size() > index and incoming.equipment[index].get("kind", "") == "oxygen":
+                    incoming.equipment[index].oxygen = float(old.equipment[index].get("oxygen", old.get("tank_oxygen", 100.0)))
+                    incoming.equipment[index].jet_reserve = float(old.equipment[index].get("jet_reserve", old.get("jet_reserve", 0.0)))
         var player: SpacePlayer3D = controller.players.get(peer_id) as SpacePlayer3D
         if player != null:
             player.jet_charge = float(incoming.get("jet_reserve", 0.0))
@@ -417,9 +613,18 @@ func real_counts(peer_id: int) -> Dictionary:
         var kind: String = String(entry.get("kind", ""))
         if SUPPLIES.has(kind):
             counts[kind] = int(counts[kind]) + 1
-    if bool(bag.get("oxygen_mounted", false)):
-        counts.oxygen = int(counts.oxygen) + 1
+    counts.oxygen = int(counts.oxygen) + _saved_oxygen_levels(bag).size()
     return counts
+
+func _saved_oxygen_levels(bag: Dictionary) -> Array:
+    var levels: Array = []
+    if bag.has("equipment"):
+        for item: Dictionary in bag.equipment:
+            if item.get("kind", "") == "oxygen":
+                levels.append(clampf(float(item.get("oxygen", bag.get("tank_oxygen", 100.0))), 0.0, 100.0))
+    elif bool(bag.get("oxygen_mounted", false)):
+        levels.append(clampf(float(bag.get("tank_oxygen", 100.0)), 0.0, 100.0))
+    return levels
 
 func real_oxygen_levels(peer_id: int) -> Array:
     var bag: Dictionary = training_saved.get(peer_id, {}).get("bag", ensure_bag(peer_id))
@@ -427,8 +632,7 @@ func real_oxygen_levels(peer_id: int) -> Array:
     for item: Dictionary in bag.slots:
         if item.get("kind", "") == "oxygen":
             levels.append(clampf(float(item.get("oxygen", 100.0)), 0.0, 100.0))
-    if bool(bag.get("oxygen_mounted", false)):
-        levels.append(clampf(float(bag.get("tank_oxygen", 100.0)), 0.0, 100.0))
+    levels.append_array(_saved_oxygen_levels(bag))
     return levels
 
 func clear_session() -> void:
@@ -484,7 +688,7 @@ func world_catalog(peer_id: int) -> Array:
     if current == "hub":
         for kind: String in SUPPLIES:
             if int(controller._ship_session.stock.get(kind, 0)) > 0:
-                result.append({"uid": "stock_" + kind, "kind": kind, "position": Vector3(-17.5, 0.98, 4.1 if kind == "medical" else 4.9), "source": "stock", "oxygen": controller._ship_session.stock_oxygen_level() if kind == "oxygen" else 100.0})
+                result.append({"uid": "stock_" + kind, "kind": kind, "position": Vector3(-17.95, 1.015, 4.1 if kind == "medical" else 4.9), "yaw": PI / 2.0, "source": "stock", "oxygen": controller._ship_session.stock_oxygen_level() if kind == "oxygen" else 100.0})
     elif current == "training":
         var claimed: Array = training_saved.get(peer_id, {}).get("claimed", [])
         for kind: String in TRAINING_POSITIONS:
@@ -528,7 +732,7 @@ func pickup(peer_id: int, entry: Dictionary) -> bool:
         return false
     entry = available
     var kind: String = String(entry.get("kind", ""))
-    if not add_item(peer_id, kind, -1, entry):
+    if not add_item(peer_id, kind, -1, entry, true):
         controller._ship_session._notify(peer_id, "物品栏已满 · G 放下")
         return false
     if entry.get("source", "") == "stock":
@@ -559,6 +763,10 @@ func handle_action(peer_id: int, action: String) -> void:
     if player == null or player.downed or controller.mission_completed or controller.mission_failed:
         return
     var bag: Dictionary = ensure_bag(peer_id)
+    if action == "toggle_equipment":
+        bag.equipment_active = not bool(bag.equipment_active)
+        publish()
+        return
     if action.begins_with("choice_"):
         var pending: Dictionary = _pending_choices.get(peer_id, {})
         var choice: String = action.trim_prefix("choice_")
@@ -567,7 +775,10 @@ func handle_action(peer_id: int, action: String) -> void:
             controller.handle_action(peer_id, choice)
         return
     if action in ["slot_1", "slot_2", "slot_next", "slot_previous"]:
-        bag.selected = (int(bag.selected) + 1) % CAPACITY if action in ["slot_next", "slot_previous"] else (0 if action == "slot_1" else 1)
+        var field: String = "equipment_selected" if bool(bag.equipment_active) else "selected"
+        var capacity: int = EQUIPMENT_CAPACITY if bool(bag.equipment_active) else CAPACITY
+        var direction: int = -1 if action == "slot_previous" else 1
+        bag[field] = posmod(int(bag[field]) + direction, capacity) if action in ["slot_next", "slot_previous"] else (0 if action == "slot_1" else 1)
         publish()
         return
     if action == "item_drop":
@@ -581,10 +792,15 @@ func handle_action(peer_id: int, action: String) -> void:
             controller.start_scan_for_peer(peer_id)
 
 func _use_selected(peer_id: int) -> void:
+    if bool(ensure_bag(peer_id).equipment_active):
+        return
     var item: Dictionary = selected(peer_id)
     var kind: String = String(item.get("kind", ""))
     if kind == "oxygen":
         mount_oxygen(peer_id)
+    elif ShipSession3D.GEAR_ITEMS.has(kind):
+        if not equip_gear(peer_id, kind, true):
+            controller._ship_session._notify(peer_id, "装备栏已满 · Tab 选择装备后 G 卸下")
     elif SUPPLIES.has(kind):
         controller._ship_session._use_supply(peer_id, kind)
     elif NAMES.has(kind) and not CARGO.has(kind):
@@ -598,14 +814,13 @@ func _use_selected(peer_id: int) -> void:
         controller._ship_session._notify(peer_id, message)
 
 func _drop_selected(peer_id: int) -> void:
+    var bag: Dictionary = ensure_bag(peer_id)
+    if bool(bag.equipment_active):
+        _drop_equipment(peer_id)
+        return
     var item: Dictionary = selected(peer_id).duplicate(true)
     if item.is_empty():
-        if not has_jet(peer_id):
-            return
-        item = {"kind": "oxygen", "oxygen": tank_oxygen(peer_id), "mounted_drop": true}
-        ensure_bag(peer_id)["oxygen_mounted"] = false
-        _new_tank_serial(ensure_bag(peer_id))
-        (controller.players[peer_id] as SpacePlayer3D).stop_jet()
+        return
     var kind: String = String(item.kind)
     var player: SpacePlayer3D = controller.players[peer_id] as SpacePlayer3D
     if HEAVY.values().has(kind):
@@ -618,12 +833,33 @@ func _drop_selected(peer_id: int) -> void:
         player.carrying_id = int(item.get("ref", -1))
         controller._drop_carried_item(peer_id)
         return
-    var point: Vector3 = drop_position(player)
-    drops.append({"uid": "drop_%d" % next_uid, "kind": kind, "position": point + Vector3.UP * 0.48, "rotation": Vector3(0.75, player.rotation.y, 0.35), "area": area(), "owner": peer_id, "oxygen": float(item.get("oxygen", 100.0))})
-    next_uid += 1
-    if not bool(item.get("mounted_drop", false)):
-        remove_item(peer_id, kind)
+    take_selected(peer_id)
+    _spawn_drop(peer_id, item)
     publish()
+
+func _drop_equipment(peer_id: int) -> void:
+    var bag: Dictionary = ensure_bag(peer_id)
+    var index: int = int(bag.equipment_selected)
+    var item: Dictionary = (bag.equipment[index] as Dictionary).duplicate(true)
+    if item.is_empty():
+        return
+    if item.kind == "oxygen":
+        item.oxygen = tank_oxygen(peer_id, index)
+        _new_tank_serial(bag)
+        (controller.players[peer_id] as SpacePlayer3D).stop_jet()
+    bag.equipment[index] = {}
+    ensure_bag(peer_id)
+    if item.kind == "oxygen":
+        (controller.players[peer_id] as SpacePlayer3D).jet_charge = jet_reserve(peer_id)
+    _spawn_drop(peer_id, item)
+    publish()
+
+func _spawn_drop(peer_id: int, item: Dictionary) -> void:
+    var player: SpacePlayer3D = controller.players[peer_id] as SpacePlayer3D
+    var kind: String = String(item.kind)
+    var point: Vector3 = drop_position(player)
+    drops.append({"uid": "drop_%d" % next_uid, "kind": kind, "position": point + Vector3.UP * 0.48, "rotation": Vector3(0.75, player.rotation.y, 0.35), "area": area(), "owner": peer_id, "oxygen": float(item.get("oxygen", 100.0)), "jet_reserve": float(item.get("jet_reserve", 0.0))})
+    next_uid += 1
 
 func drop_position(player: SpacePlayer3D) -> Vector3:
     var point: Vector3 = player.global_position - player.global_transform.basis.z * 0.85
@@ -732,7 +968,7 @@ func item_hint(peer_id: int) -> String:
     var item: Dictionary = nearby_item(peer_id)
     if item.is_empty():
         var player: SpacePlayer3D = controller.players.get(peer_id) as SpacePlayer3D
-        if area() == "training" and has_jet(peer_id) and player != null and (player.position - Vector3(-7, 0, 5.0)).length() < 2.0 and tank_oxygen(peer_id) < 99.99:
+        if area() == "training" and has_jet(peer_id) and player != null and (player.position - Vector3(-7, 0, 5.0)).length() < 2.0 and needs_oxygen_refill(peer_id):
             return "E 补满瓶内氧气"
         if selected(peer_id).get("kind", "") == "oxygen":
             return "左键 安装氧气瓶" if not has_jet(peer_id) else "左键 更换宇航服氧气瓶"
@@ -820,7 +1056,8 @@ func _refresh_world() -> void:
         material.friction = 0.65
         material.bounce = 0.12
         body.physics_material_override = material
-        body.position = Vector3(entry.position) + (Vector3.ZERO if dynamic else Vector3.UP * 0.34)
+        var source_offset: float = 0.2 if entry.get("source", "") == "stock" and entry.kind != "oxygen" else 0.34
+        body.position = Vector3(entry.position) + (Vector3.ZERO if dynamic else Vector3.UP * source_offset)
         body.rotation = Vector3(entry.get("rotation", Vector3(0, float(entry.get("yaw", 0)), 0)))
         var collider: CollisionShape3D = CollisionShape3D.new()
         if entry.kind == "oxygen":

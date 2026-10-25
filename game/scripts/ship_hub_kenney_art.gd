@@ -49,6 +49,7 @@ func build(previous_model: Node3D) -> void:
     _build_deck()
     _build_bulkheads()
     _build_pressure_structure()
+    _build_bay_partitions()
     _build_bridge()
     _build_storage()
     _build_workshop()
@@ -122,15 +123,9 @@ func _build_storage() -> void:
             _block("CargoRackUpright", Vector3(x, 0.95, z), Vector3(0.09, 1.9, 0.09), "#53616c")
     for y: float in [0.06, 0.97]:
         _block("CargoShelf", Vector3(-18.3, y, 4.5), Vector3(1.35, 0.09, 6.1), "#d4d9e0")
-        for index: int in 4:
-            var z: float = 2.1 + index * 1.55
-            _asset("StoredCargo", "container_wide" if index % 2 == 0 else "container", Vector3(-18.3, y + 0.045, z), Vector3(1.12, 0.79, 1.05), PI / 2.0)
-    for z: float in [3.4, 5.45]:
-        _asset("LooseCargo", "container", Vector3(-16.88, 0, z), Vector3(0.84, 0.66, 0.82))
 
 func _build_workshop() -> void:
     _asset("RepairWorkbench", "table", Vector3(18.08, 0, -2.98), Vector3(2.05, 1.0, 1.05), 0.0, true)
-    _asset("RepairComputer", "computer_system", Vector3(18.08, 1.0, -3.01), Vector3(0.9, 0.66, 0.85), -PI / 2.0)
     _asset("BenchComponent", "pipe_bend", Vector3(18.45, 1.02, -2.64), Vector3(0.5, 0.42, 0.32))
     _asset("ServicePanel", "wall_display", Vector3(19.05, 1.2, -2.98), Vector3(1.5, 0.95, 0.35), -PI / 2.0)
     _task_light("EngineeringWorkLight", Vector3(17.2, 2.8, -3.0), "#ffe0b0", 1.4, 5.0)
@@ -138,15 +133,11 @@ func _build_workshop() -> void:
 func _build_support() -> void:
     _asset("OxygenStorage", "container_tall", Vector3(18.51, 0, 10.26), Vector3(0.94, 1.5, 0.94))
     _asset("SupportPipe", "pipe", Vector3(18.51, 1.39, 10.26), Vector3(0.56, 0.39, 0.56), 0.0, true)
-    _block("SupplyConsoleStand", Vector3(17.37, 0.2, 10.25), Vector3(0.35, 0.4, 0.38), "#53616c")
-    _asset("SupplyConsole", "computer", Vector3(17.37, 0.4, 10.25), Vector3(0.39, 0.64, 0.41), -PI / 2.0)
-    _block("MissionPedestal", Vector3(-17.53, 0.32, -10.09), Vector3(0.5, 0.64, 0.55), "#53616c")
-    _asset("MissionConsole", "computer_screen", Vector3(-17.53, 0.64, -10.09), Vector3(0.55, 0.5, 0.55), PI / 2.0)
 
 func _build_lounge() -> void:
     for side: int in [-1, 1]:
-        for z: float in [5.2, -4.8]:
-            # Two compact berths occupy the previous bench collision footprint.
+        for z: float in ShipHub3D.CREW_BERTH_Z:
+            # Keep bunks between the bay doors, clear of the crossing routes.
             for y: float in [0.02, 0.88]:
                 _asset("CrewBerth", "bed", Vector3(side * 8.7, y, z), Vector3(1.05, 0.37, 2.6), PI / 2.0, true)
                 _asset("CrewBlanket", "blanket", Vector3(side * 8.7 + 0.35, y + 0.28, z), Vector3(1.04, 0.055, 1.65), PI / 2.0, true)
@@ -154,7 +145,7 @@ func _build_lounge() -> void:
             for x: float in [side * 8.7 - 1.55, side * 8.7 + 1.55]:
                 _block("BerthSupport", Vector3(x, 0.65, z), Vector3(0.1, 1.3, 1.0), "#344e60")
         _asset("PlanterContainer", "container_wide", Vector3(side * 11.7, 0, 0.7), Vector3(1.1, 0.95, 1.1), 0.0, true)
-        _asset("CrewSideTable", "inset", Vector3(side * 11.3, 0, 5.2), Vector3(1.05, 0.75, 1.05), 0.0, true)
+        _asset("CrewSideTable", "inset", Vector3(side * 11.3, 0, ShipHub3D.CREW_SIDE_TABLE_Z), Vector3(1.05, 0.75, 1.05), 0.0, true)
 
 func _build_pressure_structure() -> void:
     # A raised central pressure hull, with equipment bays behind lateral doors.
@@ -187,6 +178,14 @@ func _build_pressure_structure() -> void:
     for z: float in [-6.5, 4.5]:
         _task_light("CentralHullLight", Vector3(0, 3.9, z), "#c7e5ef", 1.5, 10.0)
     _task_light("LifeSupportWorkLight", Vector3(17.8, 2.6, 10.0), "#b2eed4", 1.3, 5.0)
+
+func _build_bay_partitions() -> void:
+    # Two transverse walls split the side bays; existing portals serve each room.
+    for side: int in [-1, 1]:
+        for index: int in 4:
+            var x: float = side * (8.125 + index * 3.25)
+            _asset("SideBayPartition", "wall", Vector3(x, 0, 0), Vector3(3.25, 3.38, 0.28), 0.0, true)
+        _solid("LeftBayPartitionCollision" if side < 0 else "RightBayPartitionCollision", Vector3(side * 13.0, 1.69, 0), Vector3(13.0, 3.38, 0.28))
 
 func _build_star_chart() -> void:
     _asset("StarChartPedestal", "inset", Vector3(0, 0, -0.34), Vector3(2.6, 0.85, 2.6), 0.0, true)

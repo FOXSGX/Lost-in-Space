@@ -37,24 +37,32 @@ class Probe extends Node:
             check(bottle.quaternion.angle_to(Quaternion.from_euler(euler)) < 0.3, "完整旋转没有同步")
         main.handle_action(id, "item_use")
         check(await wait_for(func(): return main._items.has_jet(id)), "客户端装配请求未由主机确认")
+        main.handle_action(id, "slot_2")
+        main.handle_action(id, "item_use")
+        check(await wait_for(func(): return main._items.oxygen_count(id) == 2), "客户端第二瓶没有装入空装备位")
         var player: SpacePlayer3D = main.players[id] as SpacePlayer3D
         check(await wait_for(func(): return player.jet_charge >= 0.995), "客户端没有收到充气资源同步")
         check(main._items.tank_oxygen(id) < 98.1, "客户端充气没有消耗瓶内氧气")
+        check(absf(main._items.tank_oxygen(id, 0) - main._items.tank_oxygen(id, 1)) < 0.2, "双瓶余量同步不一致")
         var oxygen_before: float = main._items.tank_oxygen(id)
         player.teleport_to(Vector3(3, 0, 4))
         await get_tree().create_timer(0.3).timeout
         Input.action_press("jump")
-        await get_tree().create_timer(0.48).timeout
+        await get_tree().create_timer(0.85).timeout
         check(player.jet_active and player.position.y > 1.0, "客户端不能推进")
+        var flying_bag: Dictionary = main._items.ensure_bag(id)
+        check(float(flying_bag.equipment[0].jet_reserve) == 0.0 and float(flying_bag.equipment[1].jet_reserve) > 0.0, "客户端没有先耗尽第一条再用第二条")
         acknowledge.rpc_id(1, 1)
-        await get_tree().create_timer(0.35).timeout
+        await get_tree().create_timer(0.55).timeout
         Input.action_release("jump")
         check(await wait_for(func(): return player.jet_charge >= 0.995), "客户端喷气后无法在地面重新充气")
         check(main._items.tank_oxygen(id) < oxygen_before - 1.9, "客户端第二次充气没有持续扣减瓶内氧气")
         var before_stale: float = main._items.tank_oxygen(id)
+        var second_before_stale: float = main._items.tank_oxygen(id, 1)
         var bag: Dictionary = main._items.ensure_bag(id)
-        main._items.sync_jet_resources([[id, int(bag.tank_serial), 0, 100.0, 1.0, 2.0]])
+        main._items.sync_jet_resources([[id, int(bag.tank_serial), 0, 100.0, 1.0, 2.0, [100.0, 100.0]]])
         check(is_equal_approx(main._items.tank_oxygen(id), before_stale), "过时资源消息让氧气回涨")
+        check(is_equal_approx(main._items.tank_oxygen(id, 1), second_before_stale), "过时消息让第二瓶氧气回涨")
         acknowledge.rpc_id(1, 3)
 
     @rpc("authority", "call_remote", "reliable")
@@ -100,6 +108,7 @@ class Probe extends Node:
         items.add_item(1, "oxygen")
         main.handle_action(1, "item_use")
         items.add_item(id, "oxygen")
+        items.add_item(id, "oxygen")
         items.add_item(1, "oxygen")
         var host_player: SpacePlayer3D = main.players[1] as SpacePlayer3D
         host_player.teleport_to(Vector3(0, 0, 5))
@@ -112,16 +121,17 @@ class Probe extends Node:
         inspect_and_fly.rpc_id(id, uid, body.position, body.rotation)
         check(await wait_for(func(): return phase == 1), "客户端检查超时")
         var remote: SpacePlayer3D = main.players[id] as SpacePlayer3D
-        check(items.has_jet(id) and items.occupied(id) == 0, "客户端装配没有释放格位")
+        check(items.oxygen_count(id) == 2 and items.occupied(id) == 0, "客户端双瓶装配没有释放格位")
         check(remote.jet_active and remote.position.y > 1.0, "客户端推进动作未同步给主机")
         check(is_instance_valid(remote._jet_pack) and remote._jet_pack.visible, "远端设备模型不可见")
+        check(remote._jet_bottles.size() == 2 and remote._jet_bottles[1].visible, "远端没有显示双瓶模型")
         await get_tree().create_timer(0.7).timeout
         check(not remote.jet_active, "松开后远端仍喷气")
         check(await wait_for(func(): return phase == 3), "客户端资源递减检查超时")
         var before: int = int(main._ship_session.stock.oxygen)
         reconnect_and_inspect.rpc_id(id, uid)
         check(await wait_for(func(): return main.players.size() == 1), "离队没有清理角色")
-        check(int(main._ship_session.stock.oxygen) == before + 1, "离队时已安装氧气瓶没有归库")
+        check(int(main._ship_session.stock.oxygen) == before + 2, "离队时两瓶氧气没有同时归库")
         check(await wait_for(func(): return phase == 2), "重连快照检查超时")
         id = int(main.connected_ids[1])
         stop.rpc_id(id)

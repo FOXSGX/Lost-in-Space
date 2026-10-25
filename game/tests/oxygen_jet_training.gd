@@ -196,8 +196,10 @@ func run() -> void:
     await shot("04-course-finish")
     # An unmounted bottle must settle as a rigid body and keep its pose on selection changes.
     await stand(Vector3(0, 0, 4.5))
+    await key(KEY_TAB)
     await key(KEY_G)
-    check(not items.has_jet(1) and items.drops.size() == 1, "空手 G 未卸下设备")
+    await key(KEY_TAB)
+    check(not items.has_jet(1) and items.drops.size() == 1, "装备栏 G 未卸下设备")
     await frames(150)
     var uid: String = String(items.drops[0].uid)
     var body: RigidBody3D = items._prop_bodies.get(uid) as RigidBody3D
