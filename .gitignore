@@ -27,3 +27,7 @@ Desktop.ini
 
 # 本地引擎/工具二进制（不进仓库）
 /tools/
+
+# Python 本地缓存
+__pycache__/
+*.py[cod]

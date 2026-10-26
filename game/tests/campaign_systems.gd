@@ -42,12 +42,15 @@ func run() -> void:
     main._goofy_items.tick(0.1)
     check(main._goofy_items.active_effects.size() == 6, "欢乐道具视觉效果没有完整生成")
 
-    main._ship_session.active = true
-    main._ship_session.in_hub = true
+    main.return_to_ship("装备终端验证")
+    player = main.players[1] as SpacePlayer3D
+    player.teleport_to(ShipDevices3D.point_for("gear_thermal_suit") + Vector3(0, 0, 1.3))
+    player.rotation.y = 0.0
     main._ship_session.credits = 100
-    main._ship_session.handle_request(1, "trade", "thermal_suit")
-    main._ship_session.handle_request(1, "assign_gear", "thermal_suit")
+    main.handle_action(1, "interact")
     check(main._ship_session.has_gear(1, "thermal_suit"), "共享装备没有分配到船员")
+    main._start_planet()
+    player = main.players[1] as SpacePlayer3D
 
     player.carrying = 1
     player.carrying_id = 1

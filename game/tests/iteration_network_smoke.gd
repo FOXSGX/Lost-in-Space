@@ -67,6 +67,11 @@ class AuditPeer extends Node:
         check(await wait_for(func(): return phase == 1), "主舱真实 RPC 未确认")
         for planet in ["demo", "electromagnetic"]:
             main._ship_session.select_destination(planet)
+            var pilot: SpacePlayer3D = main.players[1] as SpacePlayer3D
+            pilot.teleport_to(Vector3(ShipDevices3D.PILOT_X[0], 0, -12.2))
+            pilot._camera_yaw = 0.0
+            pilot._camera_yaw_target = 0.0
+            pilot.rotation.y = 0.0
             main._ship_session.request("ready")
             ready_client.rpc_id(client_id)
             check(await wait_for(func(): return main._ship_session.all_ready()), "客户端准备状态未同步：" + planet)
@@ -85,6 +90,12 @@ class AuditPeer extends Node:
 
     @rpc("authority", "call_remote", "reliable")
     func ready_client() -> void:
+        var pilot: SpacePlayer3D = main.players[multiplayer.get_unique_id()] as SpacePlayer3D
+        pilot.teleport_to(Vector3(ShipDevices3D.PILOT_X[1], 0, -12.2))
+        pilot._camera_yaw = 0.0
+        pilot._camera_yaw_target = 0.0
+        pilot.sync_transform.rpc(pilot.position, false, 0.0)
+        await get_tree().create_timer(0.2).timeout
         main._ship_session.request("ready")
 
     @rpc("authority", "call_remote", "reliable")

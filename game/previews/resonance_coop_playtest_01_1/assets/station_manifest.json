@@ -1,0 +1,390 @@
+{
+  "blender": "5.2.2 LTS",
+  "coordinate_rule": "glTF exporter Y-up: Blender (x,y,z) -> Godot (x,z,-y), no extra 90-degree compensation",
+  "cameras": {
+    "PLAYER · A_entry": {
+      "position": [
+        -9.25,
+        1.6059139966964722,
+        -1.8200000524520874
+      ],
+      "direction": [
+        0.9545238614082336,
+        0.00469723017886281,
+        0.29809749126434326
+      ],
+      "up": [
+        -0.004483683034777641,
+        0.9999889731407166,
+        -0.0014001985546201468
+      ],
+      "fov_vertical": 46.79552783185212
+    },
+    "PLAYER · B_cart_side": {
+      "position": [
+        -3.450000047683716,
+        1.553380012512207,
+        -2.8499999046325684
+      ],
+      "direction": [
+        0.6490498781204224,
+        -0.006921192165464163,
+        0.7607144117355347
+      ],
+      "up": [
+        0.004492251668125391,
+        0.9999760389328003,
+        0.005265223328024149
+      ],
+      "fov_vertical": 56.35718021991835
+    },
+    "PLAYER · C_mineral": {
+      "position": [
+        3.0,
+        2.0399999618530273,
+        -2.119999885559082
+      ],
+      "direction": [
+        0.5229891538619995,
+        0.06998587399721146,
+        -0.8494611978530884
+      ],
+      "up": [
+        -0.03669179230928421,
+        0.99754798412323,
+        0.059596434235572815
+      ],
+      "fov_vertical": 58.71550708558255
+    },
+    "PLAYER · D_return": {
+      "position": [
+        9.350000381469727,
+        1.598908543586731,
+        -0.7200000286102295
+      ],
+      "direction": [
+        -0.9834513068199158,
+        0.022416306659579277,
+        0.17978055775165558
+      ],
+      "up": [
+        0.022050851956009865,
+        0.999748706817627,
+        -0.004031224176287651
+      ],
+      "fov_vertical": 46.79552783185212
+    },
+    "REVIEW · 45 cutaway": {
+      "position": [
+        18.0,
+        16.0,
+        20.0
+      ],
+      "direction": [
+        -0.5886945128440857,
+        -0.4611438810825348,
+        -0.6639164686203003
+      ],
+      "up": [
+        -0.30594512820243835,
+        0.8873254060745239,
+        -0.3450380265712738
+      ],
+      "fov_vertical": 31.41727565803149
+    },
+    "REVIEW · top layout": {
+      "position": [
+        0.0,
+        28.0,
+        -0.0
+      ],
+      "direction": [
+        0.0,
+        -1.0,
+        -0.0
+      ],
+      "up": [
+        0.0,
+        0.0,
+        -1.0
+      ],
+      "fov_vertical": 28.072486935852957
+    },
+    "DETAIL · wall floor integration": {
+      "position": [
+        -3.5999999046325684,
+        1.6399999856948853,
+        -2.630000114440918
+      ],
+      "direction": [
+        0.7302364110946655,
+        -0.28545600175857544,
+        -0.6207009553909302
+      ],
+      "up": [
+        0.21750012040138245,
+        0.9583917856216431,
+        -0.18487517535686493
+      ],
+      "fov_vertical": 41.11209043916693
+    },
+    "DETAIL · cart platform and rail": {
+      "position": [
+        5.699999809265137,
+        1.899999976158142,
+        -2.200000047683716
+      ],
+      "direction": [
+        -0.7583649158477783,
+        -0.23834334313869476,
+        0.6066919565200806
+      ],
+      "up": [
+        -0.18611492216587067,
+        0.9711809754371643,
+        0.1488918513059616
+      ],
+      "fov_vertical": 38.73952406980271
+    },
+    "DETAIL · host bank in wall": {
+      "position": [
+        3.049999952316284,
+        2.25,
+        -2.9000000953674316
+      ],
+      "direction": [
+        0.6471505165100098,
+        -0.4807399809360504,
+        -0.5916800498962402
+      ],
+      "up": [
+        0.3548000454902649,
+        0.8768631815910339,
+        -0.32438844442367554
+      ],
+      "fov_vertical": 32.98305261182784
+    },
+    "REVIEW · full enclosure interior": {
+      "position": [
+        9.300000190734863,
+        4.800000190734863,
+        4.0
+      ],
+      "direction": [
+        -0.8828707933425903,
+        -0.29283344745635986,
+        -0.3671345114707947
+      ],
+      "up": [
+        -0.2703869342803955,
+        0.9561634659767151,
+        -0.11243811249732971
+      ],
+      "fov_vertical": 61.2599969696414
+    }
+  },
+  "lights": [
+    {
+      "name": "WORKLIGHT · bay pool 0",
+      "position": [
+        -5.199999809265137,
+        4.21999979019165,
+        -0.8500000238418579
+      ],
+      "color": [
+        1.0,
+        0.699999988079071,
+        0.4000000059604645
+      ],
+      "power_w": 450.0
+    },
+    {
+      "name": "WORKLIGHT · bay pool 1",
+      "position": [
+        2.0,
+        4.570000171661377,
+        -0.6499999761581421
+      ],
+      "color": [
+        1.0,
+        0.699999988079071,
+        0.4000000059604645
+      ],
+      "power_w": 450.0
+    },
+    {
+      "name": "WORKLIGHT · bay pool 2",
+      "position": [
+        8.0,
+        4.320000171661377,
+        0.10000000149011612
+      ],
+      "color": [
+        1.0,
+        0.699999988079071,
+        0.4000000059604645
+      ],
+      "power_w": 260.0
+    },
+    {
+      "name": "BOUNCE · ceiling warm readability",
+      "position": [
+        -2.0,
+        3.0999999046325684,
+        1.0
+      ],
+      "color": [
+        0.8600000143051147,
+        0.7900000214576721,
+        0.6700000166893005
+      ],
+      "power_w": 720.0
+    },
+    {
+      "name": "BOUNCE · rock face soft neutral",
+      "position": [
+        -0.6000000238418579,
+        4.099999904632568,
+        3.200000047683716
+      ],
+      "color": [
+        0.7200000286102295,
+        0.8399999737739563,
+        1.0
+      ],
+      "power_w": 750.0
+    },
+    {
+      "name": "MINERAL · hero cyan reflected light",
+      "position": [
+        4.400000095367432,
+        2.25,
+        -3.9000000953674316
+      ],
+      "color": [
+        0.1899999976158142,
+        0.6600000262260437,
+        1.0
+      ],
+      "power_w": 190.0
+    },
+    {
+      "name": "ENTRY · reflected light around bend",
+      "position": [
+        -12.5,
+        2.5,
+        -1.100000023841858
+      ],
+      "color": [
+        0.6800000071525574,
+        0.8399999737739563,
+        1.0
+      ],
+      "power_w": 480.0
+    },
+    {
+      "name": "GALLERY · distant cold lead",
+      "position": [
+        14.5,
+        2.4000000953674316,
+        -0.800000011920929
+      ],
+      "color": [
+        0.1899999976158142,
+        0.5099999904632568,
+        0.6800000071525574
+      ],
+      "power_w": 160.0
+    }
+  ],
+  "source_statistics": {
+    "new": {
+      "objects": 342,
+      "triangles": 71542
+    },
+    "reused": {
+      "objects": 583,
+      "triangles": 457050
+    },
+    "materials": [
+      "ENV02 · compacted mineral ballast",
+      "ENV02 · composite track sleepers",
+      "ENV02 · cyan deep cleavage",
+      "ENV02 · cyan resonant mineral",
+      "ENV02 · exposed axial resonance",
+      "ENV02 · fresh split feldspar",
+      "ENV02 · hydrothermal mineralised fissure",
+      "ENV02 · pressure schist",
+      "ENV02 · rail clamp",
+      "ENV02 · rail head worn steel",
+      "ENV02 · rail web steel",
+      "ENV02 · violet deep cleavage",
+      "ENV02 · violet resonant mineral",
+      "M23_A_Accent_Cyan",
+      "M23_A_Core",
+      "M23_A_Coupler",
+      "M23_A_Deck",
+      "M23_A_Energy_Cyan",
+      "M23_A_Glass",
+      "M23_A_Lamp_Amber",
+      "M23_A_Lamp_Red",
+      "M23_A_Paint_Cream",
+      "M23_A_Paint_Orange",
+      "M23_A_Paint_Yellow",
+      "M23_A_Rubber",
+      "M23_A_Steel_Dark",
+      "M23_A_Steel_Edge",
+      "ST01 · amber worklight lens",
+      "ST01 · deep folded shale",
+      "ST01 · graphite machinery",
+      "ST01 · interactive cyan screen",
+      "ST01 · iron silicate rubble",
+      "ST01 · warm ochre enamel",
+      "ST01 · warm printed safety ivory",
+      "ST01 · worn granular bedrock",
+      "ST01 · worn mineral composite deck"
+    ],
+    "unique_mesh_data": 622,
+    "degenerate_transformed_normals": 0
+  },
+  "runtime_merged_meshes": 82,
+  "material_note": "01.1 encoded source albedo/roughness/irradiance and AgX LUT retained. Dynamic parts use shared world-position lighting; no final texture bake in this round.",
+  "textures": [
+    "assets\\textures\\bedrock_dust_base.png",
+    "assets\\textures\\rock_slate_base.png"
+  ],
+  "source_statistics_scope": "Inherited approved Prototype 01 source; new/reused categories refer to that earlier build.",
+  "interaction_derivative_statistics": {
+    "station_static": {
+      "path": "assets\\station_static.glb",
+      "bytes": 67284536,
+      "unique_meshes": 82,
+      "mesh_instances": 82,
+      "mesh_triangles": 553603,
+      "instanced_triangles": 553603,
+      "material_definitions": 35,
+      "nonidentity_node_scales": []
+    },
+    "device_parts": {
+      "path": "assets\\device_parts.glb",
+      "bytes": 814228,
+      "unique_meshes": 23,
+      "mesh_instances": 23,
+      "mesh_triangles": 7688,
+      "instanced_triangles": 7688,
+      "material_definitions": 5,
+      "nonidentity_node_scales": []
+    },
+    "station_collision": {
+      "path": "assets\\station_collision.glb",
+      "bytes": 8683188,
+      "unique_meshes": 8,
+      "mesh_instances": 8,
+      "mesh_triangles": 502316,
+      "instanced_triangles": 502316,
+      "material_definitions": 0,
+      "nonidentity_node_scales": []
+    }
+  },
+  "texture_provenance_note": "The inherited textures list describes original source production. This preview reads encoded UV/color attributes plus assets/agx_medium_high.png."
+}

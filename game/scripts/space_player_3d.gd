@@ -4,8 +4,18 @@ class_name SpacePlayer3D
 const VISUAL_SCENE := preload("res://scenes/protagonist_visual.tscn")
 const SPEED := 5.8
 const SPRINT_MULTIPLIER := 1.65
+const SHIP_EYE_HEIGHT: float = 1.6
+const SHIP_FIRST_PERSON_FOV: float = 74.0
+const SHIP_LOOK_SENSITIVITY: float = 0.0020
+const SHIP_PITCH_LIMIT: float = 1.25
 const ATTACK_RANGE := 3.75
 const ATTACK_INTERVAL := 0.35
+const JUMP_SPEED: float = 5.5
+const GRAVITY: float = 18.0
+const JET_HOLD_DELAY: float = 0.22
+const JET_ACCELERATION: float = 28.0
+const JET_SPEED: float = 6.0
+const JET_DURATION: float = 0.5
 const THIRD_PERSON_DISTANCE := 15.0
 const THIRD_PERSON_MIN_DISTANCE := 11.0
 const THIRD_PERSON_HEIGHT := 8.6
@@ -17,12 +27,25 @@ const THIRD_PERSON_CAMERA_SMOOTHNESS := 20.0
 const THIRD_PERSON_PITCH_MIN := -0.58
 const THIRD_PERSON_PITCH_MAX := 0.30
 # 共振星洞窟安全范围：镜头超出这个盒子会穿进岩壁或洞顶。
+const RESONANCE_ZONE_CAMERA_RADIUS := 30.0
 const RESONANCE_CAMERA_BOUNDS_MIN := Vector3(-76.0, 2.4, -44.0)
 const RESONANCE_CAMERA_BOUNDS_MAX := Vector3(76.0, 22.0, 44.0)
 const RESONANCE_FALL_DURATION := 0.82
 const RESONANCE_CHARACTER_VISUAL_SCALE := 0.78
 var peer_id := 1
-var health := 5
+const MAX_HEALTH: int = 5
+signal health_changed(current: int)
+
+var health: int = MAX_HEALTH:
+    set(value):
+        var next: int = clampi(value, 0, MAX_HEALTH)
+        if health == next:
+            return
+        health = next
+        health_changed.emit(health)
+var health_revision: int = 0
+var _captured_health: Vector2i = Vector2i(MAX_HEALTH, 0)
+var _ship_eye_height: float = SHIP_EYE_HEIGHT
 var oxygen := 100.0
 var warmth := 1.0
 var carrying := 0
@@ -57,9 +80,20 @@ var _goofy_board_visual: MeshInstance3D
 var _resonance_camera_mode := false
 var _camera_yaw := 0.0
 var _camera_pitch := -0.18
+var _network_view_pitch: float = 0.0
 var _camera_yaw_target := 0.0
 var _camera_pitch_target := -0.18
 var _mouse_capture_requested := false
+var _ship_first_person_mode: bool = false
+var _ship_cursor_released: bool = false
+var jet_active: bool = false
+var jet_charge: float = 0.0
+var jet_button_held: bool = false
+var _jump_held: float = 0.0
+var _jet_pack: Node3D
+var _jet_flames: Array[MeshInstance3D] = []
+var _jet_bottles: Array[ItemProp3D] = []
+var _jet_audio: AudioStreamPlayer3D
 
 func setup(id: int, color: Color) -> void:
     peer_id = id
@@ -71,7 +105,7 @@ func _enter_tree() -> void:
 
 func _ready() -> void:
     collision_layer = 1
-    collision_mask = 2
+    collision_mask = 2 | 8
     var shape := CollisionShape3D.new()
     var capsule := CapsuleShape3D.new()
     capsule.radius = 0.38
@@ -113,9 +147,12 @@ func _process(delta: float) -> void:
     var motion := velocity if is_multiplayer_authority() else (global_position - _last_visual_position) / maxf(delta, 0.001)
     _last_visual_position = global_position
     var controller := get_parent() as Main3D
+    _update_jet_visual(controller)
     var resonance_camera: bool = controller != null and controller.game_started and not controller.ship_active and controller.current_planet_id == "electromagnetic"
     if _visual != null:
-        _visual.update_state(delta, Vector2(motion.x, motion.z), downed, scan_lock_remaining > 0.0, carrying > 0, health, resonance_camera)
+        if _camera != null:
+            _visual.visible = not (controller != null and controller.ship_active)
+        _visual.update_state(delta, Vector2(motion.x, motion.z), downed, scan_lock_remaining > 0.0, carrying > 0 and (controller == null or controller._items == null), health, resonance_camera or (controller != null and controller.ship_active))
         if falling_to_lava:
             _visual.rotation.x = lerpf(_visual.rotation.x, -0.18 - fall_elapsed * 0.24, minf(delta * 12.0, 1.0))
             _visual.rotation.z = sin(fall_elapsed * 17.0) * 0.16
@@ -132,19 +169,19 @@ func _process(delta: float) -> void:
             _visual.set_resonance_visibility_priority(resonance_camera)
         _update_planet_camera(resonance_camera, delta)
     if controller != null and controller.ship_active and _camera != null:
-        if controller._ship_session.in_hub:
-            # Keep the character near the centre while revealing the next cabin section.
-            _camera.global_position = _camera.global_position.lerp(global_position + ShipHub3D.CAMERA_OFFSET, 1.0 - exp(-8.0 * delta))
-            _camera.rotation_degrees = Vector3(-42, 0, 0)
-        else:
-            _camera.global_position = Vector3(0, 16, 15)
-            _camera.look_at(Vector3(0, 0.6, 0), Vector3.UP)
+        _update_ship_first_person(delta)
     _apply_camera_shake(delta)
 
 func _input(event: InputEvent) -> void:
     if peer_id != multiplayer.get_unique_id():
         return
     var controller := get_parent() as Main3D
+    if controller != null and controller.ship_active:
+        if event is InputEventMouseMotion and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED and not _ship_ui_blocked():
+            var ship_motion: InputEventMouseMotion = event as InputEventMouseMotion
+            _camera_yaw_target -= ship_motion.relative.x * SHIP_LOOK_SENSITIVITY
+            _camera_pitch_target = clampf(_camera_pitch_target + ship_motion.relative.y * SHIP_LOOK_SENSITIVITY, -SHIP_PITCH_LIMIT, SHIP_PITCH_LIMIT)
+        return
     if controller == null or controller.current_planet_id != "electromagnetic" or controller.ship_active:
         return
     if event is InputEventMouseMotion and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
@@ -156,6 +193,46 @@ func _input(event: InputEvent) -> void:
         Input.use_accumulated_input = false
     elif event is InputEventKey and (event as InputEventKey).pressed and (event as InputEventKey).keycode == KEY_ESCAPE:
         _release_resonance_mouse()
+
+func _unhandled_input(event: InputEvent) -> void:
+    var controller: Main3D = get_parent() as Main3D
+    if is_multiplayer_authority() and event is InputEventMouseButton and controller != null:
+        var wheel: InputEventMouseButton = event as InputEventMouseButton
+        var allowed: bool = (controller.ship_active or controller.game_started) and not controller._settings_visible and not controller.market_visible and not controller.is_journal_visible() and not controller._ship_session.has_panel() and not controller._items.choice_open
+        if allowed and wheel.pressed and wheel.button_index in [MOUSE_BUTTON_WHEEL_UP, MOUSE_BUTTON_WHEEL_DOWN]:
+            controller.handle_action(peer_id, "slot_next" if wheel.button_index == MOUSE_BUTTON_WHEEL_DOWN else "slot_previous")
+            get_viewport().set_input_as_handled()
+            return
+    if _camera == null or not _ship_first_person_mode or _ship_ui_blocked():
+        return
+    if event is InputEventMouseButton:
+        var click: InputEventMouseButton = event as InputEventMouseButton
+        # GUI gets the click first, so ready/market/facility buttons remain usable.
+        if click.pressed and click.button_index == MOUSE_BUTTON_LEFT and Input.mouse_mode != Input.MOUSE_MODE_CAPTURED:
+            _ship_cursor_released = false
+            controller._items.suppress_use_until = Time.get_ticks_msec() + 180
+            refresh_ship_mouse_mode()
+            get_viewport().set_input_as_handled()
+
+func _ship_ui_blocked() -> bool:
+    var controller: Main3D = get_parent() as Main3D
+    return controller == null or not controller.ship_active or controller._settings_visible or controller.market_visible or controller._screen_view != "ship" or controller._ship_session.has_panel()
+
+func refresh_ship_mouse_mode() -> void:
+    if _camera == null or not _ship_first_person_mode:
+        return
+    var capture: bool = not _ship_ui_blocked() and not _ship_cursor_released
+    Input.mouse_mode = Input.MOUSE_MODE_CAPTURED if capture else Input.MOUSE_MODE_VISIBLE
+    Input.use_accumulated_input = not capture
+
+func _update_ship_first_person(delta: float) -> void:
+    _camera_yaw = lerp_angle(_camera_yaw, _camera_yaw_target, 1.0 - exp(-THIRD_PERSON_ROTATION_SMOOTHNESS * delta))
+    _camera_pitch = lerpf(_camera_pitch, _camera_pitch_target, 1.0 - exp(-THIRD_PERSON_ROTATION_SMOOTHNESS * delta))
+    rotation.y = _camera_yaw
+    _ship_eye_height = lerpf(_ship_eye_height, 0.55 if downed else SHIP_EYE_HEIGHT, 1.0 - exp(-8.0 * delta))
+    _camera.global_position = global_position + Vector3.UP * _ship_eye_height
+    _camera.global_rotation = Vector3(-_camera_pitch, _camera_yaw, -0.12 if downed else 0.0)
+    refresh_ship_mouse_mode()
 
 func _apply_mouse_look(relative: Vector2) -> void:
     # Godot 的角色前方是 -Z；rotation.y 增大时前方朝 -X，
@@ -209,11 +286,16 @@ func teleport_to(point: Vector3) -> void:
     _target_position = point
     _has_target_position = false
     velocity = Vector3.ZERO
+    stop_jet()
+    var controller: Main3D = get_parent() as Main3D
+    jet_charge = controller._items.jet_reserve(peer_id) if controller != null and controller._items != null else 0.0
     _last_visual_position = point
     _camera_shake_remaining = 0.0
     _camera_shake_duration = 0.0
     _camera_shake_strength = 0.0
     _camera_shake_clock = 0.0
+    if _ship_first_person_mode and _camera != null:
+        _camera.global_position = global_position + Vector3.UP * SHIP_EYE_HEIGHT
 
 func set_goofy_state(kind: String, duration: float) -> void:
     if kind == "board":
@@ -237,16 +319,25 @@ func configure_ship_camera() -> void:
     var controller := get_parent() as Main3D
     _remove_camera_shake_offset()
     _resonance_camera_mode = false
-    _release_resonance_mouse()
-    _camera_yaw_target = _camera_yaw
-    _camera_pitch_target = _camera_pitch
     if _visual != null:
         _visual.set_resonance_visibility_priority(false)
+    # Remote players must not change the local window's cursor or camera state.
+    if _camera == null:
+        return
+    _release_resonance_mouse()
+    _ship_first_person_mode = controller != null and controller.ship_active
+    _ship_cursor_released = false
+    if _visual != null:
+        _visual.visible = not _ship_first_person_mode
     if _camera != null and controller != null and controller.ship_active:
-        _camera.projection = Camera3D.PROJECTION_ORTHOGONAL
-        _camera.size = ShipHub3D.CAMERA_SIZE if controller._ship_session.in_hub else 21.0
-        _camera.global_position = global_position + ShipHub3D.CAMERA_OFFSET if controller._ship_session.in_hub else Vector3(0, 16, 15)
-        _camera.rotation_degrees = Vector3(-42, 0, 0) if controller._ship_session.in_hub else Vector3(-46, 0, 0)
+        _camera_yaw = controller._ship_session.spawn_yaw()
+        _camera_yaw_target = _camera_yaw
+        _camera_pitch = 0.0
+        _camera_pitch_target = 0.0
+        _camera.projection = Camera3D.PROJECTION_PERSPECTIVE
+        _camera.fov = SHIP_FIRST_PERSON_FOV
+        _camera.near = 0.05
+        _update_ship_first_person(1.0)
         var sensor := get_node_or_null("PlayerSensorLight") as OmniLight3D
         if sensor != null:
             sensor.light_energy = 0.18
@@ -281,10 +372,20 @@ func _update_planet_camera(resonance: bool, delta: float = 0.016) -> void:
         _camera.fov = 62.0
         var target: Vector3 = global_position + Vector3(0.0, 0.9, 0.0)
         var desired_position: Vector3 = _third_person_camera_position(target)
-        desired_position = _resolve_third_person_camera_position(target, desired_position)
+        # Follow first, then constrain the desired point to the cave volume,
+        # and only then resolve solid geometry.  The previous order clamped a
+        # raycast result by room index, which could push the camera through a
+        # wall and pin it at the corridor entrance.
         desired_position = _clamp_resonance_camera(desired_position)
+        desired_position = _resolve_third_person_camera_position(target, desired_position)
         _camera.global_position = _camera.global_position.lerp(desired_position, 1.0 - exp(-THIRD_PERSON_CAMERA_SMOOTHNESS * delta))
         _camera.look_at(target, Vector3.UP)
+        var camera_controller := get_parent() as Main3D
+        var camera_stage: Node = null
+        if camera_controller != null:
+            camera_stage = camera_controller._resonance_stage
+        if _camera.current and camera_stage != null and camera_stage.has_method("update_camera_occlusion"):
+            camera_stage.update_camera_occlusion(_camera.global_position, target)
     elif _resonance_camera_mode:
         _resonance_camera_mode = false
         _camera.projection = Camera3D.PROJECTION_ORTHOGONAL
@@ -309,13 +410,32 @@ func _third_person_camera_position(target: Vector3) -> Vector3:
     return target - forward * horizontal_distance + right * THIRD_PERSON_SHOULDER + Vector3.UP * vertical_offset
 
 func _clamp_resonance_camera(position: Vector3) -> Vector3:
-    # 远景镜头不再依赖透明淡出，因此必须把镜头限制在洞窟体积内，
-    # 否则贴着岩壁站位时相机会穿到山体外面。
-    return Vector3(
+    # Broad fallback volume for non-cave resonance stages.
+    var clamped := Vector3(
         clampf(position.x, RESONANCE_CAMERA_BOUNDS_MIN.x, RESONANCE_CAMERA_BOUNDS_MAX.x),
         clampf(position.y, RESONANCE_CAMERA_BOUNDS_MIN.y, RESONANCE_CAMERA_BOUNDS_MAX.y),
         clampf(position.z, RESONANCE_CAMERA_BOUNDS_MIN.z, RESONANCE_CAMERA_BOUNDS_MAX.z)
     )
+    var controller := get_parent() as Main3D
+    if controller == null or controller._resonance_stage == null:
+        return clamped
+    var stage := controller._resonance_stage
+    if stage.has_method("clamp_cave_camera_position"):
+        # The cave chapter derives a continuous cross-section volume from the
+        # camera's own x.  It deliberately does not use cave_room/checkpoint:
+        # those values advance with tasks while the players are still standing
+        # in the previous room and must never yank the camera to another room.
+        return stage.clamp_cave_camera_position(clamped)
+    # Legacy factory stage: keep the per-zone radius envelope unchanged.
+    var focus: Vector3 = stage.zone_camera_focus()
+    if focus != Vector3.ZERO:
+        var offset := Vector2(clamped.x - focus.x, clamped.z - focus.z)
+        var distance := offset.length()
+        if distance > RESONANCE_ZONE_CAMERA_RADIUS:
+            var ratio := RESONANCE_ZONE_CAMERA_RADIUS / distance
+            clamped.x = focus.x + offset.x * ratio
+            clamped.z = focus.z + offset.y * ratio
+    return clamped
 
 func _resolve_third_person_camera_position(target: Vector3, desired_position: Vector3) -> Vector3:
     var controller := get_parent() as Main3D
@@ -329,7 +449,14 @@ func _resolve_third_person_camera_position(target: Vector3, desired_position: Ve
         return desired_position
     var hit_position: Vector3 = hit.get("position", desired_position)
     var direction := (desired_position - target).normalized()
-    var safe_distance := maxf(THIRD_PERSON_MIN_DISTANCE, target.distance_to(hit_position) - THIRD_PERSON_COLLISION_MARGIN)
+    # A collision may legitimately be closer than THIRD_PERSON_MIN_DISTANCE in
+    # a tight cave throat.  Never keep the old minimum by pushing the camera
+    # through the hit; instead pull in to the hit point with a small margin.
+    var hit_distance := target.distance_to(hit_position)
+    var safe_distance := minf(
+        target.distance_to(desired_position),
+        maxf(0.8, hit_distance - THIRD_PERSON_COLLISION_MARGIN)
+    )
     return target + direction * safe_distance
 
 func _choose_resonance_camera_position(target: Vector3) -> Vector3:
@@ -414,6 +541,14 @@ func begin_scan(startup: float, cooldown: float, origin: Vector3) -> void:
     velocity = Vector3.ZERO
 
 func _physics_process(delta: float) -> void:
+    if downed or lava_dead:
+        stop_jet()
+        sprinting = false
+        velocity = Vector3.ZERO
+        _has_target_position = false
+        return
+    if is_multiplayer_authority():
+        jet_active = false
     scan_lock_remaining = maxf(scan_lock_remaining - delta, 0.0)
     scan_cooldown_remaining = maxf(scan_cooldown_remaining - delta, 0.0)
     if scan_lock_remaining > 0.0:
@@ -430,6 +565,11 @@ func _physics_process(delta: float) -> void:
     var controller := get_parent() as Main3D
     if controller == null or (not controller.game_started and not controller.ship_active) or controller.mission_completed or controller.mission_failed:
         return
+    if controller._items.choice_open or controller._settings_visible or controller.market_visible:
+        stop_jet()
+        velocity = Vector3(0, 0 if is_on_floor() else velocity.y - GRAVITY * delta, 0)
+        move_and_slide()
+        return
     if controller.ship_active:
         _tick_ship(controller)
         return
@@ -438,12 +578,12 @@ func _physics_process(delta: float) -> void:
         velocity = Vector3.ZERO
         return
     if controller.is_journal_visible():
+        stop_jet()
         sprinting = false
         velocity = Vector3.ZERO
         return
     if Input.is_action_just_pressed("scan"):
-        controller.start_scan_for_peer(peer_id)
-        return
+        controller.handle_action(peer_id, "item_scan")
     if Input.is_action_just_pressed("resonance_drone"):
         controller.handle_action(peer_id, "resonance_drone")
         return
@@ -460,22 +600,13 @@ func _physics_process(delta: float) -> void:
         sprinting = true
     goofy_board_remaining = maxf(goofy_board_remaining - delta, 0.0)
     goofy_bubble_remaining = maxf(goofy_bubble_remaining - delta, 0.0)
-    if carrying == 1:
-        move_speed *= 0.72
-    elif carrying == 2:
-        move_speed *= 0.58
+    move_speed *= controller._items.move_multiplier(peer_id) if controller._items != null else (0.58 if carrying == 2 else (0.72 if carrying == 1 else 1.0))
     if controller.storm_active:
         move_speed *= 0.68
     var was_moving := velocity.length() > 0.1
     if scan_lock_remaining <= 0.0:
         var vertical_velocity: float = velocity.y
-        if resonance_surface:
-            if is_on_floor():
-                vertical_velocity = 0.0
-            else:
-                vertical_velocity = maxf(vertical_velocity - 18.0 * delta, -28.0)
-        else:
-            vertical_velocity = 0.0
+        vertical_velocity = _jump_velocity(vertical_velocity, delta)
         if resonance_surface:
             var movement: Vector3 = _third_person_movement(input_vector)
             velocity = Vector3(movement.x * move_speed, vertical_velocity, movement.z * move_speed)
@@ -488,20 +619,16 @@ func _physics_process(delta: float) -> void:
     var map_half := controller.get_active_map_size() * 0.5 - Vector2(1.0, 1.0)
     global_position.x = clampf(global_position.x, -map_half.x, map_half.x)
     global_position.z = clampf(global_position.z, -map_half.y, map_half.y)
-    for action in ["repair", "pickup", "drop", "deposit", "revive"]:
+    for action in ["interact", "item_drop", "slot_1", "slot_2"]:
         if Input.is_action_just_pressed(action):
             controller.handle_action(peer_id, action)
-    for action in ["signal_high", "signal_low"]:
-        if Input.is_action_just_pressed(action):
-            controller.handle_action(peer_id, action)
-    for action in ["goofy_penguin", "goofy_bubble", "goofy_board", "goofy_hologram", "goofy_smoke"]:
-        if Input.is_action_just_pressed(action):
-            controller.handle_action(peer_id, action)
-    if Input.is_action_pressed("attack") and _attack_cooldown <= 0.0 and scan_lock_remaining <= 0.0:
-        _attack_cooldown = ATTACK_INTERVAL
-        controller.attack_from_peer(peer_id)
+    if scan_lock_remaining <= 0.0 and Time.get_ticks_msec() >= controller._items.suppress_use_until:
+        var empty_hand: bool = controller._items.selected(peer_id).is_empty()
+        if (empty_hand and Input.is_action_pressed("item_use") and _attack_cooldown <= 0.0) or (not empty_hand and Input.is_action_just_pressed("item_use")):
+            _attack_cooldown = ATTACK_INTERVAL
+            controller.handle_action(peer_id, "item_use")
     if Engine.get_physics_frames() % 2 == 0:
-        sync_transform.rpc(global_position, sprinting, rotation.y, falling_to_lava)
+        sync_transform.rpc(global_position, sprinting, rotation.y, falling_to_lava, _camera_pitch, jet_active, jet_button_held)
 
 func begin_resonance_fall() -> void:
     if falling_to_lava or lava_dead or downed:
@@ -549,7 +676,17 @@ func _spawn_footstep_particle() -> void:
     tween.finished.connect(func(): particle.queue_free())
 
 @rpc("authority", "unreliable_ordered", "call_remote")
-func sync_transform(next_position: Vector3, next_sprinting: bool = false, next_rotation_y: float = -999.0, next_falling: bool = false) -> void:
+func sync_transform(next_position: Vector3, next_sprinting: bool = false, next_rotation_y: float = -999.0, next_falling: bool = false, view_pitch: float = 0.0, next_jet: bool = false, next_jet_held: bool = false) -> void:
+    if downed or lava_dead:
+        stop_jet()
+        sprinting = false
+        velocity = Vector3.ZERO
+        _has_target_position = false
+        return
+    var controller: Main3D = get_parent() as Main3D
+    jet_button_held = next_jet_held
+    jet_active = next_jet and jet_charge > 0.0 and not downed and not lava_dead and controller != null and controller._items.has_jet(peer_id)
+    _network_view_pitch = clampf(view_pitch, -SHIP_PITCH_LIMIT, SHIP_PITCH_LIMIT)
     sprinting = next_sprinting
     if next_rotation_y > -900.0:
         rotation.y = next_rotation_y
@@ -564,22 +701,105 @@ func sync_transform(next_position: Vector3, next_sprinting: bool = false, next_r
 
 func _tick_ship(controller: Main3D) -> void:
     var ship := controller._ship_session
-    if ship.has_panel():
-        velocity = Vector3.ZERO
+    if _ship_ui_blocked() or _ship_cursor_released:
+        stop_jet()
+        velocity = Vector3(0, 0 if is_on_floor() else velocity.y - GRAVITY * get_physics_process_delta_time(), 0)
+        move_and_slide()
+        sprinting = false
         return
-    var movement := Input.get_vector("move_left", "move_right", "move_up", "move_down")
+    var input_vector: Vector2 = Input.get_vector("move_left", "move_right", "move_up", "move_down")
+    var movement: Vector3 = _third_person_movement(input_vector)
+    rotation.y = _camera_yaw
     sprinting = Input.is_action_pressed("sprint")
     var move_speed := SPEED * (SPRINT_MULTIPLIER if sprinting else 1.0)
-    velocity = Vector3(movement.x * move_speed, 0, movement.y * move_speed)
+    move_speed *= controller._items.move_multiplier(peer_id)
+    if goofy_board_remaining > 0.0:
+        move_speed *= 2.05
+    goofy_board_remaining = maxf(goofy_board_remaining - get_physics_process_delta_time(), 0.0)
+    goofy_bubble_remaining = maxf(goofy_bubble_remaining - get_physics_process_delta_time(), 0.0)
+    velocity = Vector3(movement.x * move_speed, _jump_velocity(velocity.y, get_physics_process_delta_time()), movement.z * move_speed)
     move_and_slide()
     var bounds := ShipHub3D.WALK_BOUNDS if ship.in_hub else Vector2(9.9, 6.2)
     global_position.x = clampf(global_position.x, -bounds.x, bounds.x)
     global_position.z = clampf(global_position.z, -bounds.y, bounds.y)
-    if Input.is_action_just_pressed("repair"):
-        ship.request("interact")
-    if not ship.in_hub:
-        for action in ["scan", "repair", "pickup", "drop", "deposit", "attack", "revive"]:
-            if Input.is_action_just_pressed(action):
-                ship.request("train_" + action)
+    for action: String in ["interact", "item_drop", "slot_1", "slot_2"]:
+        if Input.is_action_just_pressed(action):
+            controller.handle_action(peer_id, action)
+    if Input.is_action_just_pressed("scan"):
+        controller.handle_action(peer_id, "item_scan")
+    if Input.is_action_just_pressed("item_use") and Time.get_ticks_msec() >= controller._items.suppress_use_until:
+        controller.handle_action(peer_id, "item_use")
     if Engine.get_physics_frames() % 2 == 0:
-        sync_transform.rpc(global_position, sprinting)
+        sync_transform.rpc(global_position, sprinting, rotation.y, false, _camera_pitch, jet_active, jet_button_held)
+
+func aim_direction() -> Vector3:
+    var pitch: float = _camera_pitch if is_multiplayer_authority() else _network_view_pitch
+    return (-global_transform.basis.z * cos(pitch) + Vector3.DOWN * sin(pitch)).normalized()
+
+func _jump_velocity(current: float, delta: float) -> float:
+    var held: bool = Input.is_action_pressed("jump")
+    jet_button_held = held
+    _jump_held = _jump_held + delta if held else 0.0
+    var next: float = (JUMP_SPEED if Input.is_action_just_pressed("jump") else 0.0) if is_on_floor() else maxf(current - GRAVITY * delta, -28.0)
+    var controller: Main3D = get_parent() as Main3D
+    var equipped: bool = controller != null and controller._items != null and controller._items.has_jet(peer_id)
+    jet_active = equipped and held and _jump_held >= JET_HOLD_DELAY and jet_charge > 0.0
+    if jet_active:
+        next = minf(next + JET_ACCELERATION * delta, JET_SPEED)
+        if not controller.is_host:
+            jet_charge = controller._items.spend_jet_reserve(peer_id, delta)
+    return next
+
+func stop_jet() -> void:
+    jet_active = false
+    jet_button_held = false
+    _jump_held = 0.0
+
+func capture_health_revision() -> int:
+    var state: Vector2i = Vector2i(health, int(downed))
+    if state != _captured_health:
+        health_revision += 1
+        _captured_health = state
+    return health_revision
+
+func _update_jet_visual(controller: Main3D) -> void:
+    var mounted: bool = controller != null and controller._items != null and controller._items.has_jet(peer_id)
+    if mounted and not is_instance_valid(_jet_pack):
+        _jet_pack = Node3D.new()
+        _jet_pack.name = "SuitOxygenPack"
+        _jet_pack.position = Vector3(0, 0.55, 0.4)
+        add_child(_jet_pack)
+        for index: int in CrewItems3D.EQUIPMENT_CAPACITY:
+            var bottle: ItemProp3D = ItemProp3D.create("oxygen")
+            _jet_pack.add_child(bottle)
+            _jet_bottles.append(bottle)
+        for side: float in [-0.13, 0.13]:
+            var flame: MeshInstance3D = MeshInstance3D.new()
+            var cone: CylinderMesh = CylinderMesh.new()
+            cone.top_radius = 0.07
+            cone.bottom_radius = 0.015
+            cone.height = 0.55
+            flame.mesh = cone
+            flame.material_override = _glow_material(Color("#8bf3ff"))
+            flame.position = Vector3(side, -0.26, 0.0)
+            _jet_pack.add_child(flame)
+            _jet_flames.append(flame)
+        _jet_audio = AudioStreamPlayer3D.new()
+        _jet_audio.stream = load("res://assets/audio/oxygen-jet.wav") as AudioStream
+        _jet_audio.volume_db = -30.0
+        _jet_audio.max_distance = 18.0
+        _jet_pack.add_child(_jet_audio)
+    if is_instance_valid(_jet_pack):
+        _jet_pack.visible = mounted
+        var count: int = controller._items.oxygen_count(peer_id) if mounted else 0
+        for index: int in _jet_bottles.size():
+            _jet_bottles[index].visible = index < count
+            _jet_bottles[index].position.x = (index - 0.5) * 0.31 if count == 2 else 0.0
+        var firing: bool = mounted and jet_active and not downed and not lava_dead
+        for flame: MeshInstance3D in _jet_flames:
+            flame.visible = firing
+            flame.scale.y = 0.8 + 0.2 * sin(Time.get_ticks_msec() * 0.07)
+        if firing and not _jet_audio.playing:
+            _jet_audio.play()
+        elif not firing and _jet_audio.playing:
+            _jet_audio.stop()

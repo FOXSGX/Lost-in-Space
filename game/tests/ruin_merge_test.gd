@@ -24,7 +24,6 @@ func run() -> void:
     main.connected_ids = [1]
     main.spawn_player_for_peer(1)
     main._ship_session.enter_ship(true, [1], main._ship_session.snapshot())
-    main._ship_session.ready_peers = [1]
 
     # 注册表与目的地白名单
     var info := PlanetRegistry.info("ruin")
@@ -33,6 +32,16 @@ func run() -> void:
     check(PlanetRegistry.can_land("ruin"), "PlanetRegistry.can_land 拒绝腐墟星")
     main._ship_session.select_destination("ruin")
     check(main._ship_session.selected_destination == "ruin", "飞船不接受腐墟星作为目的地")
+
+    # select_destination() 会 _clear_departure()，所以就绪状态必须在它之后设置。
+    # 另外 all_ready() 现在要求每名玩家都占一个工位（驾驶台机制），
+    # 并且 confirm_land() 会校验玩家是否站在对应工位上。
+    var walking: SpacePlayer3D = main.players[1] as SpacePlayer3D
+    if walking != null:
+        walking.global_position = ShipDevices3D.point_for("pilot_0")
+    main._ship_session.ready_peers = [1]
+    main._ship_session.station_owners = {0: 1}
+    check(main._ship_session.all_ready(), "准备状态与工位没有满足登陆条件")
 
     # 落地
     main._confirm_land()

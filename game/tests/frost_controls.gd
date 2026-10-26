@@ -35,7 +35,7 @@ func run() -> void:
     main._update_interaction_hint()
     check("E" in main._interaction_label.text, "靠近通讯塔时没有显示 E 操作提示")
     main.start_scan_for_peer(1)
-    check(is_equal_approx(player.scan_lock_remaining, main.SCAN_STARTUP), "Q 扫描没有锁定 3D 玩家")
+    check(is_equal_approx(player.scan_lock_remaining, main.SCAN_STARTUP), "右键扫描没有锁定 3D 玩家")
     # 敌人在首次修复信标后出现，资源不再是敌人触发条件
     main._check_enemy_triggers()
     check(main.enemies.is_empty(), "开局时不应已有敌人")
@@ -51,7 +51,7 @@ func run() -> void:
     first_enemy.global_position = player.global_position + Vector3(2.0, 0.0, 0.0)
     var enemy_health_before := first_enemy.health
     main.attack_from_peer(1)
-    check(first_enemy.health < enemy_health_before, "3D 空格攻击没有造成伤害")
+    check(first_enemy.health < enemy_health_before, "3D 左键攻击没有造成伤害")
     for enemy in main.enemies.values():
         (enemy as Node).queue_free()
     main.enemies.clear()

@@ -1,0 +1,27 @@
+config_version=5
+
+[application]
+config/name="Resonance Station - Energy Interaction 01"
+run/main_scene="res://station.tscn"
+
+[display]
+window/size/viewport_width=1280
+window/size/viewport_height=800
+window/size/window_width_override=1280
+window/size/window_height_override=800
+window/vsync/vsync_mode=0
+
+[rendering]
+renderer/rendering_method="gl_compatibility"
+renderer/rendering_method.mobile="gl_compatibility"
+anti_aliasing/quality/msaa_3d=2
+environment/defaults/default_clear_color=Color(0.01,0.015,0.025,1)
+
+[input]
+repair={"deadzone":0.5,"events":[]}
+pickup={"deadzone":0.5,"events":[]}
+drop={"deadzone":0.5,"events":[]}
+deposit={"deadzone":0.5,"events":[]}
+mute_preview={"deadzone":0.5,"events":[]}
+reset_preview={"deadzone":0.5,"events":[]}
+

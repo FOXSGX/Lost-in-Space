@@ -1,0 +1,7 @@
+{
+  "triangles": {
+    "solid": 446476,
+    "floor": 65832
+  },
+  "policy": "Static exact geometry, excluding scatter, track fasteners, cosmetic tread strips and fixtures; no gameplay collider edits."
+}

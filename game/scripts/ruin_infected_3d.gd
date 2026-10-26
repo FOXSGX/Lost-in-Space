@@ -26,7 +26,6 @@ func setup(id: int, player_count: int = 1) -> void:
     if form == VISUAL.Form.BLOATER:
         max_health += 3
         move_speed *= 0.72
-        attack_damage += 1
     elif form == VISUAL.Form.CRAWLER:
         max_health = maxi(max_health - 2, 2)
         move_speed *= 1.32
