@@ -1004,7 +1004,7 @@ func update_hud(local: SpacePlayer3D) -> void:
     ]
     controller._progress_label.text = progress_text
     var tool_text := "你的工具：%s" % controller.kit_tool_name(local.peer_id)
-    controller._vitals_label.text = "氧气 %d%%\n%s · %d 人模式" % [int(local.oxygen), tool_text, cave_player_mode()]
+    controller._vitals_label.text = "生命 %d/5   氧气 %d%%\n%s · %d 人模式" % [local.health, int(local.oxygen), tool_text, cave_player_mode()]
     controller._hint_label.text = "E 工具机关    R 救援    空格 攻击    Shift 加速"
     controller._alert_label.visible = cave_chapter_complete
     controller._alert_label.text = "洞穴撤离完成 · 队伍沿 +X 出口离开"
