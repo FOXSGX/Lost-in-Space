@@ -37,18 +37,20 @@
 已入库（可直接打开）：`game/previews/resonance_03_winch_prototype/`
 —— 断裂轨道挂缆 / 绞盘收放 / 过冲与回摆 / 锁定座插销的单人原型，含 README、试玩说明、KNOWN-ISSUES、PERFORMANCE、HANDOFF。
 
-**未入库（体积原因，只在本地）** 的 8 个预览工程，合计约 **878 MB（不含 `.godot` 缓存）**：
+**未入库（体积原因，只在本地）** 的 8 个预览工程，合计约 **878.9 MB（不含 `.godot` 缓存，实测）**：
 
-| 预览工程 | 体积（不含缓存） | 内容 |
-| --- | ---: | --- |
-| `game/previews/resonance_02_quality_rework` | 约 266 MB | 第 2 幕质量返工 |
-| `game/previews/resonance_02_moving_cart` | 约 236 MB | 运煤车 |
-| `game/previews/resonance_station_interaction_01` | 约 99 MB | 矿站能源交互 |
-| `game/previews/resonance_coop_playtest_01_1` | 约 71 MB | 合作试玩 01.1 |
-| `game/previews/resonance_coop_playtest_01` | 约 69 MB | 合作试玩 01 |
-| `game/previews/resonance_cooperation_slice_01` | 约 69 MB | 合作切片 |
-| `game/previews/resonance_mining_station_01_1` | 约 68 MB | 矿站原型 01.1 |
-| `game/previews/resonance_mining_station_01` | 约 40 MB | 矿站原型 01 |
+| 预览工程 | 体积（不含缓存） | 文件数 | 内容 |
+| --- | ---: | ---: | --- |
+| `game/previews/resonance_02_quality_rework` | 243.3 MB | 370 | 第 2 幕质量返工 |
+| `game/previews/resonance_02_moving_cart` | 214.7 MB | 202 | 运煤车 |
+| `game/previews/resonance_coop_playtest_01_1` | 74.9 MB | 147 | 合作试玩 01.1 |
+| `game/previews/resonance_coop_playtest_01` | 74.9 MB | 125 | 合作试玩 01 |
+| `game/previews/resonance_cooperation_slice_01` | 74.8 MB | 87 | 合作切片 |
+| `game/previews/resonance_station_interaction_01` | 74.8 MB | 65 | 矿站能源交互 |
+| `game/previews/resonance_mining_station_01_1` | 74.2 MB | 45 | 矿站原型 01.1 |
+| `game/previews/resonance_mining_station_01` | 47.3 MB | 20 | 矿站原型 01 |
+
+（已入库的 `resonance_03_winch_prototype` 为 1.8 MB / 79 文件；9 个预览合计 880.7 MB。）
 
 > 单文件最大 93.9 MB（`resonance_02_*/assets/moving_tunnel.scn`），未超 GitHub 100 MB 硬限制；
 > 但整包 878 MB 会显著撑大仓库。需要入库时建议：**GitHub Release 附 zip**，或 Git LFS；不要直接 commit。
