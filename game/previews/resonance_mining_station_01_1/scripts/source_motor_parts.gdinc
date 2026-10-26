@@ -1,0 +1,23 @@
+const SPEED : float = 5.8
+const SPRINT_MULTIPLIER : float = 1.65
+const THIRD_PERSON_DISTANCE : float = 15.0
+const THIRD_PERSON_HEIGHT : float = 8.6
+const THIRD_PERSON_SHOULDER : float = 0.9
+const THIRD_PERSON_COLLISION_MARGIN : float = 0.28
+const THIRD_PERSON_MOUSE_SENSITIVITY : float = 0.0024
+const THIRD_PERSON_ROTATION_SMOOTHNESS : float = 24.0
+const THIRD_PERSON_CAMERA_SMOOTHNESS : float = 20.0
+const THIRD_PERSON_PITCH_MIN : float = -0.58
+const THIRD_PERSON_PITCH_MAX : float = 0.30
+
+func _third_person_camera_position(target: Vector3) -> Vector3:
+    var forward: Vector3 = Vector3(-sin(_camera_yaw), 0.0, -cos(_camera_yaw))
+    var right: Vector3 = Vector3(cos(_camera_yaw), 0.0, -sin(_camera_yaw))
+    var horizontal_distance: float = cos(_camera_pitch) * THIRD_PERSON_DISTANCE
+    var vertical_offset: float = THIRD_PERSON_HEIGHT + sin(_camera_pitch) * THIRD_PERSON_DISTANCE
+    return target - forward * horizontal_distance + right * THIRD_PERSON_SHOULDER + Vector3.UP * vertical_offset
+
+func _third_person_movement(input_vector: Vector2) -> Vector3:
+    var camera_forward: Vector3 = Vector3(-sin(_camera_yaw), 0.0, -cos(_camera_yaw))
+    var camera_right: Vector3 = Vector3(cos(_camera_yaw), 0.0, -sin(_camera_yaw))
+    return camera_right * input_vector.x + camera_forward * -input_vector.y

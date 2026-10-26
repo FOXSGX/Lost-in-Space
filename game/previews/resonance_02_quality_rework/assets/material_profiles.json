@@ -1,0 +1,491 @@
+{
+  "ST01 · deep folded shale": {
+    "base_color_node_fallback_or_mid_ramp": [
+      0.11999999731779099,
+      0.12999999523162842,
+      0.15000000596046448,
+      1.0
+    ],
+    "metallic": 0.0,
+    "roughness": 0.7507500052452087,
+    "coat": 0.0,
+    "emission_strength": 0.0,
+    "family": "rock"
+  },
+  "ENV02 · pressure schist": {
+    "base_color_node_fallback_or_mid_ramp": [
+      0.11999999731779099,
+      0.12999999523162842,
+      0.15000000596046448,
+      1.0
+    ],
+    "metallic": 0.0,
+    "roughness": 0.7507500052452087,
+    "coat": 0.0,
+    "emission_strength": 0.0,
+    "family": "rock"
+  },
+  "ENV02 · fresh split feldspar": {
+    "base_color_node_fallback_or_mid_ramp": [
+      0.11999999731779099,
+      0.12999999523162842,
+      0.15000000596046448,
+      1.0
+    ],
+    "metallic": 0.0,
+    "roughness": 0.7507500052452087,
+    "coat": 0.0,
+    "emission_strength": 0.0,
+    "family": "rock"
+  },
+  "ST01 · worn granular bedrock": {
+    "base_color_node_fallback_or_mid_ramp": [
+      0.11999999731779099,
+      0.12999999523162842,
+      0.15000000596046448,
+      1.0
+    ],
+    "metallic": 0.0,
+    "roughness": 0.7507500052452087,
+    "coat": 0.0,
+    "emission_strength": 0.0,
+    "family": "rock"
+  },
+  "ST01 · iron silicate rubble": {
+    "base_color_node_fallback_or_mid_ramp": [
+      0.11999999731779099,
+      0.12999999523162842,
+      0.15000000596046448,
+      1.0
+    ],
+    "metallic": 0.0,
+    "roughness": 0.7507500052452087,
+    "coat": 0.0,
+    "emission_strength": 0.0,
+    "family": "rock"
+  },
+  "ENV02 · compacted mineral ballast": {
+    "base_color_node_fallback_or_mid_ramp": [
+      0.05700000002980232,
+      0.06499999761581421,
+      0.07000000029802322,
+      1.0
+    ],
+    "metallic": 0.0,
+    "roughness": 0.8700000047683716,
+    "coat": 0.0,
+    "emission_strength": 0.0,
+    "family": "industrial"
+  },
+  "ENV02 · rail web steel": {
+    "base_color_node_fallback_or_mid_ramp": [
+      0.054999999701976776,
+      0.07400000095367432,
+      0.09000000357627869,
+      1.0
+    ],
+    "metallic": 0.8199999928474426,
+    "roughness": 0.41999998688697815,
+    "coat": 0.0,
+    "emission_strength": 0.0,
+    "family": "industrial"
+  },
+  "ENV02 · rail head worn steel": {
+    "base_color_node_fallback_or_mid_ramp": [
+      0.23000000417232513,
+      0.28999999165534973,
+      0.3199999928474426,
+      1.0
+    ],
+    "metallic": 0.8600000143051147,
+    "roughness": 0.2800000011920929,
+    "coat": 0.0,
+    "emission_strength": 0.0,
+    "family": "industrial"
+  },
+  "ENV02 · rail clamp": {
+    "base_color_node_fallback_or_mid_ramp": [
+      0.11999999731779099,
+      0.15000000596046448,
+      0.17000000178813934,
+      1.0
+    ],
+    "metallic": 0.7200000286102295,
+    "roughness": 0.5199999809265137,
+    "coat": 0.0,
+    "emission_strength": 0.0,
+    "family": "industrial"
+  },
+  "ENV02 · composite track sleepers": {
+    "base_color_node_fallback_or_mid_ramp": [
+      0.07800000160932541,
+      0.06199999898672104,
+      0.04600000008940697,
+      1.0
+    ],
+    "metallic": 0.05000000074505806,
+    "roughness": 0.7599999904632568,
+    "coat": 0.0,
+    "emission_strength": 0.0,
+    "family": "industrial"
+  },
+  "ST01 · worn mineral composite deck": {
+    "base_color_node_fallback_or_mid_ramp": [
+      0.1599999964237213,
+      0.1899999976158142,
+      0.1899999976158142,
+      1.0
+    ],
+    "metallic": 0.18000000715255737,
+    "roughness": 0.7200000286102295,
+    "coat": 0.0,
+    "emission_strength": 0.0,
+    "family": "industrial"
+  },
+  "ST01 · warm ochre enamel": {
+    "base_color_node_fallback_or_mid_ramp": [
+      0.6800000071525574,
+      0.23499999940395355,
+      0.054999999701976776,
+      1.0
+    ],
+    "metallic": 0.3499999940395355,
+    "roughness": 0.3400000035762787,
+    "coat": 0.2199999988079071,
+    "emission_strength": 0.0,
+    "family": "industrial"
+  },
+  "ST01 · graphite machinery": {
+    "base_color_node_fallback_or_mid_ramp": [
+      0.03500000014901161,
+      0.052000001072883606,
+      0.06499999761581421,
+      1.0
+    ],
+    "metallic": 0.6000000238418579,
+    "roughness": 0.4300000071525574,
+    "coat": 0.0,
+    "emission_strength": 0.0,
+    "family": "industrial"
+  },
+  "ST01 · interactive cyan screen": {
+    "base_color_node_fallback_or_mid_ramp": [
+      0.029999999329447746,
+      0.3199999928474426,
+      0.3799999952316284,
+      1.0
+    ],
+    "metallic": 0.2800000011920929,
+    "roughness": 0.30000001192092896,
+    "coat": 0.0,
+    "emission_strength": 1.399999976158142,
+    "family": "industrial"
+  },
+  "ST01 · warm printed safety ivory": {
+    "base_color_node_fallback_or_mid_ramp": [
+      0.7200000286102295,
+      0.6899999976158142,
+      0.5199999809265137,
+      1.0
+    ],
+    "metallic": 0.11999999731779099,
+    "roughness": 0.5799999833106995,
+    "coat": 0.0,
+    "emission_strength": 0.0,
+    "family": "industrial"
+  },
+  "ENV02 · hydrothermal mineralised fissure": {
+    "base_color_node_fallback_or_mid_ramp": [
+      0.024000000208616257,
+      0.0820000022649765,
+      0.09000000357627869,
+      1.0
+    ],
+    "metallic": 0.07999999821186066,
+    "roughness": 0.6200000047683716,
+    "coat": 0.0,
+    "emission_strength": 0.0,
+    "family": "industrial"
+  },
+  "ENV02 · cyan resonant mineral": {
+    "base_color_node_fallback_or_mid_ramp": [
+      0.013062500394880772,
+      0.2199999988079071,
+      0.30250000953674316,
+      1.0
+    ],
+    "metallic": 0.05999999865889549,
+    "roughness": 0.23000000417232513,
+    "coat": 0.3400000035762787,
+    "emission_strength": 0.12999999523162842,
+    "family": "mineral"
+  },
+  "ENV02 · cyan deep cleavage": {
+    "base_color_node_fallback_or_mid_ramp": [
+      0.008751874789595604,
+      0.14740000665187836,
+      0.202674999833107,
+      1.0
+    ],
+    "metallic": 0.05999999865889549,
+    "roughness": 0.23000000417232513,
+    "coat": 0.3400000035762787,
+    "emission_strength": 0.12999999523162842,
+    "family": "mineral"
+  },
+  "ENV02 · exposed axial resonance": {
+    "base_color_node_fallback_or_mid_ramp": [
+      0.008999999612569809,
+      0.1899999976158142,
+      0.23999999463558197,
+      1.0
+    ],
+    "metallic": 0.10000000149011612,
+    "roughness": 0.27000001072883606,
+    "coat": 0.15000000596046448,
+    "emission_strength": 0.6499999761581421,
+    "family": "industrial"
+  },
+  "ENV02 · violet resonant mineral": {
+    "base_color_node_fallback_or_mid_ramp": [
+      0.1484375,
+      0.057499997317790985,
+      0.30250000953674316,
+      1.0
+    ],
+    "metallic": 0.05999999865889549,
+    "roughness": 0.23000000417232513,
+    "coat": 0.3400000035762787,
+    "emission_strength": 0.12999999523162842,
+    "family": "mineral"
+  },
+  "ENV02 · violet deep cleavage": {
+    "base_color_node_fallback_or_mid_ramp": [
+      0.09945312887430191,
+      0.03852500021457672,
+      0.202674999833107,
+      1.0
+    ],
+    "metallic": 0.05999999865889549,
+    "roughness": 0.23000000417232513,
+    "coat": 0.3400000035762787,
+    "emission_strength": 0.12999999523162842,
+    "family": "mineral"
+  },
+  "ST01 · amber worklight lens": {
+    "base_color_node_fallback_or_mid_ramp": [
+      1.0,
+      0.4699999988079071,
+      0.15000000596046448,
+      1.0
+    ],
+    "metallic": 0.11999999731779099,
+    "roughness": 0.2800000011920929,
+    "coat": 0.0,
+    "emission_strength": 3.0,
+    "family": "industrial"
+  },
+  "M23_A_Steel_Dark": {
+    "base_color_node_fallback_or_mid_ramp": [
+      0.035280000418424606,
+      0.04343999922275543,
+      0.051600001752376556,
+      1.0
+    ],
+    "metallic": 0.9200000166893005,
+    "roughness": 0.3866666555404663,
+    "coat": 0.0,
+    "emission_strength": 0.0,
+    "family": "industrial"
+  },
+  "M23_A_Steel_Edge": {
+    "base_color_node_fallback_or_mid_ramp": [
+      0.23559999465942383,
+      0.27639997005462646,
+      0.3017999827861786,
+      1.0
+    ],
+    "metallic": 0.8799999952316284,
+    "roughness": 0.35599997639656067,
+    "coat": 0.0,
+    "emission_strength": 0.0,
+    "family": "industrial"
+  },
+  "M23_A_Paint_Orange": {
+    "base_color_node_fallback_or_mid_ramp": [
+      0.8650000095367432,
+      0.20666667819023132,
+      0.024799998849630356,
+      1.0
+    ],
+    "metallic": 0.05000000074505806,
+    "roughness": 0.3084999918937683,
+    "coat": 0.4000000059604645,
+    "emission_strength": 0.0,
+    "family": "industrial"
+  },
+  "M23_A_Deck": {
+    "base_color_node_fallback_or_mid_ramp": [
+      0.026000000536441803,
+      0.03400000184774399,
+      0.03799999877810478,
+      1.0
+    ],
+    "metallic": 0.2800000011920929,
+    "roughness": 0.6053333282470703,
+    "coat": 0.0,
+    "emission_strength": 0.0,
+    "family": "industrial"
+  },
+  "M23_A_Energy_Cyan": {
+    "base_color_node_fallback_or_mid_ramp": [
+      0.0,
+      0.41999998688697815,
+      0.550000011920929,
+      1.0
+    ],
+    "metallic": 0.11999999731779099,
+    "roughness": 0.20000000298023224,
+    "coat": 0.0,
+    "emission_strength": 0.8999999761581421,
+    "family": "industrial"
+  },
+  "M23_A_Paint_Yellow": {
+    "base_color_node_fallback_or_mid_ramp": [
+      0.9223333597183228,
+      0.6180000305175781,
+      0.05199999734759331,
+      1.0
+    ],
+    "metallic": 0.03999999910593033,
+    "roughness": 0.343999981880188,
+    "coat": 0.2199999988079071,
+    "emission_strength": 0.0,
+    "family": "industrial"
+  },
+  "M23_A_Rubber": {
+    "base_color_node_fallback_or_mid_ramp": [
+      0.012000000104308128,
+      0.014000000432133675,
+      0.01600000075995922,
+      1.0
+    ],
+    "metallic": 0.0,
+    "roughness": 0.8053333163261414,
+    "coat": 0.0,
+    "emission_strength": 0.0,
+    "family": "industrial"
+  },
+  "M23_A_Lamp_Amber": {
+    "base_color_node_fallback_or_mid_ramp": [
+      0.8999999761581421,
+      0.25,
+      0.009999999776482582,
+      1.0
+    ],
+    "metallic": 0.10000000149011612,
+    "roughness": 0.25,
+    "coat": 0.0,
+    "emission_strength": 3.0,
+    "family": "industrial"
+  },
+  "M23_A_Paint_Cream": {
+    "base_color_node_fallback_or_mid_ramp": [
+      0.8680000305175781,
+      0.7523333430290222,
+      0.531000018119812,
+      1.0
+    ],
+    "metallic": 0.05000000074505806,
+    "roughness": 0.31300002336502075,
+    "coat": 0.3799999952316284,
+    "emission_strength": 0.0,
+    "family": "industrial"
+  },
+  "M23_A_Glass": {
+    "base_color_node_fallback_or_mid_ramp": [
+      0.00800000037997961,
+      0.03500000014901161,
+      0.05000000074505806,
+      1.0
+    ],
+    "metallic": 0.18000000715255737,
+    "roughness": 0.03500000014901161,
+    "coat": 1.0,
+    "emission_strength": 0.0,
+    "family": "industrial"
+  },
+  "M23_A_Accent_Cyan": {
+    "base_color_node_fallback_or_mid_ramp": [
+      0.0,
+      0.44999998807907104,
+      0.6000000238418579,
+      1.0
+    ],
+    "metallic": 0.10000000149011612,
+    "roughness": 0.11999999731779099,
+    "coat": 0.4000000059604645,
+    "emission_strength": 0.800000011920929,
+    "family": "industrial"
+  },
+  "M23_A_Coupler": {
+    "base_color_node_fallback_or_mid_ramp": [
+      0.03500000014901161,
+      0.05999999865889549,
+      0.07000000029802322,
+      1.0
+    ],
+    "metallic": 0.800000011920929,
+    "roughness": 0.2199999988079071,
+    "coat": 0.5,
+    "emission_strength": 0.4000000059604645,
+    "family": "industrial"
+  },
+  "M23_A_Lamp_Red": {
+    "base_color_node_fallback_or_mid_ramp": [
+      0.550000011920929,
+      0.012000000104308128,
+      0.00800000037997961,
+      1.0
+    ],
+    "metallic": 0.10000000149011612,
+    "roughness": 0.25,
+    "coat": 0.0,
+    "emission_strength": 2.5,
+    "family": "industrial"
+  },
+  "M23_A_Core": {
+    "base_color_node_fallback_or_mid_ramp": [
+      0.0,
+      0.05999999865889549,
+      0.10000000149011612,
+      1.0
+    ],
+    "metallic": 0.10000000149011612,
+    "roughness": 0.14000000059604645,
+    "coat": 0.550000011920929,
+    "emission_strength": 0.64166659116745,
+    "family": "industrial"
+  },
+  "__encoding__": {
+    "irradiance_scale": 8,
+    "log_encoding": true,
+    "vertex_roughness": true,
+    "actual_albedo": "EMIT-baked linear source node color packed RG in UV0 and B in UV1.r; roughness in UV1.g",
+    "lut_size": 32,
+    "log2_domain": [
+      -10,
+      5
+    ],
+    "bake_device": "OPTIX",
+    "bake_samples": 32,
+    "triangles": 559507,
+    "elapsed_seconds": 142.56834840774536,
+    "bounds": {
+      "irradiance_max": 92.81462860107422,
+      "albedo_min": 0.0,
+      "albedo_max": 1.0
+    },
+    "static_light_limit": "Baked diffuse illumination cannot change with worklight toggles; only realtime specular/character lights toggle."
+  }
+}
