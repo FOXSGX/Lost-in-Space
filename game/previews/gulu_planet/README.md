@@ -1,125 +1,99 @@
-# 咕噜星 · 第一人称试玩预览
+# 奶龙星 · 第一人称试玩预览
 
-《迷失太空 / Lost in Space》第四个星球“咕噜星”的独立试玩预览。
+《迷失太空 / Lost in Space》第四颗新星球“奶龙星”的独立试玩预览。
 
-本轮只验证**第一人称移动、鼠标观察、视角切换与场景碰撞**；场上有一只占位咕噜和一块占位燃料，
-**没有任何发现、追逐、叼走、声音或联网行为**。
+本轮只验证最小互动：
 
-![第一人称](docs/screenshots/01_first_person.png)
+**走近奶龙 → 按 Q 挑衅 → 它注意并靠近 → 连续挑衅后蓄势 → 扑来 → 侧移躲开 → 短暂恢复。**
+
+本轮没有真实燃料抢夺、伤害、道具、麦克风、联网或正式模型。
 
 ## 启动
 
-用 Godot **4.7.2** 打开本目录的 `project.godot`，或：
+用 Godot **4.7.2** 打开本目录 `project.godot`，或：
 
 ```powershell
-& "<Godot 4.7.2 可执行文件>" --path "<仓库>/game/previews/gulu_planet"
+& "<Godot 4.7.2>" --path "<仓库>/game/previews/gulu_planet"
 ```
 
-入口场景：`gulu_planet.tscn`。进入即为**第一人称**，鼠标会被捕获。
+入口：`gulu_planet.tscn`。进入默认第一人称，鼠标捕获。
 
 ### 操作
 
-- **WASD**：移动
-- **Shift**：加速
-- **鼠标**：环视
-- **Tab**：切换第一人称 / 第三人称（第三人称仅用于检查角色）
-- **R**：回到出生点
-- **Esc**：释放鼠标
-- **左键**：重新捕获鼠标
-- **F3**：开关调试面板
-- **F1**：隐藏/显示左上操作说明
+| 按键 | 作用 |
+| --- | --- |
+| WASD | 移动 |
+| Shift | 加速 |
+| 鼠标 | 环视 |
+| **Q** | **挑衅奶龙**（9 m 内、面向它、不能隔墙） |
+| Tab | 切换第一/第三人称（第三人称仅检查） |
+| R | 重置玩家、奶龙与上头值 |
+| Esc / 左键 | 释放 / 重新捕获鼠标 |
+| F3 | 调试面板 |
+| F1 | 隐藏/显示左上说明 |
 
-## 复用来源
+## 行为与反馈
 
-控制器**逐字复制**自 GitHub `main` 提交 `42519ff403241bf5ac968edb9ae326c6fdbc74fe`：
+- **待机**：奶油色占位奶龙，地面状态环微亮。
+- **注意**（0.55 s）：转向玩家，环变青，HUD 显示“它注意到你了”。
+- **靠近**（2.6 m/s，停 2.4 m）：持续盯住玩家；HUD 提示再挑衅会激怒它。
+- **上头**：每次 Q +0.34，停手 1.2 s 后缓慢下降；HUD 有橙色上头条。
+- **蓄势**（1.0 s）：压低身体、抖动、红色状态环、HUD 红色预警——“要扑了，侧移躲开”。
+- **扑击**（0.42 s，11 m/s）：只扑向蓄势结束时锁定的位置，不追尾。
+- **命中/扑空**：1.25 m 判定；本轮没有伤害或抢夺，只显示“扑空/被扑到”。
+- **恢复**（1.5 s）：不理会挑衅；结束回待机，上头清零，给玩家搬运窗口。
+- 失去视线、超过 13 m 或 9 s 没挑衅 → 回窝。
+
+所有数值集中在 `scripts/milk_dragon.gd` 顶部，**全部是原型值**。
+
+## 第一人称复用
+
+GitHub `main` 提交 `42519ff403241bf5ac968edb9ae326c6fdbc74fe`：
 
 - `game/previews/resonance_coop_playtest_01_1/scripts/station_player.gd`
-- 与 `game/previews/resonance_02_quality_rework/scripts/station_player.gd` 完全相同
-  （SHA256 `16ADB4AFB5CAE2AB151C870828D9FCA27EBF28BA1ADD30F12072510A67BE399E`）
+- 与 `resonance_02_quality_rework/scripts/station_player.gd` 逐字相同
+  （SHA256 `16ADB4AF...E399E`）。
 
-同时复制其依赖：
-
-- `scripts/camera_guard.gd`
-- `scripts/interaction_pose.gd`
-- `scripts/protagonist_visual.gd`
-- `scenes/protagonist_visual.tscn`
-- `contact_shadow.gdshader`
-- `assets/characters/protagonist_model.json`
-- `assets/characters/skins/skin_ranger.glb`
-
-没有复制共振星 67 MB 的空间站模型；本轮用自建灰盒场地。没有修改 `station_player.gd`。
-
-### 保留的视角/移动参数
-
-| 项目 | 值 |
-| --- | --- |
-| 移动速度 | 5.8 m/s |
-| Shift 倍率 | 1.65 |
-| 第一人称眼睛高度 | 1.65 m |
-| FOV | 62° |
-| 鼠标灵敏度 | 0.0024 |
-| 俯仰限制 | −0.58 … +0.30 rad |
-| 视角切换 | Tab（`inspect_first_person`） |
-
-原预览默认第三人称；本预览在生成玩家后设置 `use_first_person=true`，因此进入即为第一人称。
-Tab 仍可切回第三人称查看角色和场地。
+`station_player.gd` **未修改**；入口脚本只设置 `use_first_person=true` 和提供灰盒场地/
+`clamp_cave_camera_position`/`actors` 兼容。保留 5.8 m/s、Shift 1.65、眼高 1.65 m、
+FOV 62°、鼠标 0.0024、俯仰 −0.58…0.30、Tab 切换。
 
 ## 场景
 
-- 32×26 m 灰盒场地，地板/舱壁/横梁/箱子/低台/一道碰撞验证墙。
-- 出生点 `(-8, 0.02, 0)`，默认朝 +X；占位咕噜在左前方，占位燃料在右前方，进入首屏即可看到。
-- 占位咕噜：绿色圆润身体、眼睛、耳朵、手臂、脚；静态。
-- 占位燃料：橙色燃料罐 + 地面光环 + 暖光；静态，无交互。
-- 无漂浮 3D 文字；HUD 只有操作说明、当前视角和 F3 调试。
+- 32×26 m 灰盒：地板、舱壁、箱子、低台、碰撞墙、视线测试柱。
+- 奶龙 `(2, 0, -3.5)`；燃料占位 `(5, 0, 3)`；玩家出生 `(-8, 0.02, 0)`。
+- 奶龙外观是 `milk_dragon_visual.gd` 程序化占位；行为在 `milk_dragon.gd`，两者分离。
+- 无漂浮 3D 文字；HUD 只放必要状态。
 
-## 实际验证（自动运行）
+## 验证
 
 ```powershell
-& $godot --path $preview -- --selftest
-# GULU SELFTEST SUMMARY passes=16 failures=0
-
 & $godot --headless --path $preview -- --selftest
-# GULU SELFTEST SUMMARY passes=14 failures=0（headless 跳过鼠标观察）
+# GULU SELFTEST SUMMARY passes=28 failures=0
 ```
 
-已验证：默认第一人称、眼睛高度 1.65 m、FOV 62°、W 前进 5.22 m、鼠标 yaw、
-俯仰 clamp、内墙碰撞停在 x=11.32、Tab 双向切换、R 重置、F3 调试、两只占位对象首屏可见。
+已通过：默认第一人称、眼高/FOV、移动、内墙碰撞、Tab 双向、待机→注意→靠近、
+第 3 次挑衅蓄势、1.0 s 预兆、侧移躲开、恢复→待机、隔墙拒绝、连按冷却、R 重置、F3 调试。
 
-**尚未验证**：真人手动试玩的手感；跳跃（复用的控制器本身没有跳跃）；咕噜行为；麦克风；
-联网同步。详见 `TESTING.md`。
+未验证：真人手感与趣味、鼠标观察（本轮 headless 跳过；基础版曾窗口通过）、
+伤害/抢夺/结算、麦克风、联网、正式动画。
 
-## 本轮范围
+## 素材
 
-**做**：预览工程、第一人称接入、灰盒场地、占位咕噜/燃料、移动/观察/碰撞验证、重置、文档。
+查找记录见 `ASSETS.md`：找到可下载 GLB 候选，但没有同时满足骨骼动画与明确 IP 授权；
+本轮**未导入**第三方模型，继续使用程序化占位。
 
-**不做**：发现/追逐、声音吸引、叼走/吞掉/抢回燃料、攻击/伤害、任务结算、正式航线接入、
-麦克风系统、联网扩展、正式模型/动画。
+## 范围
 
-## 目录
+**做**：奶龙占位、Q 挑衅、注意/靠近/蓄势/扑击/恢复/回窝、HUD、重置、文档。
 
-```
-gulu_planet/
-├─ project.godot
-├─ gulu_planet.tscn
-├─ scripts/
-│  ├─ station_player.gd      # 复用，逐字未改
-│  ├─ camera_guard.gd        # 复用
-│  ├─ interaction_pose.gd    # 复用
-│  ├─ protagonist_visual.gd  # 复用
-│  ├─ gulu_app.gd            # 入口/场地/输入/HUD/自测
-│  ├─ placeholder_gulu.gd
-│  └─ fuel_prop.gd
-├─ scenes/protagonist_visual.tscn
-├─ assets/characters/...
-├─ docs/screenshots/
-├─ BRIEF.md / STATUS.md / DECISIONS.md / TESTING.md
-```
+**不做**：真实燃料搬运/叼走/追回、伤害、道具、结算、声音/麦克风、联网、正式建模、
+正式航线接入、其他星球修改。
 
-## 已知限制
+## 文档
 
-- 本地 `origin/main` 仍是旧 2D `3969511`；GitHub 当前 main 是 3D `42519ff`。
-  `git fetch` 连接被重置，本轮分支基于旧本地 main，预览文件从 42519ff raw 复制且自包含；
-  网络恢复后应 rebase 到最新 main。
-- 第三人称只用于检查；镜头被限制在灰盒内，靠近角色时可能隐藏身体（沿用原预览行为）。
-- 控制器没有跳跃；本轮不另写一套。
-- 未接入正式星球选择、航线和主线。
+- `BRIEF.md`：目标、约束、参数、来源
+- `STATUS.md`：完成情况、验证、下一步
+- `DECISIONS.md`：选择与待讨论
+- `TESTING.md`：启动、测试步骤、结果
+- `ASSETS.md`：奶龙素材查找与授权记录

@@ -1,11 +1,11 @@
-; 咕噜星独立试玩预览
-; 仅验证第一人称移动、观察与场景碰撞；未接入正式航线。
+﻿; 奶龙星独立试玩预览（内部路径沿用 gulu_planet）
+; 仅验证第一人称移动/观察/碰撞与奶龙最小互动；未接入正式航线。
 config_version=5
 
 [application]
 
-config/name="Lost in Space - Gulu Planet Preview"
-config/description="咕噜星第一人称试玩预览：复用共振星独立预览的站台玩家控制器。"
+config/name="Lost in Space - Nailong Planet Preview"
+config/description="奶龙星第一人称试玩预览：复用共振星独立预览的站台玩家控制器。"
 run/main_scene="res://gulu_planet.tscn"
 config/features=PackedStringArray("4.7")
 

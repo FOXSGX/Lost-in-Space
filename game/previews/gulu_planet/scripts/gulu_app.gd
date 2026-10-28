@@ -1,14 +1,15 @@
 extends Node3D
 
-## 咕噜星第一人称试玩预览。
+## 奶龙星第一人称试玩预览（内部路径沿用 gulu_planet）。
 ##
 ## 复用来源：
 ##   game/previews/resonance_coop_playtest_01_1/scripts/station_player.gd
 ##   game/previews/resonance_02_quality_rework/scripts/station_player.gd（两份 hash 相同）
 ## 控制器文件逐字复制，未改写；本脚本只负责输入映射、测试场地、HUD 与启动参数。
 ##
-## 本轮只验证：移动、鼠标观察、第一/第三人称切换、场景碰撞、重置。
-## 不包含麦克风、发现、追逐、叼走燃料、联网或正式美术。
+## 本轮验证：移动、鼠标观察、第一/第三人称、场景碰撞，以及
+## “挑衅 → 注意 → 靠近 → 蓄势扑击 → 躲开/恢复”的最小互动。
+## 不包含麦克风、真实抢燃料、伤害、道具、联网或正式美术。
 
 const SOURCE_COMMIT := "42519ff403241bf5ac968edb9ae326c6fdbc74fe"
 const SPAWN := Vector3(-8.0, 0.02, 0.0)
@@ -17,7 +18,7 @@ const GULU_POSITION := Vector3(2.0, 0.0, -3.5)
 const FUEL_POSITION := Vector3(5.0, 0.0, 3.0)
 
 var player: CharacterBody3D
-var gulu: Node3D
+var gulu: CharacterBody3D
 var fuel: Node3D
 var actors: Dictionary = {}
 
@@ -26,11 +27,17 @@ var _help_visible := true
 var _hud: CanvasLayer
 var _root: Control
 var _mode_label: Label
+var _creature_label: Label
+var _agitation_bar: ProgressBar
 var _debug_panel: PanelContainer
 var _debug_label: Label
 var _crosshair_root: Control
 var _help_label: Label
+var _prompt_panel: PanelContainer
+var _prompt_label: Label
 var _font: SystemFont
+var _feedback := ""
+var _feedback_timer := 0.0
 
 var _automation := false
 var _shot_dir := "user://gulu_shots"
@@ -41,9 +48,9 @@ func _ready() -> void:
 	_register_input()
 	_build_environment()
 	_build_field()
+	_spawn_player()
 	_build_gulu()
 	_build_fuel()
-	_spawn_player()
 	_build_hud()
 
 	var args := OS.get_cmdline_user_args()
@@ -69,6 +76,7 @@ func _register_input() -> void:
 		"release_mouse": KEY_ESCAPE,
 		"inspect_first_person": KEY_TAB,
 		"brace": KEY_H,
+		"provoke": KEY_Q,
 	}
 	for action in map:
 		if not InputMap.has_action(action):
@@ -87,6 +95,9 @@ func _register_input() -> void:
 
 func _unhandled_key_input(event: InputEvent) -> void:
 	if not (event is InputEventKey) or not event.pressed or event.echo:
+		return
+	if event.is_action_pressed("provoke"):
+		_try_provoke()
 		return
 	match event.keycode:
 		KEY_R:
@@ -149,6 +160,10 @@ func _build_field() -> void:
 	_add_static_box(Vector3(0.6, 3.0, 6.0), Vector3(12.0, 1.5, -4.0), Color("#2b3d44"))
 	_add_mesh_box(Vector3(0.64, 0.12, 6.05), Vector3(12.0, 3.02, -4.0), Color("#72c6b7"))
 
+	# 视线测试柱：从它后面挑衅不应生效；不挡主路线。
+	_add_static_box(Vector3(0.8, 2.4, 0.6), Vector3(-2.0, 1.2, -4.7), Color("#2b3d44"))
+	_add_mesh_box(Vector3(0.84, 0.10, 0.64), Vector3(-2.0, 2.42, -4.7), Color("#72c6b7"))
+
 	# 可绕行的箱子与低台，验证普通碰撞/step assist。
 	_add_static_box(Vector3(1.0, 1.0, 1.0), Vector3(7.0, 0.5, 5.5), Color("#b77a45"))
 	_add_static_box(Vector3(1.0, 1.0, 1.0), Vector3(7.2, 1.5, 5.4), Color("#c98a52"))
@@ -168,7 +183,7 @@ func _spawn_player() -> void:
 	player.position = SPAWN
 	add_child(player)
 	actors[1] = player
-	# 复用控制器默认第三人称；咕噜星要求在进入试玩时直接是第一人称。
+	# 复用控制器默认第三人称；奶龙星要求在进入试玩时直接是第一人称。
 	player.set("use_first_person", true)
 	(player.get("visual") as Node3D).visible = false
 	player.call("update_camera", 1.0, true)
@@ -176,63 +191,15 @@ func _spawn_player() -> void:
 
 
 func _build_gulu() -> void:
-	gulu = Node3D.new()
-	gulu.name = "PlaceholderGulu"
+	gulu = load("res://scripts/milk_dragon.gd").new() as CharacterBody3D
+	gulu.name = "MilkDragon"
 	gulu.position = GULU_POSITION
 	gulu.rotation.y = -0.46
-	gulu.set_script(load("res://scripts/placeholder_gulu.gd"))
+	var visual := load("res://scripts/milk_dragon_visual.gd").new() as Node3D
+	visual.name = "Visual"
+	gulu.add_child(visual)
 	add_child(gulu)
-
-	var body := SphereMesh.new()
-	body.radius = 0.52
-	body.height = 1.04
-	_add_mesh(gulu, body, Vector3(0.0, 0.62, 0.0), Color("#67b98d"), Vector3(1.0, 1.15, 0.92))
-	var belly := SphereMesh.new()
-	belly.radius = 0.3
-	belly.height = 0.58
-	_add_mesh(gulu, belly, Vector3(0.0, 0.5, 0.28), Color("#a8d9b8"), Vector3(1.0, 1.0, 0.55))
-	var head := SphereMesh.new()
-	head.radius = 0.35
-	head.height = 0.7
-	_add_mesh(gulu, head, Vector3(0.0, 1.28, 0.0), Color("#74c79a"), Vector3(1.0, 0.95, 1.0))
-
-	for side in [-1.0, 1.0]:
-		var eye := SphereMesh.new()
-		eye.radius = 0.085
-		eye.height = 0.17
-		_add_mesh(gulu, eye, Vector3(side * 0.14, 1.34, -0.3), Color("#f1fff8"))
-		var pupil := SphereMesh.new()
-		pupil.radius = 0.040
-		pupil.height = 0.08
-		_add_mesh(gulu, pupil, Vector3(side * 0.14, 1.34, -0.37), Color("#14231f"))
-		var ear := CylinderMesh.new()
-		ear.top_radius = 0.02
-		ear.bottom_radius = 0.12
-		ear.height = 0.34
-		var ear_node := _add_mesh(gulu, ear, Vector3(side * 0.31, 1.52, 0.0), Color("#67b98d"))
-		ear_node.rotation.z = side * -0.55
-		var arm := CapsuleMesh.new()
-		arm.radius = 0.095
-		arm.height = 0.5
-		var arm_node := _add_mesh(gulu, arm, Vector3(side * 0.5, 0.66, 0.02), Color("#5eae84"))
-		arm_node.rotation.z = side * 0.18
-		var foot := SphereMesh.new()
-		foot.radius = 0.16
-		foot.height = 0.32
-		_add_mesh(gulu, foot, Vector3(side * 0.24, 0.12, -0.06), Color("#4f8f70"), Vector3(1.0, 0.6, 1.25))
-
-	var collider := StaticBody3D.new()
-	collider.collision_layer = 6
-	collider.collision_mask = 0
-	var shape := CollisionShape3D.new()
-	var capsule := CapsuleShape3D.new()
-	capsule.radius = 0.42
-	capsule.height = 1.4
-	shape.shape = capsule
-	shape.position.y = 0.7
-	collider.add_child(shape)
-	gulu.add_child(collider)
-
+	gulu.call("setup_player", player)
 
 func _build_fuel() -> void:
 	fuel = StaticBody3D.new()
@@ -362,20 +329,20 @@ func _build_hud() -> void:
 	margin.add_child(column)
 
 	var title := Label.new()
-	title.text = "咕噜星 · 第一人称试玩"
+	title.text = "奶龙星 · 第一人称试玩"
 	title.add_theme_font_size_override("font_size", 21)
 	title.add_theme_color_override("font_color", Color("#e9f7f3"))
 	column.add_child(title)
 
 	var subtitle := Label.new()
-	subtitle.text = "占位场地 · 只验证移动、观察与碰撞"
+	subtitle.text = "占位场地 · 验证挑衅、靠近、扑击与躲开"
 	subtitle.add_theme_font_size_override("font_size", 13)
 	subtitle.add_theme_color_override("font_color", Color("#8fb3ae"))
 	column.add_child(subtitle)
 
 	_help_label = Label.new()
-	_help_label.text = "WASD 移动 · Shift 加速 · 鼠标观察\nTab 切换视角 · R 回到起点 · Esc 释放鼠标 · 左键收回鼠标\nF3 调试 · F1 隐藏说明"
-	_help_label.add_theme_font_size_override("font_size", 13)
+	_help_label.text = "WASD 移动 · Shift 加速 · 鼠标观察 · Q 挑衅\nTab 切换视角 · R 重置 · Esc 释放鼠标 · 左键收回鼠标\nF3 调试 · F1 隐藏说明"
+	_help_label.add_theme_font_size_override("font_size", 12)
 	_help_label.add_theme_color_override("font_color", Color("#b9d4cf"))
 	column.add_child(_help_label)
 
@@ -386,6 +353,40 @@ func _build_hud() -> void:
 	_mode_label.add_theme_font_size_override("font_size", 17)
 	_mode_label.add_theme_color_override("font_color", Color("#7dffd4"))
 	_root.add_child(_mode_label)
+
+	_creature_label = Label.new()
+	_creature_label.position = Vector2(944, 58)
+	_creature_label.size = Vector2(312, 26)
+	_creature_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	_creature_label.add_theme_font_size_override("font_size", 15)
+	_creature_label.add_theme_color_override("font_color", Color("#9fe8d8"))
+	_creature_label.text = "奶龙：待机 · 关注 —"
+	_root.add_child(_creature_label)
+
+	_agitation_bar = ProgressBar.new()
+	_agitation_bar.position = Vector2(1024, 88)
+	_agitation_bar.size = Vector2(232, 12)
+	_agitation_bar.min_value = 0.0
+	_agitation_bar.max_value = 100.0
+	_agitation_bar.value = 0.0
+	_agitation_bar.show_percentage = false
+	var bar_bg := StyleBoxFlat.new()
+	bar_bg.bg_color = Color(0.04, 0.1, 0.12, 0.9)
+	bar_bg.border_color = Color(0.3, 0.5, 0.46, 0.5)
+	bar_bg.set_border_width_all(1)
+	bar_bg.corner_radius_top_left = 3
+	bar_bg.corner_radius_top_right = 3
+	bar_bg.corner_radius_bottom_left = 3
+	bar_bg.corner_radius_bottom_right = 3
+	var bar_fill := StyleBoxFlat.new()
+	bar_fill.bg_color = Color("#ff9a54")
+	bar_fill.corner_radius_top_left = 3
+	bar_fill.corner_radius_top_right = 3
+	bar_fill.corner_radius_bottom_left = 3
+	bar_fill.corner_radius_bottom_right = 3
+	_agitation_bar.add_theme_stylebox_override("background", bar_bg)
+	_agitation_bar.add_theme_stylebox_override("fill", bar_fill)
+	_root.add_child(_agitation_bar)
 
 	_crosshair_root = Control.new()
 	_crosshair_root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -402,8 +403,28 @@ func _build_hud() -> void:
 	v.size = Vector2(2, 12)
 	_crosshair_root.add_child(v)
 
+	_prompt_panel = PanelContainer.new()
+	_prompt_panel.position = Vector2(330, 690)
+	_prompt_panel.custom_minimum_size = Vector2(620, 52)
+	_prompt_panel.add_theme_stylebox_override("panel", _panel_style(0.86))
+	_root.add_child(_prompt_panel)
+	var pmargin := MarginContainer.new()
+	pmargin.add_theme_constant_override("margin_left", 18)
+	pmargin.add_theme_constant_override("margin_right", 18)
+	pmargin.add_theme_constant_override("margin_top", 7)
+	pmargin.add_theme_constant_override("margin_bottom", 7)
+	_prompt_panel.add_child(pmargin)
+	_prompt_label = Label.new()
+	_prompt_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_prompt_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_prompt_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_prompt_label.add_theme_font_size_override("font_size", 16)
+	_prompt_label.add_theme_color_override("font_color", Color("#e9f7f3"))
+	_prompt_label.text = "走近奶龙，面向它按 Q 挑衅"
+	pmargin.add_child(_prompt_label)
+
 	_debug_panel = PanelContainer.new()
-	_debug_panel.position = Vector2(22, 606)
+	_debug_panel.position = Vector2(22, 520)
 	_debug_panel.custom_minimum_size = Vector2(460, 0)
 	_debug_panel.add_theme_stylebox_override("panel", _panel_style(0.92))
 	_debug_panel.visible = false
@@ -434,13 +455,24 @@ func _panel_style(alpha: float = 0.82) -> StyleBoxFlat:
 	return style
 
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
 	if player == null:
 		return
 	var first := bool(player.get("use_first_person"))
 	_mode_label.text = "第一人称" if first else "第三人称"
 	_mode_label.add_theme_color_override("font_color", Color("#7dffd4") if first else Color("#ffcf5c"))
 	_crosshair_root.visible = first
+	_feedback_timer = maxf(_feedback_timer - delta, 0.0)
+
+	if gulu != null:
+		var state := String(gulu.call("state_name"))
+		var ag := float(gulu.get("agitation"))
+		_creature_label.text = "奶龙：%s · 关注 %s" % [state, String(gulu.call("focus_name"))]
+		_agitation_bar.tooltip_text = "上头 %d%%" % int(round(ag * 100.0))
+		_creature_label.add_theme_color_override("font_color", _state_color(state))
+		_agitation_bar.value = ag * 100.0
+		_update_prompt(state)
+
 	if _debug:
 		var pos := player.global_position
 		var contacts := int(player.get("contacts"))
@@ -448,11 +480,80 @@ func _process(_delta: float) -> void:
 		_debug_label.text = "\n".join(PackedStringArray([
 			"FPS %d · 视角 %s · 位置 %.2f, %.2f, %.2f" % [Engine.get_frames_per_second(), "FPS" if first else "TPS", pos.x, pos.y, pos.z],
 			"镜头高 %.2f m · FOV %.0f · 碰撞计数 %d" % [cam.global_position.y - pos.y, cam.fov, contacts - _last_collisions],
-			"咕噜 %s" % (gulu.call("get_debug_text") if gulu else "—"),
+			"奶龙 %s" % (gulu.call("debug_text") if gulu else "—"),
 			"燃料 %s" % (fuel.call("get_debug_text") if fuel else "—"),
-			"Tab 切换 · R 重置 · 本轮无行为",
+			"Q 挑衅 · Tab 视角 · R 重置 · 本轮不结算抢夺/伤害",
 		]))
 
+
+func _state_color(state: String) -> Color:
+	match state:
+		"注意":
+			return Color("#7dffd4")
+		"靠近":
+			return Color("#ffcf5c")
+		"蓄势", "扑击":
+			return Color("#ff6b5a")
+		"恢复":
+			return Color("#9fb3ae")
+		"回窝":
+			return Color("#8fa6b2")
+		_:
+			return Color("#9fe8d8")
+
+
+func _update_prompt(state: String) -> void:
+	var prompt := ""
+	var color := Color("#e9f7f3")
+	var distance := player.global_position.distance_to(gulu.global_position)
+	if state == "蓄势":
+		prompt = "它压低身体、盯住你了——要扑了，侧移躲开！"
+		color = Color("#ff7a5e")
+	elif state == "扑击":
+		prompt = "扑击！立刻离开它锁定的位置"
+		color = Color("#ff5a4a")
+	elif _feedback_timer > 0.0:
+		prompt = _feedback
+		color = Color("#ffcf5c")
+	else:
+		match state:
+			"待机":
+				if distance > 9.0:
+					prompt = "走近奶龙（9 m 内），面向它按 Q 挑衅"
+				else:
+					prompt = "按 Q 挑衅奶龙，把它从燃料路线引开"
+			"注意":
+				prompt = "它注意到你了，正转向你"
+				color = Color("#7dffd4")
+			"靠近":
+				prompt = "它正在靠近——再按 Q 会激怒它"
+				color = Color("#ffcf5c")
+			"恢复":
+				if bool(gulu.get("last_pounce_hit")):
+					prompt = "被扑到了（原型不结算伤害），它正在恢复"
+				else:
+					prompt = "它扑空了，正在喘气——这是搬运窗口"
+				color = Color("#9fe8d8")
+			"回窝":
+				prompt = "它失去兴趣，回去了"
+				color = Color("#8fa6b2")
+			_:
+				prompt = "按 Q 挑衅奶龙"
+	if prompt != _prompt_label.text:
+		_prompt_label.text = prompt
+	_prompt_label.add_theme_color_override("font_color", color)
+
+
+func _try_provoke() -> void:
+	if gulu == null or player == null:
+		return
+	var result: Dictionary = gulu.call("try_provoke", player)
+	if bool(result.get("ok", false)):
+		_feedback = ""
+		_feedback_timer = 0.0
+	else:
+		_feedback = String(result.get("reason", "现在不能挑衅"))
+		_feedback_timer = 1.4
 
 func _toggle_debug() -> void:
 	_debug = not _debug
@@ -475,6 +576,10 @@ func reset_preview() -> void:
 	(player.get("visual") as Node3D).visible = false
 	player.call("update_camera", 1.0, true)
 	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+	if gulu != null:
+		gulu.call("reset_to_home")
+	_feedback = ""
+	_feedback_timer = 0.0
 	_last_collisions = int(player.get("contacts"))
 	print("GULU reset spawn=%s" % str(SPAWN))
 
@@ -496,6 +601,20 @@ func _teleport(at: Vector3, yaw: float) -> void:
 	player.set("_camera_pitch", -0.18)
 	player.set("_camera_pitch_target", -0.18)
 	player.call("update_camera", 1.0, true)
+
+
+func _yaw_to(target: Vector3) -> float:
+	var direction := target - player.global_position
+	return atan2(-direction.x, -direction.z)
+
+
+func _press_provoke() -> void:
+	var event := InputEventKey.new()
+	event.physical_keycode = KEY_Q
+	event.keycode = KEY_Q
+	event.pressed = true
+	event.echo = false
+	_unhandled_key_input(event)
 
 
 # ---------------------------------------------------------------- automation
@@ -587,23 +706,74 @@ func _run_selftest() -> void:
 	_check(bool(player.get("use_first_person")), "Tab returns to first person", passes, failures)
 	_check(not (player.get("visual") as Node3D).visible, "first person hides own body", passes, failures)
 
-	# 重置。
+	# 奶龙行为：挑衅 → 注意 → 靠近 → 蓄势 → 扑击 → 玩家躲开 → 恢复。
+	reset_preview()
+	_teleport(Vector3(-5.0, 0.02, -3.5), _yaw_to(GULU_POSITION))
+	await _wait(0.2)
+	_check(gulu.state_name() == "待机", "dragon starts idle", passes, failures)
+	_press_provoke()
+	await _wait(0.06)
+	_check(gulu.state_name() == "注意", "Q provoke makes dragon notice", passes, failures)
+	_check(float(gulu.get("agitation")) > 0.2, "provoke raises agitation", passes, failures)
+	await _wait(0.8)
+	_check(gulu.state_name() == "靠近", "dragon approaches after notice", passes, failures)
+	var approach_distance := player.global_position.distance_to(gulu.global_position)
+	await _wait(0.7)
+	var closer_distance := player.global_position.distance_to(gulu.global_position)
+	_check(closer_distance < approach_distance - 0.4, "dragon closes distance (%.2f -> %.2f)" % [approach_distance, closer_distance], passes, failures)
+
+	_press_provoke()
+	await _wait(0.8)
+	_press_provoke()
+	await _wait(0.15)
+	_check(gulu.state_name() == "蓄势", "third provoke triggers windup", passes, failures)
+	await _wait(0.3)
+	_check(gulu.state_name() == "蓄势", "windup telegraph lasts before pounce", passes, failures)
+
+	Input.action_press("move_right")
+	await _wait(0.9)
+	Input.action_release("move_right")
+	await _wait(0.6)
+	_check(not bool(gulu.get("last_pounce_hit")), "player can dodge the pounce", passes, failures)
+	_check(gulu.state_name() == "恢复" or gulu.state_name() == "待机", "pounce ends in recovery", passes, failures)
+	await _wait(1.7)
+	_check(gulu.state_name() == "待机", "dragon returns to idle after recovery", passes, failures)
+
+	# 墙体遮挡：隔墙挑衅不应生效。
+	reset_preview()
+	_teleport(Vector3(-6.0, 0.02, -5.5), _yaw_to(GULU_POSITION))
+	await _wait(0.2)
+	_press_provoke()
+	await _wait(0.1)
+	_check(gulu.state_name() == "待机", "provoke behind wall is rejected", passes, failures)
+	_check(float(gulu.get("agitation")) < 0.01, "blocked provoke adds no agitation", passes, failures)
+
+	# 冷却：同一瞬间连按不应叠两倍 agitation。
+	reset_preview()
+	_teleport(Vector3(-5.0, 0.02, -3.5), _yaw_to(GULU_POSITION))
+	await _wait(0.2)
+	_press_provoke()
+	_press_provoke()
+	await _wait(0.06)
+	_check(float(gulu.get("agitation")) <= 0.35, "provoke cooldown blocks rapid repeats", passes, failures)
+
 	reset_preview()
 	await get_tree().physics_frame
 	_check(player.global_position.distance_to(SPAWN) < 0.2, "reset returns to spawn", passes, failures)
 	_check(bool(player.get("use_first_person")), "reset restores first person", passes, failures)
+	_check(gulu.state_name() == "待机", "reset restores dragon idle", passes, failures)
 
 	_toggle_debug()
 	await _wait(0.25)
-	_check(_debug_label.text.length() > 0 and _debug_label.text.contains("咕噜"), "debug panel renders", passes, failures)
+	_check(_debug_label.text.length() > 0 and _debug_label.text.contains("奶龙"), "debug panel renders", passes, failures)
 	_toggle_debug()
 
 	Input.action_release("move_up")
+	Input.action_release("move_right")
 	Input.action_release("sprint")
 	print("GULU SELFTEST SUMMARY passes=%d failures=%d" % [passes.size(), failures.size()])
 	await _wait(0.2)
 	get_tree().quit(0 if failures.is_empty() else 1)
-
 
 func _run_shots() -> void:
 	DirAccess.make_dir_recursive_absolute(_shot_dir)
@@ -612,22 +782,23 @@ func _run_shots() -> void:
 	await _wait(0.5)
 	var shot_cam := player.get("camera") as Camera3D
 	print("GULU SHOT view gulu=%s fuel=%s" % [shot_cam.unproject_position(gulu.global_position + Vector3.UP * 0.8), shot_cam.unproject_position(fuel.global_position + Vector3.UP * 0.45)])
-	await _shot("01_first_person.png")
+	await _shot("01_first_person_idle.png")
 
-	var toggle := InputEventAction.new()
-	toggle.action = "inspect_first_person"
-	toggle.pressed = true
-	player.call("_unhandled_input", toggle)
-	await _wait(0.7)
-	await _shot("02_third_person.png")
-	player.call("_unhandled_input", toggle)
+	_press_provoke()
+	await _wait(0.35)
+	await _shot("02_notice.png")
+
+	await _wait(0.8)
+	_press_provoke()
+	await _wait(0.8)
+	_press_provoke()
 	await _wait(0.3)
+	await _shot("03_windup.png")
+
 	print("GULU SHOTS dir=%s" % ProjectSettings.globalize_path(_shot_dir))
 	get_tree().quit(0)
 
-
 func _shot(file_name: String) -> void:
-	DisplayServer.window_move_to_foreground()
 	RenderingServer.force_draw()
 	await get_tree().process_frame
 	await get_tree().process_frame
