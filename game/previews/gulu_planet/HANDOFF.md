@@ -9,7 +9,7 @@
 
 - 仓库：`C:\Users\31798\Documents\GitHub\Lost-in-Space-gulu`
 - 分支：`feature/gulu-planet-preview`
-- 最新提交：`69625d2 docs: add multi-day handoff checkpoint`
+- 最新提交：以 `git log -1 --oneline` 为准（本文件不绑定具体哈希）
 - 预览目录：`game/previews/gulu_planet`
 - 当前阶段：占位角色 + 行为完成；**等待用户选择建模方案 A/B/C**
 - 最新自测：`GULU SELFTEST SUMMARY passes=38 failures=0`
