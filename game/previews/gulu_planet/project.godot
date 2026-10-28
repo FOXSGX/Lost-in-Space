@@ -1,0 +1,32 @@
+; 咕噜星独立试玩预览
+; 仅验证第一人称移动、观察与场景碰撞；未接入正式航线。
+config_version=5
+
+[application]
+
+config/name="Lost in Space - Gulu Planet Preview"
+config/description="咕噜星第一人称试玩预览：复用共振星独立预览的站台玩家控制器。"
+run/main_scene="res://gulu_planet.tscn"
+config/features=PackedStringArray("4.7")
+
+[display]
+
+window/size/viewport_width=1280
+window/size/viewport_height=800
+window/size/window_width_override=1280
+window/size/window_height_override=800
+window/stretch/mode="canvas_items"
+window/size/min_width=960
+window/size/min_height=600
+
+[physics]
+
+3d/physics_engine="Jolt Physics"
+common/physics_interpolation=true
+
+[rendering]
+
+renderer/rendering_method="gl_compatibility"
+renderer/rendering_method.mobile="gl_compatibility"
+anti_aliasing/quality/msaa_3d=2
+environment/defaults/default_clear_color=Color(0.015, 0.025, 0.035, 1)
