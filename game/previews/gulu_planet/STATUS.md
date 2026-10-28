@@ -20,7 +20,7 @@
 - 隔墙挑衅拒绝；快速连按不重复叠加；失去视线/距离过远/超时回窝。
 - HUD 显示奶龙状态、上头条、预警短句；F3 调试；无漂浮 3D 文字。
 - R 重置玩家、奶龙状态与位置。
-- 文档：BRIEF / STATUS / DECISIONS / TESTING / ASSETS / README。
+- 文档：BRIEF / STATUS / DECISIONS / TESTING / ASSETS / README / HANDOFF。
 - Blender 4.5.15 LTS 已安装；独立测试 GLB 已通过 Godot 导入与节点/材质/比例/轴向/脚底检查；
   测试方块默认隐藏，F4 开关。
 - 第三方模型只下载到仓库外（`Documents\NailongAssets`）做内部检查：GitHub 静态 AI 模型
