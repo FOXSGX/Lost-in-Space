@@ -1,6 +1,6 @@
 # STATUS — 奶龙星第一人称试玩预览
 
-最后更新：2026-10-28 20:25（GMT+8）
+最后更新：2026-10-28 23:55（GMT+8）
 分支：`feature/gulu-planet-preview`
 目录：`game/previews/gulu_planet/`（内部路径沿用上一轮）
 
@@ -23,6 +23,8 @@
 - 文档：BRIEF / STATUS / DECISIONS / TESTING / ASSETS / README。
 - Blender 4.5.15 LTS 已安装；独立测试 GLB 已通过 Godot 导入与节点/材质/比例/轴向/脚底检查；
   测试方块默认隐藏，F4 开关。
+- 第三方模型只下载到仓库外（`Documents\NailongAssets`）做内部检查：GitHub 静态 AI 模型
+  846,783 顶点、无骨骼/无动画、无 LICENSE，未导入、未提交、未替换角色。
 
 ## 实际验证（headless）
 
@@ -50,7 +52,8 @@ headless 无鼠标捕获，鼠标观察测试按设计跳过；此前基础版�
 1. 真人用鼠标键盘试玩 2–3 次，判断挑衅距离、蓄势时间、扑击速度是否好躲。
 2. 根据反馈调 `milk_dragon.gd` 顶部参数；目前全是原型值。
 3. 下一阶段再做燃料搬运、叼走/追回、道具或声音入口；本轮未做。
-4. 素材：找到几个可下载 GLB 候选，但无合适骨骼动画且 IP 授权不明确，未导入；继续占位。
+4. 素材：官方无 3D 下载；已下载并检查一个公开 GitHub 静态 AI 模型（无骨骼/动画、无 LICENSE），
+   Sketchfab 候选需登录；均未导入，继续占位。
 
 ## 阻塞/风险
 

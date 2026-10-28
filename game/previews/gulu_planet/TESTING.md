@@ -23,7 +23,9 @@ $preview = "C:\Users\31798\Documents\GitHub\Lost-in-Space-gulu\game\previews\gul
 GULU SELFTEST SUMMARY passes=38 failures=0
 ```
 
-（headless，2026-10-28；鼠标观察/俯仰因 headless 无真实鼠标捕获而跳过。\n\n新增 Blender GLB 检查后共 34 项，全部通过（4 个 mesh、0.8 m 主体、+Y→−Z、+Z→+Y、材质）。）
+（headless，2026-10-28；鼠标观察/俯仰因 headless 无真实鼠标捕获而跳过。
+
+新增 Blender GLB 检查后共 38 项，全部通过（4 个 mesh、0.8 m 主体、+Y→−Z、+Z→+Y、材质）。）
 
 | 项目 | 实测 |
 | --- | --- |
@@ -60,6 +62,9 @@ $blender = "C:\Users\31798\AppData\Local\Programs\Blender Foundation\Blender 4.5
   ForwardMarker 在 Godot z=−0.65（Blender +Y→−Z），TopMarker 在 y=0.92（+Z→+Y）；
   BodyMat 基色导入；默认隐藏，F4 显示。
 - 没有开窗截图；以上是实际导入/实例化/节点/材质检查。
+- 外部第三方模型（不在仓库）：`Documents\NailongAssets\scnuLwz_ai_work_proflie\nailong.glb`，
+  SHA256 校验通过；Blender 回读为 1 个 mesh、846,783 顶点、无 armature/action、3 张 4K 贴图、
+  高 1.089 m、脚底 z≈0。只做内部检查，未导入 Godot。
 
 ## 3. 未验证
 

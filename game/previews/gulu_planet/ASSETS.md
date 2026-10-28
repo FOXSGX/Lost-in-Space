@@ -23,7 +23,9 @@
   75,285,180 bytes，SHA256 `7853405f8e2c9271a99ca1dab48b6cb22dc8d0826a9ae2bd8f69008e9f4cff4a`。
   README 称其为 AI 生成模型；仓库**没有 LICENSE 文件**。
   已下载到独立目录 `C:\Users\31798\Documents\NailongAssets\scnuLwz_ai_work_proflie\`，未入游戏工程。
-  外观/骨骼/材质/动画检查结果见 `BLENDER.md` 与本次反馈。
+  Blender 4.5.15 检查：1 个 mesh、846,783 顶点 / 1,499,676 三角面；**无骨骼、无 vertex group、无动画**；
+  1 材质 + 3 张 4096 PBR 贴图；高 1.089 m，脚底 z≈0。属静态 AI 网格，需要重拓扑/减面/绑骨。
+  预览：同目录 `nailong_preview.png`。
 - `scnuLwz/talk-nailong-3d` 使用的是“奶蛙 GLB”，不是奶龙；不列入。
 - 其余 GitHub 3D 奶龙项目多为程序化/网页游戏资产，未发现可复用的官方角色 GLB。
 
@@ -38,7 +40,7 @@
 另有三条 Sketchfab 结果不可下载（`奶龙_爱给网_aigei_com`、`奶龙新年版`、
 `Cute cartoon奶龙 dinosaur`），未列入可用候选。
 
-## 实际下载与骨骼复核
+## Sketchfab 候选（需登录）
 
 - 三个候选页面都标 `isDownloadable=true`，但匿名请求
   `https://api.sketchfab.com/v3/models/<uid>/download` 返回 **HTTP 401**；
@@ -51,7 +53,9 @@
 
 ## 结论
 
-- 有可下载的 GLB/glTF 候选，但没有**已验证**同时满足“骨骼/可编辑 + 足够动画 + 明确可公开发布”的模型。
+- 找到并下载了公开 GitHub 静态 AI 模型；但它无骨骼/动画、仓库无 LICENSE，不能直接用于行为或公开发布。
+- Sketchfab 有可下载候选，但需登录；未取得文件，骨骼/动画未验证。
+- 没有**已验证**同时满足“骨骼/可编辑 + 足够动画 + 明确可公开发布”的模型。
 - CC BY / Free Standard 是上传者给模型的授权，**不当然包含奶龙 IP 本身的公开商用/发行权**；
   不能把“可下载”当作“允许公开发布”。
 - 因此本轮继续使用**程序化占位奶龙**，行为与外观分离；没有把第三方模型放入仓库。

@@ -96,10 +96,13 @@
 - 坐标规范：Blender 源文件 Z-up、脚底 z=0、测试前向 +Y；Godot 导入后 Y-up、脚底 y=0、前向标记 −Z。不要把 Godot 轴向直接写进 Blender 源文件。
 - 不把测试资产接进奶龙行为或正式资源。
 
-## D-13 奶龙候选未下载，骨骼/可编辑性未验证
+## D-13 第三方奶龙：静态模型已检查，Sketchfab 候选未下载
 
-- Sketchfab 页面标可下载，但匿名下载 API 返回 401；不绕过登录。
-- 因未取得文件，不能确认骨骼/权重/动画轨道；`animationCount=0` 不等于不能使用。
+- 公开 GitHub `scnuLwz/ai_work_proflie` 的 `nailong.glb` 已下载到仓库外并校验；
+  Blender 回读 1 mesh / 846,783 顶点 / 0 armature / 0 action / 3 张 4K 贴图，属静态 AI 网格。
+- 该仓库无 LICENSE；角色 IP 未授权；只做内部检查，不导入、不提交、不替换角色。
+- Sketchfab 页面标可下载，但匿名下载 API 返回 401；不绕过登录，候选文件未取得。
+- 因未取得 Sketchfab 文件，不能确认其骨骼/权重/动画轨道；`animationCount=0` 不等于不能使用。
 - CC BY / Free Standard 不当然包含奶龙 IP 发行权；本轮不导入第三方模型。
 - 推荐下一轮：团队自制或确认 IP/发行授权后再进 Blender 处理。
 

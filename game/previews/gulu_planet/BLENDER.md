@@ -74,16 +74,36 @@ headless 自测（`--headless -- --selftest`）实际检查：
 
 ## 4. 奶龙模型复核
 
-详细候选与许可见 `ASSETS.md`。本轮重新确认：
+### 官方来源
 
-- Sketchfab 页面标 `isDownloadable=true`，但匿名访问
-  `https://api.sketchfab.com/v3/models/<uid>/download` 返回 **401**；
-  实际下载需要登录，不能绕过。
-- 因未取得文件，**骨骼是否存在、是否可在 Blender 中编辑、动画轨道质量均未验证**。
-- “没有动画”不等于“不能用”：0 动画的模型仍可能在 Blender 中绑定骨骼/制作动画；
-  但需要先取得合法文件并检查网格/骨架。
-- 授权：`Nailong`、`奶龙女孩` 为 CC BY 4.0；`奶龙模型` 为 Sketchfab Free Standard。
-  这些是上传者授权，**不当然包含奶龙 IP 的公开商用/发行权**。
+- 官方 IP 方：第七印象文化传媒（深圳）有限公司，官网 https://www.nailoong.com/ ，
+  角色页 https://www.nailoong.com/ipStar/NaiLong/ 。
+- 官网只有 IP 介绍、影视、出版物、品牌授权；**没有找到公开的 3D 模型下载**。
+- 官方“角色形象授权”与“模型文件许可”是两件事，不能互相替代。
+
+### 已下载检查：scnuLwz / ai_work_proflie
+
+- 来源：https://github.com/scnuLwz/ai_work_proflie/releases/tag/v1
+- 文件：`nailong.glb`，75,285,180 bytes；SHA256 校验一致：
+  `7853405f8e2c9271a99ca1dab48b6cb22dc8d0826a9ae2bd8f69008e9f4cff4a`
+- 本地独立目录：`C:\Users\31798\Documents\NailongAssets\scnuLwz_ai_work_proflie\`
+  （未进入游戏工程、未提交、未替换角色）。
+- Blender 4.5.15 检查：
+  - 1 个 mesh（`node_0`），846,783 顶点 / 1,499,676 三角面；
+  - **无 armature、无 vertex group、无 action（0 骨骼 / 0 动画）**；
+  - 1 个材质，3 张 4096×4096 PBR 贴图；
+  - 世界包围盒：高约 **1.089 m**、宽 0.500 m、深 0.518 m，脚底 z≈0；
+  - 静态 AI 生成网格；需要重拓扑/减面/绑骨才能用于行为动画。
+- 渲染预览（Blender，非 Godot）：`nailong_preview.png` 在同目录。
+- 授权：仓库**没有 LICENSE**，README 称 AI 生成模型；角色 IP 未授权。
+  只做内部检查，不作为可发布素材。
+
+### Sketchfab 候选
+
+- 页面标 `isDownloadable=true`，但匿名下载 API 返回 **401**；实际下载需要登录，不绕过。
+- 未取得文件，骨骼/可编辑性/动画质量未验证；`Nailong`、`奶龙女孩` 为 CC BY 4.0，
+  `奶龙模型` 为 Sketchfab Free Standard。
+- “没有动画”不等于“不能用”：可在 Blender 中绑骨/补动画；但没有合法文件与授权前不导入。
 
 ## 5. 推荐方案
 
