@@ -20,7 +20,7 @@ $preview = "C:\Users\31798\Documents\GitHub\Lost-in-Space-gulu\game\previews\gul
 ## 1. 本轮实际结果
 
 ```
-GULU SELFTEST SUMMARY passes=34 failures=0
+GULU SELFTEST SUMMARY passes=38 failures=0
 ```
 
 （headless，2026-10-28；鼠标观察/俯仰因 headless 无真实鼠标捕获而跳过。\n\n新增 Blender GLB 检查后共 34 项，全部通过（4 个 mesh、0.8 m 主体、+Y→−Z、+Z→+Y、材质）。）
@@ -56,9 +56,9 @@ $blender = "C:\Users\31798\AppData\Local\Programs\Blender Foundation\Blender 4.5
 
 - Blender 回读：4 个 mesh（Body/ForwardMarker/TopMarker/BackMarker），4 个材质；
   Body 0.8×0.8×0.8 m。
-- Godot headless 导入实例 `BlenderLinkTest`：4 个 MeshInstance3D，Body AABB 0.8 m；
-  ForwardMarker 在 Godot z=−0.65（Blender +Y→−Z），TopMarker 在 y=1.02（+Z→+Y）；
-  BodyMat 基色导入。
+- Godot headless 导入实例 `BlenderLinkTest`：4 个 MeshInstance3D，Body AABB 0.8 m、脚底 y=0；
+  ForwardMarker 在 Godot z=−0.65（Blender +Y→−Z），TopMarker 在 y=0.92（+Z→+Y）；
+  BodyMat 基色导入；默认隐藏，F4 显示。
 - 没有开窗截图；以上是实际导入/实例化/节点/材质检查。
 
 ## 3. 未验证

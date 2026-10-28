@@ -31,7 +31,7 @@ top_mat = material("TopMat", (0.18, 0.85, 0.45), 0.0, 0.5)
 back_mat = material("BackMat", (0.15, 0.35, 0.75), 0.0, 0.5)
 
 # 1 m 主体（0.8 m 宽、0.8 m 深、0.8 m 高），底部在 z=0。
-bpy.ops.mesh.primitive_cube_add(size=1.0, location=(0.0, 0.0, 0.5))
+bpy.ops.mesh.primitive_cube_add(size=1.0, location=(0.0, 0.0, 0.4))
 body = bpy.context.object
 body.name = "Body"
 body.dimensions = (0.8, 0.8, 0.8)
@@ -42,19 +42,19 @@ bevel.segments = 2
 body.data.materials.append(body_mat)
 
 # Blender +Y 前向标记；glTF 导出后应到 Godot 的 -Z。
-bpy.ops.mesh.primitive_uv_sphere_add(radius=0.12, location=(0.0, 0.65, 0.5))
+bpy.ops.mesh.primitive_uv_sphere_add(radius=0.12, location=(0.0, 0.65, 0.4))
 fwd = bpy.context.object
 fwd.name = "ForwardMarker"
 fwd.data.materials.append(nose_mat)
 
 # Blender +Z 顶部标记；glTF 导出后应到 Godot 的 +Y。
-bpy.ops.mesh.primitive_uv_sphere_add(radius=0.10, location=(0.0, 0.0, 1.02))
+bpy.ops.mesh.primitive_uv_sphere_add(radius=0.10, location=(0.0, 0.0, 0.92))
 top = bpy.context.object
 top.name = "TopMarker"
 top.data.materials.append(top_mat)
 
 # Blender -Y 后向标记，帮助判断旋转。
-bpy.ops.mesh.primitive_cube_add(size=1.0, location=(0.0, -0.68, 0.5))
+bpy.ops.mesh.primitive_cube_add(size=1.0, location=(0.0, -0.68, 0.4))
 back = bpy.context.object
 back.name = "BackMarker"
 back.dimensions = (0.25, 0.18, 0.25)

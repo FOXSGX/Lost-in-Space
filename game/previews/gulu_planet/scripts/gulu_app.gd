@@ -106,6 +106,8 @@ func _unhandled_key_input(event: InputEvent) -> void:
 			reset_preview()
 		KEY_F3:
 			_toggle_debug()
+		KEY_F4:
+			_toggle_blender_test()
 		KEY_F1:
 			_help_visible = not _help_visible
 			_help_label.visible = _help_visible
@@ -306,6 +308,7 @@ func _build_blender_test_asset() -> void:
 	blender_test_asset = packed.instantiate() as Node3D
 	blender_test_asset.name = "BlenderLinkTest"
 	blender_test_asset.position = Vector3(-4.0, 0.0, 2.5)
+	blender_test_asset.visible = false
 	add_child(blender_test_asset)
 
 
@@ -354,7 +357,7 @@ func _build_hud() -> void:
 	column.add_child(subtitle)
 
 	_help_label = Label.new()
-	_help_label.text = "WASD 移动 · Shift 加速 · 鼠标观察 · Q 挑衅\nTab 切换视角 · R 重置 · Esc 释放鼠标 · 左键收回鼠标\nF3 调试 · F1 隐藏说明"
+	_help_label.text = "WASD 移动 · Shift 加速 · 鼠标观察 · Q 挑衅\nTab 切换视角 · R 重置 · Esc 释放鼠标 · 左键收回鼠标\nF3 调试 · F4 GLB 测试资产 · F1 隐藏说明"
 	_help_label.add_theme_font_size_override("font_size", 12)
 	_help_label.add_theme_color_override("font_color", Color("#b9d4cf"))
 	column.add_child(_help_label)
@@ -573,6 +576,11 @@ func _toggle_debug() -> void:
 	_debug_panel.visible = _debug
 
 
+func _toggle_blender_test() -> void:
+	if blender_test_asset != null:
+		blender_test_asset.visible = not blender_test_asset.visible
+
+
 # ---------------------------------------------------------------- reset / camera helpers
 
 func reset_preview() -> void:
@@ -667,6 +675,10 @@ func _run_selftest() -> void:
 
 	# Blender 独立测试资产：GLB 已导入，检查节点、比例、轴向与材质。
 	var ba := blender_test_asset
+	_check(ba != null and not ba.visible, "Blender test asset hidden by default", passes, failures)
+	_toggle_blender_test()
+	await get_tree().physics_frame
+	_check(ba != null and ba.visible, "F4 toggles Blender test asset", passes, failures)
 	var ba_meshes: Array = ba.find_children("*", "MeshInstance3D", true, false) if ba != null else []
 	print("BLENDER_TEST meshes=%d" % ba_meshes.size())
 	for mi in ba_meshes:
@@ -684,10 +696,15 @@ func _run_selftest() -> void:
 	if body_mesh != null:
 		var body_size := body_mesh.get_aabb().size
 		_check(absf(body_size.x - 0.8) < 0.03 and absf(body_size.y - 0.8) < 0.03 and absf(body_size.z - 0.8) < 0.03, "Blender scale is 0.8 m body", passes, failures)
+		var foot_y := body_mesh.position.y - body_size.y * 0.5
+		_check(absf(foot_y) < 0.03, "Blender feet rest on ground (y=%.3f)" % foot_y, passes, failures)
 		var body_material := body_mesh.get_active_material(0) as StandardMaterial3D
 		_check(body_material != null and body_material.albedo_color.r > body_material.albedo_color.b, "Blender material imports", passes, failures)
 	_check(fwd_marker != null and fwd_marker.position.z < -0.4, "Blender +Y becomes Godot -Z", passes, failures)
 	_check(top_marker != null and top_marker.position.y > 0.8, "Blender +Z becomes Godot +Y", passes, failures)
+	_toggle_blender_test()
+	await get_tree().physics_frame
+	_check(not ba.visible, "F4 hides Blender test asset", passes, failures)
 
 	# 真实动作输入：W 前进。
 	var start := player.global_position

@@ -1,6 +1,6 @@
 # ASSETS — 奶龙 3D 素材查找记录
 
-查找日期：2026-10-28。只记录公开可访问的候选，**没有下载或导入任何第三方模型**。
+查找日期：2026-10-28。第三方文件只放在独立素材目录，**未导入游戏工程、未替换角色、未提交到公开仓库**。
 
 ## 方法
 
@@ -8,7 +8,26 @@
 - 使用 Sketchfab 公开搜索 API：`https://api.sketchfab.com/v3/search?type=models&q=nailong` 与 `q=奶龙`。
 - 逐个读取模型页的 license 标签与 API 元数据；未登录、未绕过付费/访问限制。
 
-## 候选
+## 官方来源
+
+- **第七印象文化传媒（深圳）有限公司**是官方 IP 方，官网：
+  https://www.nailoong.com/ ，角色页：https://www.nailoong.com/ipStar/NaiLong/
+- 官网只提供 IP 介绍、影视、出版物、品牌授权信息；本轮未找到官方公开 3D 模型下载。
+- 官方 IP 与“模型文件许可”是两件事：即使拿到某个模型的 CC BY/Free Standard，
+  也不等于取得奶龙角色形象的公开商用/发行授权。
+- GitHub `Nailong-Studio/NaiLong-Universe` 是粉丝/艺术项目，不是第七印象官方；不要称其为官方模型。
+
+## 公开可直接下载候选
+
+- `scnuLwz/ai_work_proflie`：GitHub Release `v1/nailong.glb`，
+  75,285,180 bytes，SHA256 `7853405f8e2c9271a99ca1dab48b6cb22dc8d0826a9ae2bd8f69008e9f4cff4a`。
+  README 称其为 AI 生成模型；仓库**没有 LICENSE 文件**。
+  已下载到独立目录 `C:\Users\31798\Documents\NailongAssets\scnuLwz_ai_work_proflie\`，未入游戏工程。
+  外观/骨骼/材质/动画检查结果见 `BLENDER.md` 与本次反馈。
+- `scnuLwz/talk-nailong-3d` 使用的是“奶蛙 GLB”，不是奶龙；不列入。
+- 其余 GitHub 3D 奶龙项目多为程序化/网页游戏资产，未发现可复用的官方角色 GLB。
+
+## 第三方/同人模型（需登录）
 
 | 名称 | 作者 | 页面 | 格式/大小 | 动画 | 授权 |
 | --- | --- | --- | --- | --- | --- |

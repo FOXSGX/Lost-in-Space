@@ -1,4 +1,4 @@
-﻿# 奶龙星 · 第一人称试玩预览
+# 奶龙星 · 第一人称试玩预览
 
 《迷失太空 / Lost in Space》第四颗新星球“奶龙星”的独立试玩预览。
 
@@ -30,6 +30,7 @@
 | R | 重置玩家、奶龙与上头值 |
 | Esc / 左键 | 释放 / 重新捕获鼠标 |
 | F3 | 调试面板 |
+| F4 | 显示/隐藏 Blender GLB 测试方块（默认隐藏） |
 | F1 | 隐藏/显示左上说明 |
 
 ## 行为与反馈
@@ -69,7 +70,7 @@ FOV 62°、鼠标 0.0024、俯仰 −0.58…0.30、Tab 切换。
 
 ```powershell
 & $godot --headless --path $preview -- --selftest
-# GULU SELFTEST SUMMARY passes=34 failures=0
+# GULU SELFTEST SUMMARY passes=38 failures=0
 ```
 
 已通过：默认第一人称、眼高/FOV、移动、内墙碰撞、Tab 双向、待机→注意→靠近、
@@ -86,7 +87,9 @@ FOV 62°、鼠标 0.0024、俯仰 −0.58…0.30、Tab 切换。
 
 - 用自带 Python 3.11 创建独立测试资产（0.8 m 主体 + 前/上/后标记 + 4 个材质），
   导出 GLB 与可编辑 `.blend`。
-- Godot 已导入 `assets/test/blender_link_test.glb` 并在预览中作为独立对象显示；
+- 坐标：Blender 源文件 **Z-up、脚底 z=0**；导出后在 Godot 验证 **Y-up、脚底 y=0、角色/前向 −Z**。
+  不要把 Godot 的轴向要求直接写进 Blender 源文件。
+- Godot 已导入 `assets/test/blender_link_test.glb`，作为独立对象放在 (-4, 0, 2.5)，默认隐藏，按 F4 显示。
   headless 检查：4 个 mesh、0.8 m、Blender +Y→Godot −Z、+Z→+Y、材质正确。
 - 未安装 MCP 或第三方插件。详细命令、源文件和检查结果见 `BLENDER.md`。
 - 本轮未用 Blender 制作/替换奶龙，只打通管线。

@@ -92,7 +92,8 @@
 
 - 新增 `assets/test/blender_link_test.glb`、可编辑 `.blend` 与生成/回读脚本。
 - 测试对象放在 `(-4, 0, 2.5)`，无碰撞，仅验证 Blender → GLB → Godot。
-- 实测 4 个 mesh、主体 0.8 m、+Y→−Z、+Z→+Y、材质导入；自测 34/0。
+- 实测 4 个 mesh、主体 0.8 m、+Y→−Z、+Z→+Y、材质导入；自测 38/0。
+- 坐标规范：Blender 源文件 Z-up、脚底 z=0、测试前向 +Y；Godot 导入后 Y-up、脚底 y=0、前向标记 −Z。不要把 Godot 轴向直接写进 Blender 源文件。
 - 不把测试资产接进奶龙行为或正式资源。
 
 ## D-13 奶龙候选未下载，骨骼/可编辑性未验证

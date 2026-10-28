@@ -42,22 +42,32 @@ $script  = "<repo>\game\previews\gulu_planet\tools\blender\make_test_link.py"
 
 - 对象：`Body`、`ForwardMarker`、`TopMarker`、`BackMarker`
 - 材质：`BodyMat`、`ForwardMat`、`TopMat`、`BackMat`
-- Blender 中主体尺寸 0.8 × 0.8 × 0.8 m，底部在 z=0
+- Blender 中主体尺寸 0.8 × 0.8 × 0.8 m，主体中心 z=0.4，**脚底 z=0**
 - GLB 使用 Y-up；Blender +Y → Godot **−Z**，Blender +Z → Godot **+Y**
+
+## 2.1 坐标规范（不要混用）
+
+- **Blender 源文件：Z-up、米制。** 测试体在 Blender 中脚底位于 z=0，前向标记放在 +Y；
+  这是美术源文件的坐标，不要把 Godot 的“面朝 −Z”直接当作 Blender 源坐标。
+- **导出：glTF 2.0 / Y-up。** Blender 导出器做 Z-up → Y-up 转换。
+- **Godot：Y-up。** 导入后 `Body` 中心 y=0.4、AABB 0.8，脚底 y=0；
+  `ForwardMarker` 位于 z=−0.65，`TopMarker` 位于 y=0.92。
+- **最终角色的验收顺序：** 先在 Blender 里按 Z-up 建好并让脚底 z=0；导出 GLB 后，
+  在 Godot 里验证 Y-up、脚底 y=0、角色面向 −Z。不要在 Blender 源文件里硬套 Godot 轴向。
 
 ## 3. Godot 导入验证
 
 预览入口脚本把 `assets/test/blender_link_test.glb` 实例化到 `(-4, 0, 2.5)`，
-命名为 `BlenderLinkTest`，无碰撞、与奶龙分离。
+命名为 `BlenderLinkTest`，无碰撞、与奶龙分离；**默认隐藏，按 F4 才显示**。
 
 headless 自测（`--headless -- --selftest`）实际检查：
 
 - GLB 导入出 **4 个 MeshInstance3D**
-- `Body` 局部 AABB = **0.8 × 0.8 × 0.8 m**
+- `Body` 局部 AABB = **0.8 × 0.8 × 0.8 m**，脚底 y=0
 - `ForwardMarker` 在 Godot 的 **z = −0.65**（+Y 前向映射正确）
-- `TopMarker` 在 Godot 的 **y = 1.02**（+Z 上方映射正确）
+- `TopMarker` 在 Godot 的 **y = 0.92**（+Z 上方映射正确）
 - `BodyMat` 材质导入，基色偏红/橙（`r > b`）
-- 整体自测 `passes=34 failures=0`
+- 默认隐藏；F4 显示/隐藏；整体自测 `passes=38 failures=0`
 
 说明：按“不强制打开窗口”，没有做窗口像素截图；以上是 Godot headless 实际导入/实例化/
 节点与材质检查。
@@ -83,8 +93,10 @@ headless 自测（`--headless -- --selftest`）实际检查：
      以 1 m ≈ 1 Godot 单位导出 GLB；或
    - 使用已确认 IP 与发行授权的模型：下载后在 Blender 检查网格/骨架、重定向动画、统一比例，
      记录作者、来源、许可证与修改。
-3. 导出规范：米制、Y-up GLB、角色朝 **−Z**、脚底在 y=0、材质使用 Principled BSDF；
-   在 Godot 中用独立测试场景验证 AABB/材质/朝向后再替换占位。
+3. 导出规范：Blender 源文件用 Z-up、脚底 z=0；导出 GLB 后在 **Godot** 中验证 Y-up、
+   角色面向 **−Z**、脚底 y=0、材质使用 Principled BSDF；不要把这些 Godot 轴向要求
+   直接写进 Blender 源文件。
+   在 Godot 中用独立测试场景/调试开关验证 AABB、材质、朝向后再替换占位。
 4. 不要把“可下载”当作“可公开发布”；IP 未明确前只在内部检查目录使用。
 
 ## 6. 本轮未做
