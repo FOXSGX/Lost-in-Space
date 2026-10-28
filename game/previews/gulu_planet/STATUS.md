@@ -21,11 +21,12 @@
 - HUD 显示奶龙状态、上头条、预警短句；F3 调试；无漂浮 3D 文字。
 - R 重置玩家、奶龙状态与位置。
 - 文档：BRIEF / STATUS / DECISIONS / TESTING / ASSETS / README。
+- Blender 4.5.15 LTS 已安装；独立测试 GLB 已通过 Godot 导入与节点/材质/比例/轴向检查。
 
 ## 实际验证（headless）
 
 ```
-GULU SELFTEST SUMMARY passes=28 failures=0
+GULU SELFTEST SUMMARY passes=34 failures=0
 ```
 
 覆盖基础移动/碰撞/视角，以及：

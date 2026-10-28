@@ -20,6 +20,7 @@ const FUEL_POSITION := Vector3(5.0, 0.0, 3.0)
 var player: CharacterBody3D
 var gulu: CharacterBody3D
 var fuel: Node3D
+var blender_test_asset: Node3D
 var actors: Dictionary = {}
 
 var _debug := false
@@ -51,6 +52,7 @@ func _ready() -> void:
 	_spawn_player()
 	_build_gulu()
 	_build_fuel()
+	_build_blender_test_asset()
 	_build_hud()
 
 	var args := OS.get_cmdline_user_args()
@@ -295,6 +297,17 @@ func _add_static_box(size: Vector3, at: Vector3, color: Color, collision: bool =
 
 
 # ---------------------------------------------------------------- HUD
+
+func _build_blender_test_asset() -> void:
+	var packed := load("res://assets/test/blender_link_test.glb") as PackedScene
+	if packed == null:
+		push_error("Blender 测试 GLB 未导入")
+		return
+	blender_test_asset = packed.instantiate() as Node3D
+	blender_test_asset.name = "BlenderLinkTest"
+	blender_test_asset.position = Vector3(-4.0, 0.0, 2.5)
+	add_child(blender_test_asset)
+
 
 func _build_hud() -> void:
 	_font = SystemFont.new()
@@ -651,6 +664,30 @@ func _run_selftest() -> void:
 	print("GULU screen gulu=%s fuel=%s viewport=%s" % [gulu_screen, fuel_screen, screen_size])
 	_check(gulu_screen.x > 0.0 and gulu_screen.x < screen_size.x and gulu_screen.y > 0.0 and gulu_screen.y < screen_size.y, "placeholder gulu visible on entry", passes, failures)
 	_check(fuel_screen.x > 0.0 and fuel_screen.x < screen_size.x and fuel_screen.y > 0.0 and fuel_screen.y < screen_size.y, "placeholder fuel visible on entry", passes, failures)
+
+	# Blender 独立测试资产：GLB 已导入，检查节点、比例、轴向与材质。
+	var ba := blender_test_asset
+	var ba_meshes: Array = ba.find_children("*", "MeshInstance3D", true, false) if ba != null else []
+	print("BLENDER_TEST meshes=%d" % ba_meshes.size())
+	for mi in ba_meshes:
+		var mesh_instance := mi as MeshInstance3D
+		var mats: Array = []
+		for s in mesh_instance.mesh.get_surface_count():
+			var m := mesh_instance.get_active_material(s)
+			mats.append(m.resource_name if m != null else "null")
+		print("BLENDER_TEST node=%s pos=%s scale=%s aabb=%s mats=%s" % [mesh_instance.name, mesh_instance.position, mesh_instance.global_transform.basis.get_scale(), mesh_instance.get_aabb().size, mats])
+	_check(ba != null and ba_meshes.size() == 4, "Blender GLB imports four meshes", passes, failures)
+	var body_mesh := ba.find_child("Body", true, false) as MeshInstance3D if ba != null else null
+	var fwd_marker := ba.find_child("ForwardMarker", true, false) as Node3D if ba != null else null
+	var top_marker := ba.find_child("TopMarker", true, false) as Node3D if ba != null else null
+	_check(body_mesh != null, "Blender body node exists", passes, failures)
+	if body_mesh != null:
+		var body_size := body_mesh.get_aabb().size
+		_check(absf(body_size.x - 0.8) < 0.03 and absf(body_size.y - 0.8) < 0.03 and absf(body_size.z - 0.8) < 0.03, "Blender scale is 0.8 m body", passes, failures)
+		var body_material := body_mesh.get_active_material(0) as StandardMaterial3D
+		_check(body_material != null and body_material.albedo_color.r > body_material.albedo_color.b, "Blender material imports", passes, failures)
+	_check(fwd_marker != null and fwd_marker.position.z < -0.4, "Blender +Y becomes Godot -Z", passes, failures)
+	_check(top_marker != null and top_marker.position.y > 0.8, "Blender +Z becomes Godot +Y", passes, failures)
 
 	# 真实动作输入：W 前进。
 	var start := player.global_position

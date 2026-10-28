@@ -1,4 +1,4 @@
-# 奶龙星 · 第一人称试玩预览
+﻿# 奶龙星 · 第一人称试玩预览
 
 《迷失太空 / Lost in Space》第四颗新星球“奶龙星”的独立试玩预览。
 
@@ -69,7 +69,7 @@ FOV 62°、鼠标 0.0024、俯仰 −0.58…0.30、Tab 切换。
 
 ```powershell
 & $godot --headless --path $preview -- --selftest
-# GULU SELFTEST SUMMARY passes=28 failures=0
+# GULU SELFTEST SUMMARY passes=34 failures=0
 ```
 
 已通过：默认第一人称、眼高/FOV、移动、内墙碰撞、Tab 双向、待机→注意→靠近、
@@ -78,10 +78,24 @@ FOV 62°、鼠标 0.0024、俯仰 −0.58…0.30、Tab 切换。
 未验证：真人手感与趣味、鼠标观察（本轮 headless 跳过；基础版曾窗口通过）、
 伤害/抢夺/结算、麦克风、联网、正式动画。
 
+## Blender 管线
+
+已安装官方 **Blender 4.5.15 LTS**：
+
+`C:\Users\31798\AppData\Local\Programs\Blender Foundation\Blender 4.5\blender.exe`
+
+- 用自带 Python 3.11 创建独立测试资产（0.8 m 主体 + 前/上/后标记 + 4 个材质），
+  导出 GLB 与可编辑 `.blend`。
+- Godot 已导入 `assets/test/blender_link_test.glb` 并在预览中作为独立对象显示；
+  headless 检查：4 个 mesh、0.8 m、Blender +Y→Godot −Z、+Z→+Y、材质正确。
+- 未安装 MCP 或第三方插件。详细命令、源文件和检查结果见 `BLENDER.md`。
+- 本轮未用 Blender 制作/替换奶龙，只打通管线。
+
 ## 素材
 
-查找记录见 `ASSETS.md`：找到可下载 GLB 候选，但没有同时满足骨骼动画与明确 IP 授权；
-本轮**未导入**第三方模型，继续使用程序化占位。
+查找记录见 `ASSETS.md`：找到可下载 GLB 候选，但实际下载接口返回 401，
+骨骼/可编辑性与动画质量未验证；本轮**未导入**第三方模型，继续使用程序化占位。
+`BLENDER.md` 记录了下一轮推荐方案。
 
 ## 范围
 
@@ -96,4 +110,5 @@ FOV 62°、鼠标 0.0024、俯仰 −0.58…0.30、Tab 切换。
 - `STATUS.md`：完成情况、验证、下一步
 - `DECISIONS.md`：选择与待讨论
 - `TESTING.md`：启动、测试步骤、结果
-- `ASSETS.md`：奶龙素材查找与授权记录
+- `ASSETS.md`：奶龙素材查找、许可与下载复核
+- `BLENDER.md`：Blender 安装、GLB 管线验证与推荐方案

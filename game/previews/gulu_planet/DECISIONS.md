@@ -80,6 +80,28 @@
 - `git fetch` 多次连接重置，无法把分支基到最新 main；预览文件从 42519ff raw 复制且自包含。
 - 网络恢复后需 rebase 到最新 main；未推送、未合并。
 
+## D-11 Blender 用官方 LTS 便携包，不装第三方/MCP
+
+- 机器原先没有 Blender；从官方 `download.blender.org` 下载 **4.5.15 LTS** Windows x64 ZIP，
+  校验官方 SHA256 后解压到用户目录。
+- 未使用第三方整合包；未安装 MCP 或额外插件。
+- 路径：`C:\Users\31798\AppData\Local\Programs\Blender Foundation\Blender 4.5\blender.exe`。
+- 自带 Python 3.11.15；无界面脚本可生成/导出/回读 GLB。
+
+## D-12 独立 GLB 测试资产，不替换奶龙
+
+- 新增 `assets/test/blender_link_test.glb`、可编辑 `.blend` 与生成/回读脚本。
+- 测试对象放在 `(-4, 0, 2.5)`，无碰撞，仅验证 Blender → GLB → Godot。
+- 实测 4 个 mesh、主体 0.8 m、+Y→−Z、+Z→+Y、材质导入；自测 34/0。
+- 不把测试资产接进奶龙行为或正式资源。
+
+## D-13 奶龙候选未下载，骨骼/可编辑性未验证
+
+- Sketchfab 页面标可下载，但匿名下载 API 返回 401；不绕过登录。
+- 因未取得文件，不能确认骨骼/权重/动画轨道；`animationCount=0` 不等于不能使用。
+- CC BY / Free Standard 不当然包含奶龙 IP 发行权；本轮不导入第三方模型。
+- 推荐下一轮：团队自制或确认 IP/发行授权后再进 Blender 处理。
+
 ## 待用户决定
 
 1. 真人试玩后：挑衅范围、蓄势 1.0 s、扑击 11 m/s 是否合适。

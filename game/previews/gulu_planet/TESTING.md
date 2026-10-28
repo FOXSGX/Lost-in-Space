@@ -20,10 +20,10 @@ $preview = "C:\Users\31798\Documents\GitHub\Lost-in-Space-gulu\game\previews\gul
 ## 1. 本轮实际结果
 
 ```
-GULU SELFTEST SUMMARY passes=28 failures=0
+GULU SELFTEST SUMMARY passes=34 failures=0
 ```
 
-（headless，2026-10-28；鼠标观察/俯仰因 headless 无真实鼠标捕获而跳过。）
+（headless，2026-10-28；鼠标观察/俯仰因 headless 无真实鼠标捕获而跳过。\n\n新增 Blender GLB 检查后共 34 项，全部通过（4 个 mesh、0.8 m 主体、+Y→−Z、+Z→+Y、材质）。）
 
 | 项目 | 实测 |
 | --- | --- |
@@ -44,7 +44,24 @@ GULU SELFTEST SUMMARY passes=28 failures=0
 | R 重置 | 玩家回出生点；奶龙回待机 |
 | F3 调试 | 显示奶龙状态/上头/距离 |
 
-## 2. 未验证
+## 2. Blender → GLB → Godot 验证
+
+Blender 4.5.15 LTS（官方 ZIP，便携解压）自带 Python 3.11.15。
+
+```powershell
+$blender = "C:\Users\31798\AppData\Local\Programs\Blender Foundation\Blender 4.5\blender.exe"
+& $blender --background --factory-startup --python "<preview>\tools\blender\make_test_link.py"
+& $blender --background --factory-startup --python "<preview>\tools\blender\verify_test_link.py"
+```
+
+- Blender 回读：4 个 mesh（Body/ForwardMarker/TopMarker/BackMarker），4 个材质；
+  Body 0.8×0.8×0.8 m。
+- Godot headless 导入实例 `BlenderLinkTest`：4 个 MeshInstance3D，Body AABB 0.8 m；
+  ForwardMarker 在 Godot z=−0.65（Blender +Y→−Z），TopMarker 在 y=1.02（+Z→+Y）；
+  BodyMat 基色导入。
+- 没有开窗截图；以上是实际导入/实例化/节点/材质检查。
+
+## 3. 未验证
 
 - **真人手动试玩**：挑衅距离、蓄势 1.0 s、扑击 11 m/s 是否好躲、是否有趣，均未由真人判断。
 - **鼠标观察（本轮代码）**：headless 跳过；此前基础版窗口运行通过（16/0），但本轮没有再次开窗。
@@ -53,7 +70,7 @@ GULU SELFTEST SUMMARY passes=28 failures=0
 - **联网**：无网络代码，不能宣称多人已验证。
 - **正式模型/动画**：占位模型；第三方素材未导入。
 
-## 3. 测试步骤（真人）
+## 4. 测试步骤（真人）
 
 1. 启动后确认是第一人称，鼠标可环视，WASD/Shift 正常。
 2. 走近奶龙到 9 m 内并在画面中面对它；按 Q。HUD 应从“待机”变“注意”，奶龙转向并亮起状态环。
@@ -62,7 +79,7 @@ GULU SELFTEST SUMMARY passes=28 failures=0
 5. 走到视线测试柱后面按 Q，应提示“被墙挡住了”，奶龙不追踪。
 6. 按 R 重置，重复。
 
-## 4. 已知风险
+## 5. 已知风险
 
 - 行为参数全部是原型值，集中写在 `scripts/milk_dragon.gd` 顶部。
 - 奶龙与玩家都使用碰撞层 16；扑击撞到玩家/墙会提前结束，不会穿墙。
