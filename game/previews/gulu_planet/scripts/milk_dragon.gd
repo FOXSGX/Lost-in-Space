@@ -183,9 +183,13 @@ func _physics_process(delta: float) -> void:
 	velocity.y = 0.0 if is_on_floor() else velocity.y - gravity * delta
 	move_and_slide()
 
-	# 扑击撞到墙或玩家就提前结束，绝不穿过碰撞体。
-	if state == STATE_POUNCE and get_slide_collision_count() > 0:
-		_finish_pounce()
+	# 扑击只被墙/玩家等非地面碰撞提前结束；地板接触不算撞墙。
+	if state == STATE_POUNCE:
+		for i in get_slide_collision_count():
+			var collision := get_slide_collision(i)
+			if collision.get_normal().y < 0.7:
+				_finish_pounce()
+				break
 
 	_update_visual()
 

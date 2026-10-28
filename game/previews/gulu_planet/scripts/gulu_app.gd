@@ -8,8 +8,9 @@ extends Node3D
 ## 控制器文件逐字复制，未改写；本脚本只负责输入映射、测试场地、HUD 与启动参数。
 ##
 ## 本轮验证：移动、鼠标观察、第一/第三人称、场景碰撞，以及
-## “挑衅 → 注意 → 靠近 → 蓄势扑击 → 躲开/恢复”的最小互动。
-## 不包含麦克风、真实抢燃料、伤害、道具、联网或正式美术。
+## “挑衅 → 注意 → 靠近 → 蓄势扑击 → 躲开/被扑 → 恢复”的最小互动；
+## 燃料占位 E 拾取/放下，被扑中掉落。
+## 不包含奶龙叼走/追回、伤害、道具、联网或正式美术。
 
 const SOURCE_COMMIT := "42519ff403241bf5ac968edb9ae326c6fdbc74fe"
 const SPAWN := Vector3(-8.0, 0.02, 0.0)
@@ -79,6 +80,7 @@ func _register_input() -> void:
 		"inspect_first_person": KEY_TAB,
 		"brace": KEY_H,
 		"provoke": KEY_Q,
+		"interact": KEY_E,
 	}
 	for action in map:
 		if not InputMap.has_action(action):
@@ -100,6 +102,9 @@ func _unhandled_key_input(event: InputEvent) -> void:
 		return
 	if event.is_action_pressed("provoke"):
 		_try_provoke()
+		return
+	if event.is_action_pressed("interact"):
+		_try_interact()
 		return
 	match event.keycode:
 		KEY_R:
@@ -204,6 +209,7 @@ func _build_gulu() -> void:
 	gulu.add_child(visual)
 	add_child(gulu)
 	gulu.call("setup_player", player)
+	gulu.connect("pounce_finished", _on_pounce_finished)
 
 func _build_fuel() -> void:
 	fuel = StaticBody3D.new()
@@ -351,13 +357,13 @@ func _build_hud() -> void:
 	column.add_child(title)
 
 	var subtitle := Label.new()
-	subtitle.text = "占位场地 · 验证挑衅、靠近、扑击与躲开"
+	subtitle.text = "占位场地 · 验证挑衅、搬运、扑击与躲开"
 	subtitle.add_theme_font_size_override("font_size", 13)
 	subtitle.add_theme_color_override("font_color", Color("#8fb3ae"))
 	column.add_child(subtitle)
 
 	_help_label = Label.new()
-	_help_label.text = "WASD 移动 · Shift 加速 · 鼠标观察 · Q 挑衅\nTab 切换视角 · R 重置 · Esc 释放鼠标 · 左键收回鼠标\nF3 调试 · F4 GLB 测试资产 · F1 隐藏说明"
+	_help_label.text = "WASD 移动 · Shift 加速 · 鼠标观察 · Q 挑衅 · E 拾取/放下\nTab 切换视角 · R 重置 · Esc 释放鼠标 · 左键收回鼠标\nF3 调试 · F4 GLB 测试资产 · F1 隐藏说明"
 	_help_label.add_theme_font_size_override("font_size", 12)
 	_help_label.add_theme_color_override("font_color", Color("#b9d4cf"))
 	column.add_child(_help_label)
@@ -555,6 +561,12 @@ func _update_prompt(state: String) -> void:
 				color = Color("#8fa6b2")
 			_:
 				prompt = "按 Q 挑衅奶龙"
+	if fuel != null:
+		if bool(fuel.get("carried")):
+			prompt += " · E 放下燃料"
+		elif state == "待机" or state == "注意" or state == "靠近" or state == "恢复":
+			if bool(fuel.call("can_pick_up", player)):
+				prompt += " · E 拾取燃料"
 	if prompt != _prompt_label.text:
 		_prompt_label.text = prompt
 	_prompt_label.add_theme_color_override("font_color", color)
@@ -570,6 +582,30 @@ func _try_provoke() -> void:
 	else:
 		_feedback = String(result.get("reason", "现在不能挑衅"))
 		_feedback_timer = 1.4
+
+
+func _try_interact() -> void:
+	if fuel == null or player == null:
+		return
+	if bool(fuel.get("carried")):
+		fuel.call("drop_from_player", player)
+		_feedback = "燃料已放下"
+		_feedback_timer = 1.2
+		return
+	if bool(fuel.call("can_pick_up", player)):
+		fuel.call("pick_up", player)
+		_feedback = "抱起燃料——把它带离奶龙，按 E 放下"
+		_feedback_timer = 2.0
+	else:
+		_feedback = "走近燃料再按 E"
+		_feedback_timer = 1.2
+
+
+func _on_pounce_finished(hit: bool) -> void:
+	if hit and fuel != null and bool(fuel.get("carried")):
+		fuel.call("drop_from_player", player)
+		_feedback = "被扑到了！燃料掉了——趁它恢复捡回来"
+		_feedback_timer = 2.6
 
 func _toggle_debug() -> void:
 	_debug = not _debug
@@ -599,6 +635,8 @@ func reset_preview() -> void:
 	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 	if gulu != null:
 		gulu.call("reset_to_home")
+	if fuel != null:
+		fuel.call("reset_to_home")
 	_feedback = ""
 	_feedback_timer = 0.0
 	_last_collisions = int(player.get("contacts"))
@@ -633,6 +671,15 @@ func _press_provoke() -> void:
 	var event := InputEventKey.new()
 	event.physical_keycode = KEY_Q
 	event.keycode = KEY_Q
+	event.pressed = true
+	event.echo = false
+	_unhandled_key_input(event)
+
+
+func _press_interact() -> void:
+	var event := InputEventKey.new()
+	event.physical_keycode = KEY_E
+	event.keycode = KEY_E
 	event.pressed = true
 	event.echo = false
 	_unhandled_key_input(event)
@@ -810,6 +857,41 @@ func _run_selftest() -> void:
 	_press_provoke()
 	await _wait(0.06)
 	_check(float(gulu.get("agitation")) <= 0.35, "provoke cooldown blocks rapid repeats", passes, failures)
+
+	# 燃料搬运：E 拾取/放下，携带时关闭碰撞并跟随玩家。
+	reset_preview()
+	_teleport(FUEL_POSITION + Vector3(-1.0, 0.02, 0.0), _yaw_to(FUEL_POSITION))
+	await _wait(0.2)
+	_check(bool(fuel.call("can_pick_up", player)), "fuel can be picked up", passes, failures)
+	_press_interact()
+	await _wait(0.1)
+	_check(bool(fuel.get("carried")), "E picks up fuel", passes, failures)
+	_check(int(fuel.collision_layer) == 0, "carried fuel disables collision", passes, failures)
+	_check(fuel.global_position.distance_to(player.global_position) < 1.4, "carried fuel follows player", passes, failures)
+	_press_interact()
+	await _wait(0.1)
+	_check(not bool(fuel.get("carried")), "E drops fuel", passes, failures)
+	_check(int(fuel.collision_layer) != 0, "dropped fuel restores collision", passes, failures)
+
+	# 被扑中：携带的燃料应掉落，形成“捡回来”的窗口。
+	reset_preview()
+	_teleport(FUEL_POSITION + Vector3(-1.0, 0.02, 0.0), _yaw_to(FUEL_POSITION))
+	await _wait(0.2)
+	_press_interact()
+	await _wait(0.1)
+	_check(bool(fuel.get("carried")), "fuel carried for pounce test", passes, failures)
+	_teleport(Vector3(2.0, 0.02, -1.2), _yaw_to(GULU_POSITION))
+	await _wait(0.2)
+	_press_provoke()
+	await _wait(0.8)
+	_press_provoke()
+	await _wait(0.8)
+	_press_provoke()
+	await _wait(0.2)
+	_check(gulu.state_name() == "蓄势", "stationary player triggers windup", passes, failures)
+	await _wait(1.4)
+	_check(bool(gulu.get("last_pounce_hit")), "pounce can hit a stationary player", passes, failures)
+	_check(not bool(fuel.get("carried")), "getting pounced drops carried fuel", passes, failures)
 
 	reset_preview()
 	await get_tree().physics_frame

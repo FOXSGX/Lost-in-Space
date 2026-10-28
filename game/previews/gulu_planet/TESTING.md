@@ -1,6 +1,6 @@
 # TESTING — 奶龙星第一人称试玩预览
 
-最后更新：2026-10-28 20:25（GMT+8）
+最后更新：2026-10-29 01:25（GMT+8）
 
 ## 0. 启动
 
@@ -20,12 +20,12 @@ $preview = "C:\Users\31798\Documents\GitHub\Lost-in-Space-gulu\game\previews\gul
 ## 1. 本轮实际结果
 
 ```
-GULU SELFTEST SUMMARY passes=38 failures=0
+GULU SELFTEST SUMMARY passes=48 failures=0
 ```
 
 （headless，2026-10-28；鼠标观察/俯仰因 headless 无真实鼠标捕获而跳过。
 
-新增 Blender GLB 检查后共 38 项，全部通过（4 个 mesh、0.8 m 主体、+Y→−Z、+Z→+Y、材质）。）
+新增 Blender GLB 检查与燃料搬运测试后共 48 项，全部通过（4 个 mesh、0.8 m 主体、+Y→−Z、+Z→+Y、材质）。）
 
 | 项目 | 实测 |
 | --- | --- |
@@ -40,6 +40,9 @@ GULU SELFTEST SUMMARY passes=38 failures=0
 | 第 3 次挑衅 → 蓄势 | 通过；agitation 0.98 |
 | 蓄势预兆 | 通过；1.0 s 内保持蓄势 |
 | 侧移躲开 | 通过；扑击未命中 |
+| 静止玩家被扑中 | 通过；命中判定 1.25 m |
+| 燃料 E 拾取/放下 | 通过；携带跟随、碰撞关闭/恢复 |
+| 被扑中掉落燃料 | 通过；恢复窗口可捡回 |
 | 扑击后恢复 → 待机 | 通过；1.5 s 恢复 |
 | 隔墙挑衅 | 拒绝；agitation 0 |
 | 同瞬间连按 | 第二次被 0.7 s 冷却拒绝 |
