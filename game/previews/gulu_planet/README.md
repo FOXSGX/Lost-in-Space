@@ -70,21 +70,32 @@ $preview = "C:\Users\31798\Documents\GitHub\Lost-in-Space-gulu\game\previews\gul
 - **场景配色对齐飞船内部**：暖灰壳体 `#9aa9a6`、深蓝绿结构 `#375967`、
   冷白环境光、琥珀 `#ffb347` 燃料、青色 `#3fd8ff` 提示光。
 
+## 角色模型（2026-10-30 起）
+
+- 游戏内目前**仍是程序化占位**；新的自建静态模型已入库但未替换（等外观确认）。
+- 自建资产：`assets/characters/nailong.glb`（13 网格 / 30,400 三角面 / 9 材质）、
+  可编辑源文件 `tools/blender/nailong.blend`，由 `tools/blender/build_nailong.py` 生成。
+- 预览图（正交正/侧/背 + 3/4 + 游戏同参数第一人称）：`docs/model/`。
+- 构建与校验命令见 `BLENDER.md` 第 0.5 节；来源与许可见 `ASSETS.md` 第 7 节。
+
 ## 目录
 
 ```
 gulu_planet.tscn            入口
 scripts/gulu_app.gd         关卡、场地、HUD、自动化检查
 scripts/milk_dragon.gd      奶龙状态机（含找燃料 / 叼货 / 扑击释放 / 卡住恢复）
-scripts/milk_dragon_visual.gd  奶龙程序化外观与表演
+scripts/milk_dragon_visual.gd  奶龙程序化外观与表演（当前仍在用）
 scripts/fuel_prop.gd        燃料罐（拾取/携带/抛出/入仓）
 scripts/collector.gd        飞船装货口（漏斗 + 容错判定 + 计数指示灯）
 scripts/sfx.gd              5 个短音效
 scripts/station_player.gd   复用共振星独立预览控制器（第一人称镜头已对齐飞船）
 assets/audio/*.wav          本地合成音效（见 ASSETS.md）
+assets/characters/nailong.glb   自建奶龙静态模型（尚未替换游戏外观）
 docs/shots/*.png            本轮窗口截图
-tools/audio/make_sfx.py     音效生成脚本（可复现）
-tools/inspect_shot.py       截图亮度/色块体检脚本
+docs/model/*.png            角色四视图 + 第一人称预览
+tools/blender/build_nailong.py  奶龙模型生成脚本（Blender 4.5）
+tools/blender/nailong.blend     可编辑源文件
+tools/check_nailong_glb.gd      GLB 导入检查
 ```
 
 ## 验证

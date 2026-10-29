@@ -16,6 +16,47 @@
 - 若加骨骼，只需满足：头（转头/低头）、下颌（张嘴）、四肢（走/扑）、尾（摆动）。
   不需要复杂面部系统；扑击位移继续由 `milk_dragon.gd` 控制，不做根运动。
 
+## 0.5 2026-10-30：自建奶龙静态模型（本轮）
+
+```powershell
+$blender = "C:\Users\31798\AppData\Local\Programs\Blender Foundation\Blender 4.5\blender.exe"
+$preview = "C:\Users\31798\Documents\GitHub\Lost-in-Space-gulu\game\previews\gulu_planet"
+
+# 完整构建 + 5 张预览图（约 3-4 分钟，Cycles CPU）
+& $blender --background --factory-startup --python "$preview\tools\blender\build_nailong.py" -- "$preview\tools\blender"
+
+# 只重建资产不渲染（调试参数时用）
+& $blender --background --factory-startup --python "$preview\tools\blender\build_nailong.py" -- "$preview\tools\blender" norender
+
+# Godot 导入检查（网格数 / 三角面 / 脚底是否贴地）
+$godot = "C:\Users\31798\Downloads\迷失太空\迷失太空\tools\godot-4.7.2\Godot_v4.7.2-stable_win64.exe"
+& $godot --headless --import --path $preview
+& $godot --headless --path $preview --script "res://tools/check_nailong_glb.gd"
+```
+
+### 几何方案（为什么不是“球拼的”）
+
+- 骨架：30 个节点（脊柱/头/嗅/下顿/双耳/双臂/双腿/四节尾），用 **Skin 修改器** 生成管状表面，
+  再叠 **Subdivision level 3** 平滑 → 一个连续、水密的曲面（18,880 三角面，0 非流形边）。
+- 关节处不做布尔、不体素重网格：Skin 的交叉包络 + 细分就是连续的，不存在“球穿进另一个球”。
+- 五官：先建好身体，再用 `obj.ray_cast` 从外向内找表面点，眼/嘴/腮红/鼻孔按命中点 + 法线摆放，
+  所以不会浮空也不会陷进去。
+- 材质分区：同一个曲面上按面中心位置/法线分配「奶油色身体 / 浅色肚皮与口鼻」，不是叠一个白色椭球。
+
+### 自查（不是审美结论）
+
+脚本会打印：
+
+- `STATS`：顶点/三角面/非流形边/孤立点/包围盒；
+- `VISIBLE`：从正前方逐个射线检测五官，确认每个部件都是“第一个被击中的物体”（没被头吞掉）；
+- `NAILONG_GLB`（Godot 侧）：13 个网格、30400 三角面、脚底 y=0、面朝 -Z。
+
+### 已知待确认（需要人看）
+
+- 头是 Skin 交叉包络，横截面是“圆角方”，不像真球体那么圆；要不要再补一层 Cast/球形化，需要看图定。
+- 耳朵目前是两个短锥；奶龙的耳朵形状可以是圆叶，需确认。
+- 嘴目前是贴在外面的深色椭球（静态阶段），绑骨后要改成能真正张开的嘴腔/下颌。
+
 ## 1. 安装
 
 - 机器原先没有 Blender（`where blender`、`winget list` 均无）。

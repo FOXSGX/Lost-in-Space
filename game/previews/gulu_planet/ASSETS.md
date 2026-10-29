@@ -7,8 +7,10 @@
 
 | 资产 | 路径 | 来源 | 许可 |
 | --- | --- | --- | --- |
+| **奶龙静态模型（本轮）** | `assets/characters/nailong.glb`、`tools/blender/nailong.blend` | 本仓库 `tools/blender/build_nailong.py` 程序化建模（Blender 4.5.15） | 随项目；未使用任何第三方模型/贴图 |
+| 模型预览图 | `docs/model/nailong_{front,side,back,three_quarter,first_person}.png` | 同脚本 Cycles 渲染 | 随项目 |
 | 5 个短音效 | `assets/audio/*.wav` | 本仓库脚本 `tools/audio/make_sfx.py` 用 Python 标准库合成（正弦/噪声 + 包络） | 随项目；无第三方素材 |
-| 奶龙外观 | `scripts/milk_dragon_visual.gd` | 程序化生成（球体/圆柱/圆环），按奶龙形象方向手工调参 | 随项目；非官方模型 |
+| 奶龙旧占位外观 | `scripts/milk_dragon_visual.gd` | 程序化生成（球体/圆柱/圆环），**本轮起仅作为未替换时的回退** | 随项目；非官方模型 |
 | 装货口与飞船 | `scripts/collector.gd` | 程序化方块/圆柱拼装，配色参考本作飞船内部 | 随项目 |
 | 场地、岩石、燃料、货箱 | `scripts/gulu_app.gd` | 程序化几何 | 随项目 |
 | 截图 | `docs/shots/*.png` | 本机 Godot 4.7.2 窗口渲染 | 随项目（含占位角色） |
@@ -77,7 +79,22 @@ python tools\audio\make_sfx.py assets\audio
 - 「动画=0」不等于「不能用」：可能没有动画但有骨架，或有网格但需要重新绑定。
 - 结论：本轮仍不导入第三方模型。
 
-## 6. 结论与下一轮建议
+## 7. 奶龙模型（2026-10-30 自建，静态阶段）
+
+- 结论：**没有可用的授权模型**。仓库外那个第三方 `nailong.glb`（71.8 MB，846k 顶点）无骨骼、无动画、**无 LICENSE**，
+  且不属于官方发布素材，不能用于公开原型。Sketchfab 候选需登录，未取得。
+- 因此本轮用 Blender **自建**：`tools/blender/build_nailong.py`
+  - 身体/头/四肢/尾巴/耳朵 = 一条骨架曲线 + Skin 修改器 + Subdivision，**一个连续曲面**
+    （18,880 三角面、0 条非流形边、无孤立顶点），不是互相穿插的球体。
+  - 眼、嘴、舌、腮红、鼻孔是独立小件，位置由**射线检测贴合曲面**，不是手填坐标。
+  - 面朝 Blender +Y（Godot 导入后 → -Z），脚底 z=0，高 1.728 m。
+- 导出：`assets/characters/nailong.glb`（632 KB，13 个网格、30,400 三角面、9 种材质）。
+- 可编辑源文件：`tools/blender/nailong.blend`（含影棚灯光/相机，可直接重渲）。
+- **本轮只做静态外观**，未绑骨骼、未接动画、**尚未替换游戏里的占位外观**。
+- 使用限制：这是本项目自制的“奶龙形象方向”角色，**不是**官方素材，也不能对外声称是官方奶龙；
+  若后续要发布，仍需解决角色 IP 授权（见第 3、4 节）。
+
+## 8. 结论与下一轮建议
 
 - 本轮所有可见内容都是本仓库自制或本作既有资源，可以随预览分支提交。
 - 奶龙形象仍是程序化占位；**没有**把「可下载」当成「有 IP 授权」。
