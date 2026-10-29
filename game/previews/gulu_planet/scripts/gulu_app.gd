@@ -1,4 +1,4 @@
-extends Node3D
+﻿extends Node3D
 
 ## 奶龙星第一人称试玩预览（内部路径沿用 gulu_planet）。
 ##
@@ -14,14 +14,15 @@ extends Node3D
 ##   也可以先引开它，再自己把燃料搬进装货口（安全但路远）。
 
 const SOURCE_COMMIT := "42519ff403241bf5ac968edb9ae326c6fdbc74fe"
-const SPAWN := Vector3(-9.0, 0.02, 6.5)
+const SPAWN := Vector3(-11.0, 0.02, 5.0)
 const SPAWN_YAW := -PI * 0.5
-const DRAGON_HOME := Vector3(1.5, 0.0, -0.5)
+const DRAGON_HOME := Vector3(1.0, 0.0, -2.5)
 const DRAGON_HOME_YAW := PI * 0.5
+## 燃料 0 = 教学罐（出生点前、奶龙看不见）；1 = 奶龙地盘上的；2 = 开场就在它嘴里。
 const FUEL_HOMES: Array[Vector3] = [
-	Vector3(1.5, 0.0, -1.9),   # 开场就在奶龙嘴里
-	Vector3(-6.5, 0.0, -7.0),  # 北路：近、经过奶龙地盘
-	Vector3(-5.0, 0.0, 7.5),   # 南路：远、有石头挡视线
+	Vector3(-8.0, 0.0, 4.4),   # 第一罐：捡起来自己搬，教学用
+	Vector3(4.4, 0.0, -5.0),   # 第二罐：奶龙窝边，去拿会有干扰
+	Vector3(2.6, 0.0, -3.4),   # 第三罐：开场被奶龙叼着
 ]
 const TARGET_COUNT := 3
 
@@ -36,6 +37,9 @@ var player: CharacterBody3D
 var gulu: CharacterBody3D
 var collector: Node3D
 var blender_test_asset: Node3D
+var _lock_marker: Node3D
+var _lock_material: StandardMaterial3D
+var _lock_active := false
 var fuels: Array = []
 var actors: Dictionary = {}
 
@@ -72,6 +76,7 @@ func _ready() -> void:
 	_register_input()
 	_build_environment()
 	_build_field()
+	_build_lock_marker()
 	_build_collector()
 	_spawn_player()
 	_build_fuels()
@@ -146,8 +151,18 @@ func _unhandled_key_input(event: InputEvent) -> void:
 func _build_environment() -> void:
 	# 配色对齐飞船内部（ship_hub_3d.gd）：暖灰壳体 + 深蓝绿结构 + 冷白环境光。
 	var env := Environment.new()
-	env.background_mode = Environment.BG_COLOR
-	env.background_color = Color("#2d4757")
+	env.background_mode = Environment.BG_SKY
+	var sky_material := ProceduralSkyMaterial.new()
+	sky_material.sky_top_color = Color("#1b3141")
+	sky_material.sky_horizon_color = Color("#9db6b8")
+	sky_material.sky_curve = 0.22
+	sky_material.ground_bottom_color = Color("#2a3a3a")
+	sky_material.ground_horizon_color = Color("#7d9490")
+	sky_material.sun_angle_max = 18.0
+	sky_material.sun_curve = 0.12
+	var sky := Sky.new()
+	sky.sky_material = sky_material
+	env.sky = sky
 	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
 	env.ambient_light_color = Color("#dbeaf1")
 	env.ambient_light_energy = 0.26
@@ -155,6 +170,7 @@ func _build_environment() -> void:
 	env.fog_mode = Environment.FOG_MODE_EXPONENTIAL
 	env.fog_light_color = Color("#8fa6aa")
 	env.fog_density = 0.006
+	env.fog_sky_affect = 0.15
 	env.tonemap_mode = Environment.TONE_MAPPER_ACES
 	env.tonemap_exposure = 0.9
 	var world_env := WorldEnvironment.new()
@@ -195,18 +211,17 @@ func _build_field() -> void:
 	var pad_rim := TorusMesh.new()
 	pad_rim.inner_radius = 5.9
 	pad_rim.outer_radius = 6.1
-	var rim := _add_mesh(pad_rim, Vector3(9.2, 0.015, 0.0), TRIM)
-	rim.rotation.x = PI * 0.5
+	_add_mesh(pad_rim, Vector3(9.2, 0.015, 0.0), TRIM)
 	for side in [-1.0, 1.0]:
 		for index in range(5):
 			var dash := BoxMesh.new()
 			dash.size = Vector3(0.9, 0.02, 0.16)
 			_add_mesh(dash, Vector3(9.2 + float(index) * 1.05 - 2.1, 0.02, side * 4.6), AMBER, 0.5)
-	# 南路（安全、绕远）：青绿导引条
+	# 南路（安全、绕远）：青绿导引条，从教学罐一直指到停机坪
 	for index in range(9):
 		var safe := BoxMesh.new()
 		safe.size = Vector3(0.7, 0.02, 0.20)
-		_add_mesh(safe, Vector3(-6.0 + float(index) * 1.7, 0.02, 7.6 - float(index) * 0.55), CYAN, 0.35)
+		_add_mesh(safe, Vector3(-7.9 + float(index) * 1.98, 0.02, 4.4 - float(index) * 0.33), CYAN, 0.35)
 	# 北路（快、穿过奶龙地盘）：琥珀导引条
 	for index in range(8):
 		var risky := BoxMesh.new()
@@ -220,7 +235,7 @@ func _build_field() -> void:
 	_add_static_box(Vector3(0.8, 5.0, 30.0), Vector3(20.0, 2.5, 0.0), GROUND_DARK)
 
 	# 能挡视线、允许绕行的石堆。位置固定，便于重复试玩。
-	_rock(Vector3(2.6, 0.0, 2.7), Vector3(2.4, 2.2, 2.0), 0.3)
+	_rock(Vector3(2.2, 0.0, 6.2), Vector3(2.4, 2.2, 2.0), 0.3)
 	_rock(Vector3(4.8, 0.0, -3.6), Vector3(2.0, 1.8, 1.8), -0.5)
 	_rock(Vector3(-1.6, 0.0, 5.4), Vector3(2.6, 2.4, 2.0), 0.9)
 	_rock(Vector3(1.0, 0.0, -8.6), Vector3(3.0, 2.0, 2.0), -0.2)
@@ -282,6 +297,57 @@ func _rock(at: Vector3, size: Vector3, spin: float) -> void:
 	add_child(body)
 
 
+## 蓄势锁定的地面标记：一出现就说明「这块地要被扑了」，比文字直观。
+func _build_lock_marker() -> void:
+	_lock_marker = Node3D.new()
+	_lock_marker.name = "PounceLockMarker"
+	add_child(_lock_marker)
+	_lock_material = StandardMaterial3D.new()
+	_lock_material.albedo_color = Color(1.0, 0.42, 0.22, 0.85)
+	_lock_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	_lock_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	_lock_material.emission_enabled = true
+	_lock_material.emission = Color(1.0, 0.38, 0.2)
+	_lock_material.emission_energy_multiplier = 1.2
+	var torus := TorusMesh.new()
+	torus.inner_radius = 0.82
+	torus.outer_radius = 0.98
+	torus.rings = 40
+	torus.ring_segments = 8
+	var ring := MeshInstance3D.new()
+	ring.mesh = torus
+	ring.material_override = _lock_material
+	_lock_marker.add_child(ring)
+	for index in range(4):
+		var tick := BoxMesh.new()
+		tick.size = Vector3(0.10, 0.02, 0.32)
+		var node := MeshInstance3D.new()
+		node.mesh = tick
+		node.material_override = _lock_material
+		var angle := float(index) * PI * 0.5
+		node.position = Vector3(cos(angle) * 1.12, 0.0, sin(angle) * 1.12)
+		node.rotation.y = -angle
+		_lock_marker.add_child(node)
+	_lock_marker.visible = false
+
+
+func _on_windup_locked(point: Vector3) -> void:
+	_lock_active = true
+	_lock_marker.global_position = Vector3(point.x, 0.03, point.z)
+	_lock_marker.visible = true
+	_lock_marker.scale = Vector3.ONE * 0.72
+	var tween := create_tween()
+	tween.tween_property(_lock_marker, "scale", Vector3.ONE * 1.15, 0.22).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+
+
+func _on_pounce_ended(_point: Vector3) -> void:
+	_lock_active = false
+	var tween := create_tween()
+	tween.tween_interval(0.2)
+	tween.tween_property(_lock_marker, "scale", Vector3.ONE * 0.3, 0.3)
+	tween.tween_callback(func() -> void: _lock_marker.visible = false)
+
+
 func _build_collector() -> void:
 	collector = load("res://scripts/collector.gd").new() as Node3D
 	collector.name = "ShipLoadingBay"
@@ -338,7 +404,7 @@ func _build_fuel_mesh(fuel: Node3D) -> void:
 	ring.inner_radius = 0.42
 	ring.outer_radius = 0.48
 	var ring_node := _add_mesh_child(fuel, ring, Vector3(0.0, 0.02, 0.0), AMBER, 1.7)
-	ring_node.rotation.x = PI * 0.5
+	fuel.set("base_ring", ring_node)
 	var collider := CollisionShape3D.new()
 	var shape := BoxShape3D.new()
 	shape.size = Vector3(0.6, 0.9, 0.4)
@@ -347,10 +413,11 @@ func _build_fuel_mesh(fuel: Node3D) -> void:
 	fuel.add_child(collider)
 	var glow := OmniLight3D.new()
 	glow.position = Vector3(0.0, 0.7, 0.0)
-	glow.omni_range = 2.6
+	glow.omni_range = 1.7
 	glow.light_color = AMBER
-	glow.light_energy = 0.8
+	glow.light_energy = 0.35
 	fuel.add_child(glow)
+	fuel.set("glow_light", glow)
 
 
 func _build_gulu() -> void:
@@ -362,12 +429,17 @@ func _build_gulu() -> void:
 	visual.name = "Visual"
 	gulu.add_child(visual)
 	add_child(gulu)
-	gulu.call("setup_player", player)
+	gulu.call("setup_actors", [player])
 	gulu.call("setup_fuels", fuels)
-	gulu.call("start_holding", fuels[0])
+	gulu.call("setup_loading_zone", collector)
+	gulu.call("start_holding", fuels[2])
 	gulu.connect("pounce_finished", _on_pounce_finished)
 	gulu.connect("fuel_grabbed", _on_fuel_grabbed)
 	gulu.connect("fuel_released", _on_fuel_released)
+	gulu.connect("spotted_cargo", _on_spotted_cargo)
+	gulu.connect("fuel_snatched", _on_fuel_snatched)
+	gulu.connect("windup_locked", _on_windup_locked)
+	gulu.connect("pounce_ended", _on_pounce_ended)
 
 
 func _build_blender_test_asset() -> void:
@@ -635,6 +707,7 @@ func _process(delta: float) -> void:
 		var lit: bool = index < loaded_count
 		_pips[index].color = AMBER if lit else Color(0.24, 0.33, 0.34, 0.9)
 
+	_lock_pulse(delta)
 	_update_prompt()
 
 	if _debug:
@@ -659,7 +732,7 @@ func _fuels_debug() -> String:
 
 func _update_prompt() -> void:
 	if completed:
-		_set_prompt("装货完成！按 R 再来一次，或继续在场上走动", Color("#ffe0a8"))
+		_set_prompt("返航准备完成！按 R 再来一次，或继续在场上走动", Color("#ffe0a8"))
 		return
 	if _feedback_timer > 0.0:
 		_set_prompt(_feedback, Color("#ffcf5c"))
@@ -667,31 +740,45 @@ func _update_prompt() -> void:
 	var carrying := _carried_fuel() != null
 	var dragon_state := String(gulu.call("state_name")) if gulu != null else "待机"
 	var holding: bool = bool(gulu.get("has_fuel")) if gulu != null else false
+	var snatching: float = float(gulu.call("snatch_progress")) if gulu != null else 0.0
 	var near_bay := player.global_position.x > 9.4
+	var in_bay := player.global_position.x > 11.2
 	if dragon_state == "蓄势":
-		_set_prompt("它压低身体、盯住你了——要扑了，侧移躲开！", Color("#ff7a5e"))
+		_set_prompt("它锁定了你脚下的红圈——出去！", Color("#ff7a5e"))
 		return
 	if dragon_state == "扑击":
 		_set_prompt("扑击！立刻离开它锁定的位置", Color("#ff5a4a"))
 		return
+	if snatching > 0.05:
+		_set_prompt("它要抢你手上的燃料了——快走开，或按 E 放下", Color("#ff8a5e"))
+		return
 	if carrying:
-		if near_bay:
-			_set_prompt("再往里走一点，燃料就会被装货口吸进去", Color("#ffcf8a"))
+		if in_bay:
+			_set_prompt("再往里走一点，燃料就会被吸进去", Color("#ffcf8a"))
+		elif near_bay:
+			_set_prompt("抱着燃料直接走进装货口就行", Color("#ffcf8a"))
 		else:
-			_set_prompt("抱着燃料：E 放下 · 直接抱进飞船装货口也算装货", Color("#ffcf8a"))
+			_set_prompt("抱着燃料：沿青色导引条送到船头，E 放下", Color("#ffcf8a"))
+		return
+	if in_bay:
+		_set_prompt("舱口里没法挑衅——先退出去几米，再回头按 Q", Color("#8fa6b2"))
 		return
 	if near_bay and holding:
-		_set_prompt("站住别动，等它扑过来——它一张嘴，燃料就往里飞", Color("#7dffd4"))
+		_set_prompt("站住别动，按 Q 让它扑过来——它一张嘴，燃料就往里飞", Color("#7dffd4"))
 		return
 	if holding and dragon_state in ["待机", "找燃料", "注意", "靠近"]:
-		_set_prompt("它嘴里的燃料可以抢回来：站到装货口前按 Q 挑衅它", Color("#7dffd4"))
+		_set_prompt("它嘴里那罐可以抢回来：站到装货口前按 Q 挑衅它", Color("#7dffd4"))
 		return
-	if _nearest_free_fuel(3.0) != null:
-		_set_prompt("E 搬起这罐燃料，走到船头装货口", Color("#ffcf8a"))
+	var nearby := _nearest_free_fuel(6.0)
+	if nearby != null:
+		if loaded_count == 0 and _nearest_free_fuel(3.2) != null:
+			_set_prompt("先用 E 抱起脚边这罐，沿着青色地标走到船头装货口", Color("#ffcf8a"))
+		else:
+			_set_prompt("E 搬起这罐燃料——绕远路自己搬，或引开它再搬", Color("#ffcf8a"))
 		return
 	match dragon_state:
 		"待机", "找燃料":
-			_set_prompt("它正盯着燃料。按 Q 挑衅，把它引到别处再搬", Color("#e9f7f3"))
+			_set_prompt("它守着剩下的燃料。按 Q 挑衅，把它引到别处再搬", Color("#e9f7f3"))
 		"注意":
 			_set_prompt("它注意到你了，正转向你", Color("#7dffd4"))
 		"靠近":
@@ -705,6 +792,13 @@ func _update_prompt() -> void:
 			_set_prompt("它失去兴趣，回去了", Color("#8fa6b2"))
 		_:
 			_set_prompt("按 Q 挑衅奶龙", Color("#e9f7f3"))
+
+
+func _lock_pulse(_delta: float) -> void:
+	if _lock_material == null:
+		return
+	var pulse := 0.5 + 0.5 * sin(Time.get_ticks_msec() * 0.012)
+	_lock_material.emission_energy_multiplier = 0.9 + (0.9 * pulse if _lock_active else 0.0)
 
 
 func _set_prompt(text: String, color: Color) -> void:
@@ -737,6 +831,11 @@ func _nearest_free_fuel(max_distance: float) -> Node3D:
 
 func _try_provoke() -> void:
 	if gulu == null or player == null:
+		return
+	# 仓口是卸货区，不是掩体：躲进去就挑衅不到它了。
+	if player.global_position.x > 11.2:
+		_feedback = "它不肯冲进装货口——先退到舱口外再挑衅"
+		_feedback_timer = 2.0
 		return
 	var result: Dictionary = gulu.call("try_provoke", player)
 	if bool(result.get("ok", false)):
@@ -797,6 +896,20 @@ func _on_fuel_released(_fuel: Node3D) -> void:
 	_feedback_timer = 1.4
 
 
+func _on_spotted_cargo(_who: Node3D) -> void:
+	if _sfx != null:
+		_sfx.call("play", "notice")
+	_feedback = "它看见你手里的燃料了——别让它贴太近"
+	_feedback_timer = 2.2
+
+
+func _on_fuel_snatched(fuel: Node3D) -> void:
+	if _sfx != null:
+		_sfx.call("play", "chomp")
+	_feedback = "它一口把%s抢走了！现在挑衅它，让它扑到装货口前" % String(fuel.get("display_name"))
+	_feedback_timer = 3.0
+
+
 func _on_pounce_finished(hit: bool) -> void:
 	if hit:
 		var carried := _carried_fuel()
@@ -845,7 +958,7 @@ func reset_preview() -> void:
 	_counter_label.text = "已装 0 / %d" % TARGET_COUNT
 	if gulu != null:
 		gulu.call("reset_to_home")
-		gulu.call("start_holding", fuels[0])
+		gulu.call("start_holding", fuels[2])
 	_feedback = ""
 	_feedback_timer = 0.0
 	_last_collisions = int(player.get("contacts"))
@@ -908,6 +1021,17 @@ func _wait(seconds: float) -> void:
 	await get_tree().create_timer(seconds).timeout
 
 
+## 等到奶龙进入某个状态（比固定等待稳，避免调参后测试时间错位）。
+func _await_state(target_state: String, timeout: float) -> bool:
+	var waited := 0.0
+	while waited < timeout:
+		if gulu != null and gulu.state_name() == target_state:
+			return true
+		await _wait(0.05)
+		waited += 0.05
+	return false
+
+
 func _run_selftest() -> void:
 	await _wait(0.8)
 	var passes: Array = []
@@ -938,7 +1062,8 @@ func _run_selftest() -> void:
 		mesh_count = body.find_children("*", "MeshInstance3D", true, false).size()
 	_check(mesh_count > 3, "player skin meshes present (%d)" % mesh_count, passes, failures)
 
-	# --- Blender GLB 管线仍在（F4 切换显示）---	_check(blender_test_asset != null and not blender_test_asset.visible, "Blender test asset hidden by default", passes, failures)
+	# --- Blender GLB 管线仍在（F4 切换显示）---
+	_check(blender_test_asset != null and not blender_test_asset.visible, "Blender test asset hidden by default", passes, failures)
 	_toggle_blender_test()
 	await get_tree().physics_frame
 	var ba_meshes: Array = blender_test_asset.find_children("*", "MeshInstance3D", true, false) if blender_test_asset != null else []
@@ -985,11 +1110,12 @@ func _run_selftest() -> void:
 	_check(bool(player.get("use_first_person")), "Tab returns to first person", passes, failures)
 	_check(absf(cam.fov - 74.0) < 0.1, "first person restores ship fov", passes, failures)
 
-	# --- 起始状态：奶龙叼着第一罐 ---
+	# --- 起始状态：奶龙叼着第三罐，前两罐在地上 ---
 	_check(bool(gulu.get("has_fuel")), "dragon starts holding fuel", passes, failures)
-	_check(String(fuels[0].get("mode")) == "dragon", "starting fuel is carried by dragon", passes, failures)
+	_check(String(fuels[2].get("mode")) == "dragon", "starting fuel is carried by dragon", passes, failures)
+	_check(String(fuels[0].get("mode")) == "free" and String(fuels[1].get("mode")) == "free", "two fuels start on the ground", passes, failures)
 	var anchor: Node3D = gulu.call("mouth_anchor")
-	_check(anchor != null and fuels[0].global_position.distance_to(anchor.global_position) < 0.4, "dragon mouth anchor holds fuel", passes, failures)
+	_check(anchor != null and fuels[2].global_position.distance_to(anchor.global_position) < 0.4, "dragon mouth anchor holds fuel", passes, failures)
 
 	# --- 挑衅 → 注意 → 靠近 ---
 	reset_preview()
@@ -1007,7 +1133,7 @@ func _run_selftest() -> void:
 
 	# 隔岩挑衅被拒绝
 	reset_preview()
-	_place_player(Vector3(2.6, 0.02, 6.0), DRAGON_HOME)
+	_place_player(Vector3(2.2, 0.02, 8.8), DRAGON_HOME)
 	await _wait(0.2)
 	_press_provoke()
 	await _wait(0.1)
@@ -1021,7 +1147,7 @@ func _run_selftest() -> void:
 	_press_provoke()
 	_press_provoke()
 	await _wait(0.06)
-	_check(float(gulu.get("agitation")) <= 0.43, "provoke cooldown blocks rapid repeats", passes, failures)
+	_check(float(gulu.get("agitation")) <= 0.51, "provoke cooldown blocks rapid repeats", passes, failures)
 
 	# --- 核心场面：借力送货 ---
 	reset_preview()
@@ -1030,10 +1156,9 @@ func _run_selftest() -> void:
 	_press_provoke()
 	await _wait(0.85)
 	_press_provoke()
-	await _wait(0.85)
-	_press_provoke()
-	await _wait(0.25)
-	_check(gulu.state_name() == "蓄势", "third provoke triggers windup", passes, failures)
+	var got_windup: bool = await _await_state("蓄势", 4.0)
+	_check(got_windup, "agitated dragon closes in, then winds up", passes, failures)
+	_check(_lock_marker.visible and Vector2(_lock_marker.global_position.x - player.global_position.x, _lock_marker.global_position.z - player.global_position.z).length() < 0.4, "windup shows a lock marker on the floor", passes, failures)
 	var locked := player.global_position
 	Input.action_press("move_right")
 	await _wait(1.2)
@@ -1055,21 +1180,21 @@ func _run_selftest() -> void:
 
 	# --- 拾取 / 放下 / 掉落 ---
 	reset_preview()
-	_place_player(FUEL_HOMES[2] + Vector3(-1.2, 0.02, 0.0), FUEL_HOMES[2])
+	_place_player(FUEL_HOMES[0] + Vector3(-1.2, 0.02, 0.0), FUEL_HOMES[0])
 	await _wait(0.2)
-	_check(bool(fuels[2].call("can_pick_up", player)), "fuel can be picked up", passes, failures)
+	_check(bool(fuels[0].call("can_pick_up", player)), "fuel can be picked up", passes, failures)
 	_press_interact()
 	await _wait(0.15)
-	_check(String(fuels[2].get("mode")) == "player", "E picks up fuel", passes, failures)
-	_check(int(fuels[2].collision_layer) == 0, "carried fuel disables collision", passes, failures)
-	_check(fuels[2].global_position.distance_to(player.global_position) < 1.4, "carried fuel follows player", passes, failures)
+	_check(String(fuels[0].get("mode")) == "player", "E picks up fuel", passes, failures)
+	_check(int(fuels[0].collision_layer) == 0, "carried fuel disables collision", passes, failures)
+	_check(fuels[0].global_position.distance_to(player.global_position) < 1.4, "carried fuel follows player", passes, failures)
 	_press_interact()
 	await _wait(0.15)
-	_check(String(fuels[2].get("mode")) == "free", "E drops fuel", passes, failures)
-	_check(int(fuels[2].collision_layer) != 0, "dropped fuel restores collision", passes, failures)
+	_check(String(fuels[0].get("mode")) == "free", "E drops fuel", passes, failures)
+	_check(int(fuels[0].collision_layer) != 0, "dropped fuel restores collision", passes, failures)
 
 	# 自己抱着走进装货口：应该自动入仓
-	_place_player(FUEL_HOMES[2] + Vector3(-1.2, 0.02, 0.0), FUEL_HOMES[2])
+	_place_player(FUEL_HOMES[0] + Vector3(-1.2, 0.02, 0.0), FUEL_HOMES[0])
 	await _wait(0.2)
 	_press_interact()
 	await _wait(0.15)
@@ -1080,23 +1205,44 @@ func _run_selftest() -> void:
 
 	# 被扑中掉落
 	reset_preview()
-	_place_player(FUEL_HOMES[2] + Vector3(-1.2, 0.02, 0.0), FUEL_HOMES[2])
+	_place_player(FUEL_HOMES[0] + Vector3(-1.2, 0.02, 0.0), FUEL_HOMES[0])
 	await _wait(0.2)
 	_press_interact()
 	await _wait(0.1)
-	_check(String(fuels[2].get("mode")) == "player", "fuel carried for pounce test", passes, failures)
-	_place_player(Vector3(1.6, 0.02, 1.8), DRAGON_HOME)
+	_check(String(fuels[0].get("mode")) == "player", "fuel carried for pounce test", passes, failures)
+	_place_player(Vector3(1.2, 0.02, 0.6), DRAGON_HOME)
 	await _wait(0.2)
 	_press_provoke()
 	await _wait(0.85)
 	_press_provoke()
-	await _wait(0.85)
-	_press_provoke()
-	await _wait(0.3)
-	_check(gulu.state_name() == "蓄势", "stationary player triggers windup", passes, failures)
-	await _wait(1.5)
+	var got_windup2: bool = await _await_state("蓄势", 4.0)
+	_check(got_windup2, "stationary player triggers windup", passes, failures)
+	await _wait(1.7)
 	_check(bool(gulu.get("last_pounce_hit")), "pounce can hit a stationary player", passes, failures)
-	_check(String(fuels[2].get("mode")) != "player", "getting pounced drops carried fuel", passes, failures)
+	_check(String(fuels[0].get("mode")) != "player", "getting pounced drops carried fuel", passes, failures)
+
+	# --- 舱口不能当掩体：站在装货口里挑衅应被拒绝 ---
+	reset_preview()
+	_place_player(Vector3(13.0, 0.02, 0.0), DRAGON_HOME)
+	await _wait(0.2)
+	_press_provoke()
+	await _wait(0.1)
+	_check(float(gulu.get("agitation")) < 0.01, "provoking inside the loading bay is rejected", passes, failures)
+	_check(_feedback.contains("装货口"), "bay provoke shows a clear reason", passes, failures)
+
+	# --- 看见你抱着燃料 → 凑过来 → 抢走 ---
+	reset_preview()
+	gulu.call("_release_fuel")
+	await get_tree().physics_frame
+	_place_player(FUEL_HOMES[1] + Vector3(-1.0, 0.02, 0.0), FUEL_HOMES[1])
+	await _wait(0.2)
+	_press_interact()
+	await _wait(0.3)
+	_check(String(fuels[1].get("mode")) == "player", "fuel picked up near dragon", passes, failures)
+	_check(gulu.state_name() == "注意", "dragon spots the carried fuel", passes, failures)
+	_teleport(gulu.global_position + Vector3(1.6, 0.02, 0.0), 0.0)
+	await _wait(1.6)
+	_check(String(fuels[1].get("mode")) == "dragon", "dragon snatches the carried fuel", passes, failures)
 
 	# --- 奶龙找燃料 ---
 	reset_preview()
@@ -1105,10 +1251,10 @@ func _run_selftest() -> void:
 	# 让它把嘴里那罐丢掉，并站到一罐散装燃料旁边，验证它会自己去叼。
 	gulu.call("_release_fuel")
 	await get_tree().physics_frame
-	gulu.set("global_position", Vector3(-6.5, 0.0, -4.7))
+	gulu.set("global_position", Vector3(2.0, 0.0, -6.0))
 	gulu.call("_set_state", "idle", true)
-	await _wait(3.5)
-	_check(String(fuels[1].get("mode")) == "dragon" or String(fuels[2].get("mode")) == "dragon", "dragon forages and grabs loose fuel", passes, failures)
+	await _wait(4.5)
+	_check(String(fuels[1].get("mode")) == "dragon", "dragon forages and grabs loose fuel", passes, failures)
 
 	# --- 完成与重开 ---
 	reset_preview()
@@ -1128,8 +1274,8 @@ func _run_selftest() -> void:
 	_check(bool(player.get("use_first_person")), "reset restores first person", passes, failures)
 	_check(gulu.state_name() == "待机", "reset restores dragon idle", passes, failures)
 	_check(loaded_count == 0 and not completed and not _banner.visible, "reset clears loading progress", passes, failures)
-	_check(int(fuels[0].collision_layer) == 0 and bool(gulu.get("has_fuel")), "reset re-attaches starting fuel", passes, failures)
-	_check(String(fuels[1].get("mode")) == "free" and String(fuels[2].get("mode")) == "free", "reset returns loose fuels", passes, failures)
+	_check(int(fuels[2].collision_layer) == 0 and bool(gulu.get("has_fuel")), "reset re-attaches starting fuel", passes, failures)
+	_check(String(fuels[0].get("mode")) == "free" and String(fuels[1].get("mode")) == "free", "reset returns loose fuels", passes, failures)
 
 	# --- 调试面板与状态环 ---
 	_toggle_debug()
@@ -1151,65 +1297,75 @@ func _run_selftest() -> void:
 func _run_shots() -> void:
 	DirAccess.make_dir_recursive_absolute(_shot_dir)
 	await _wait(1.0)
-	_place_player(Vector3(-1.0, 0.02, 4.2), DRAGON_HOME)
+
+	# 01 开场：出生点同时看得见燃料、奶龙、装货口
+	_teleport(SPAWN, SPAWN_YAW)
 	await _wait(0.6)
-	await _shot("01_opening_pad.png")
+	await _shot("01_opening_three_way.png")
+
+	# 02 抱起第一罐（教学罐）朝船头走
+	_place_player(FUEL_HOMES[0] + Vector3(0.9, 0.02, 0.5), Vector3(13.0, 0.0, 0.0))
+	await _wait(0.3)
+	_press_interact()
+	await _wait(0.3)
+	Input.action_press("move_up")
+	await _wait(0.6)
+	Input.action_release("move_up")
+	await _wait(0.2)
+	await _shot("02_carry_first_can.png")
+
+	# 03 它看见你手里的燃料（凑过来盯住）
+	reset_preview()
+	_place_player(Vector3(3.2, 0.02, -4.2), DRAGON_HOME)
+	await _wait(0.25)
+	_press_interact()
+	await _wait(0.32)
+	await _shot("03_dragon_sees_your_fuel.png")
+
+	# 04 它叼着燃料、压低身体准备扑击
+	reset_preview()
+	_place_player(Vector3(5.6, 0.02, -2.5), DRAGON_HOME)
+	await _wait(0.3)
+	_press_provoke()
+	await _wait(0.8)
+	_press_provoke()
+	await _await_state("蓄势", 4.0)
+	await _wait(0.45)
+	await _shot("04_dragon_windup_with_fuel.png")
+
+	# 05 扑空抬头 + 燃料落入收集仓
 	reset_preview()
 	_place_player(Vector3(9.2, 0.02, 0.0), DRAGON_HOME)
 	await _wait(0.3)
 	_press_provoke()
-	await _wait(0.9)
+	await _wait(0.8)
 	_press_provoke()
-	await _wait(0.85)
-	_press_provoke()
-	await _wait(0.4)
-	await _shot("02_windup.png")
-	await _wait(1.2)
-	await _shot("03_pounce_release.png")
-	await _wait(1.4)
-	await _shot("04_bay_after_release.png")
+	await _await_state("蓄势", 4.0)
+	Input.action_press("move_right")
+	await _wait(1.1)
+	Input.action_release("move_right")
+	await _await_state("恢复", 2.0)
+	_place_player(Vector3(11.9, 0.02, 7.4), Vector3(11.9, 0.7, 0.0))
+	await _wait(0.12)
+	await _shot("05_miss_fuel_into_bay.png")
 
+	# 06 入仓确认 / 指示灯
+	await _wait(1.0)
+	await _shot("06_bay_feedback.png")
+
+	# 07 装货口全景
 	reset_preview()
-	_place_player(Vector3(-4.9, 0.02, 6.4), FUEL_HOMES[2])
-	await _wait(0.4)
-	_press_interact()
-	await _wait(0.3)
-	await _shot("05_carry_first_person.png")
+	_place_player(Vector3(7.6, 0.02, 3.6), Vector3(14.0, 0.0, 0.0))
+	await _wait(0.5)
+	await _shot("07_loading_bay_wide.png")
+
+	# 08 第三人称：玩家模型与其他星球同源
 	var toggle := InputEventAction.new()
 	toggle.action = "inspect_first_person"
 	toggle.pressed = true
 	player.call("_unhandled_input", toggle)
 	await _wait(0.8)
-	await _shot("06_third_person_player_model.png")
-
-	# 角色特写：先看一眼叼货的正面，再看扑空脸着地
-	reset_preview()
-	_place_player(Vector3(-1.6, 0.02, -0.5), DRAGON_HOME)
-	await _wait(0.6)
-	await _shot("07_dragon_face_with_fuel.png")
-
-	reset_preview()
-	_place_player(Vector3(-2.4, 0.02, -0.5), DRAGON_HOME)
-	await _wait(0.3)
-	_press_provoke()
-	await _wait(0.85)
-	_press_provoke()
-	await _wait(0.85)
-	_press_provoke()
-	await _wait(0.5)
-	Input.action_press("move_right")
-	await _wait(0.8)
-	Input.action_release("move_right")
-	await _wait(0.45)
-	var faceplant_spot := gulu.global_position
-	_place_player(faceplant_spot + Vector3(-3.4, 0.02, 1.2), faceplant_spot + Vector3.UP * 0.9)
-	await _wait(0.12)
-	await _shot("08_dragon_miss_faceplant.png")
-
-	reset_preview()
-	_place_player(Vector3(7.6, 0.02, 3.6), Vector3(14.0, 0.0, 0.0))
-	await _wait(0.5)
-	await _shot("09_loading_bay_wide.png")
+	await _shot("08_third_person_player_model.png")
 
 	print("GULU SHOTS dir=%s" % ProjectSettings.globalize_path(_shot_dir))
 	get_tree().quit(0)
@@ -1227,8 +1383,12 @@ func _shot(file_name: String) -> void:
 		for fuel in fuels:
 			fuel_modes.append(String(fuel.get("mode")))
 		var player_screen := shot_cam.unproject_position(player.global_position + Vector3.UP * 0.9)
-		print("SHOTMETA %s dragon_screen=%s on_screen=%s player_screen=%s loaded=%d state=%s holding=%s fuels=%s" % [
-			file_name, head, on_screen, player_screen, loaded_count, gulu.state_name(), str(gulu.get("has_fuel")), ",".join(fuel_modes)])
+		var fuel_note := ""
+		for fuel in fuels:
+			if String(fuel.get("mode")) == "thrown":
+				fuel_note = " thrown_at=%s" % shot_cam.unproject_position(fuel.global_position)
+		print("SHOTMETA %s dragon_screen=%s on_screen=%s player_screen=%s loaded=%d state=%s holding=%s fuels=%s%s" % [
+			file_name, head, on_screen, player_screen, loaded_count, gulu.state_name(), str(gulu.get("has_fuel")), ",".join(fuel_modes), fuel_note])
 	var image := get_viewport().get_texture().get_image()
 	var path := _shot_dir.path_join(file_name)
 	var error := image.save_png(path)

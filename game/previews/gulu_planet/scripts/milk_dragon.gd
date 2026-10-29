@@ -10,6 +10,14 @@ signal state_changed(previous: String, current: String)
 signal pounce_finished(hit: bool)
 signal fuel_grabbed(fuel: Node3D)
 signal fuel_released(fuel: Node3D)
+## 看见目标手里的燃料（用于画面/音效反馈，也方便以后多人分工）
+signal spotted_cargo(who: Node3D)
+## 从目标手上抢走燃料
+signal fuel_snatched(fuel: Node3D)
+## 蓄势开始、目标点锁定（画面标记用）
+signal windup_locked(point: Vector3)
+## 扑击结束（无论命中/扑空）
+signal pounce_ended(point: Vector3)
 
 const STATE_IDLE := "idle"
 const STATE_FORAGE := "forage"
@@ -34,9 +42,10 @@ const STATE_NAMES := {
 # ---- 原型参数（不是最终数值） ----
 @export var provoke_range := 9.0
 @export var provoke_half_angle_deg := 55.0
-@export var provoke_cooldown := 0.7
+@export var provoke_cooldown := 0.65
 @export var agitation_per_provoke := 0.34
-@export var agitation_per_provoke_holding := 0.42
+@export var agitation_per_provoke_holding := 0.50
+@export var agitation_per_provoke_carrying := 0.42
 @export var windup_threshold := 0.95
 @export var agitation_decay := 0.10
 @export var notice_time := 0.55
@@ -48,20 +57,28 @@ const STATE_NAMES := {
 @export var pounce_speed := 11.0
 @export var pounce_time := 0.42
 @export var pounce_hit_radius := 1.25
-@export var recover_time := 1.5
+@export var recover_time := 1.25
 @export var return_speed := 2.2
 @export var turn_speed := 10.0
 @export var gravity := 18.0
+## 看见你抱着燃料后会凑过来；贴太近会被它抢走
+@export var snatch_distance := 2.1
+@export var snatch_delay := 0.75
+@export var snatch_cooldown := 4.0
+## 它能“注意到你手里的货”的距离（比挑衅范围短，保证教学罐是安全的）
+@export var spot_cargo_range := 7.5
 ## 找燃料
 @export var forage_range := 8.0
 @export var forage_speed := 2.4
 @export var grab_radius := 1.15
-@export var grab_cooldown := 2.4
+@export var grab_cooldown := 3.0
 ## 叼货扑空后燃料的抛出速度（可控，不依赖高速物理碰撞）
 @export var release_speed := 7.2
 @export var release_lift := 3.4
 
 var player: CharacterBody3D
+## 可被关注的对象列表（现在只有本地玩家；多人时把队友加进来即可，目标不写死）。
+var actors: Array = []
 var visual: Node3D
 var state := STATE_IDLE
 var agitation := 0.0
@@ -72,6 +89,7 @@ var home_position := Vector3.ZERO
 var home_yaw := 0.0
 
 var _fuels: Array = []
+var loading_zone: Node3D
 var _forage_target: Node3D
 var _timer := 0.0
 var _interest_timer := 0.0
@@ -86,6 +104,10 @@ var _sidestep_timer := 0.0
 var _sidestep_dir := 1.0
 var _stuck_total := 0.0
 var _last_position := Vector3.ZERO
+var _target_scan := 0.0
+var _snatch_timer := 0.0
+var _snatch_ready_at := 0.0
+var _was_target_carrying := false
 
 
 func _ready() -> void:
@@ -107,13 +129,59 @@ func _ready() -> void:
 
 
 func setup_player(next_player: CharacterBody3D) -> void:
-	player = next_player
-	if visual != null:
-		visual.call("set_look_target", player)
+	setup_actors([next_player])
+
+
+## 目标不是写死的节点：取最近的、看得见的那个。
+func setup_actors(list: Array) -> void:
+	actors = list
+	_pick_target(true)
+
+
+func _pick_target(force: bool = false) -> void:
+	if not force and state in [STATE_WINDUP, STATE_POUNCE, STATE_RECOVER]:
+		return
+	var best: CharacterBody3D = null
+	var best_distance := give_up_distance
+	for entry in actors:
+		var actor := entry as CharacterBody3D
+		if actor == null or not is_instance_valid(actor) or not actor.is_inside_tree():
+			continue
+		var distance := global_position.distance_to(actor.global_position)
+		if distance >= best_distance:
+			continue
+		if not _has_los_to(actor.global_position + Vector3.UP * 1.15):
+			continue
+		best = actor
+		best_distance = distance
+	if best == null:
+		# 看不到任何人时保留当前目标，避免每帧切换。
+		return
+	if best != player:
+		player = best
+		if visual != null:
+			visual.call("set_look_target", player)
+
+
+## 当前目标是否正抱着燃料。
+func target_carrying() -> bool:
+	if player == null or not is_instance_valid(player):
+		return false
+	return int(player.get("carrying")) > 0
+
+
+## 抢货进度 0..1，供 HUD/表现层预警。
+func snatch_progress() -> float:
+	return clampf(_snatch_timer / maxf(snatch_delay, 0.01), 0.0, 1.0)
 
 
 func setup_fuels(fuels: Array) -> void:
 	_fuels = fuels
+
+
+## 卸货区（装货口）：它不会进来，也不会在这里抢货。
+func setup_loading_zone(zone: Node3D) -> void:
+	loading_zone = zone
 
 
 func mouth_anchor() -> Node3D:
@@ -135,15 +203,27 @@ func start_holding(fuel: Node3D) -> void:
 
 func _physics_process(delta: float) -> void:
 	_grab_cooldown = maxf(0.0, _grab_cooldown - delta)
+	if player != null and not is_instance_valid(player):
+		player = null
 	if player == null:
-		_update_visual()
-		return
+		_pick_target(true)
+		if player == null:
+			_update_visual()
+			return
 
+	_target_scan += delta
+	if _target_scan >= 0.3:
+		_target_scan = 0.0
+		_pick_target()
+		_los_check_accum = 0.12
 	var distance := global_position.distance_to(player.global_position)
 	_los_check_accum += delta
 	if _los_check_accum >= 0.12:
 		_los_check_accum = 0.0
 		_last_los = _has_line_of_sight()
+
+	_watch_cargo(distance)
+	_try_snatch(delta)
 
 	match state:
 		STATE_IDLE:
@@ -163,7 +243,7 @@ func _physics_process(delta: float) -> void:
 			_face_point(player.global_position, delta)
 			_timer += delta
 			if _timer >= notice_time:
-				if _pending_windup or agitation >= windup_threshold:
+				if (_pending_windup or agitation >= windup_threshold) and distance <= _windup_reach():
 					_begin_windup()
 				else:
 					_set_state(STATE_APPROACH)
@@ -181,7 +261,7 @@ func _physics_process(delta: float) -> void:
 					velocity.x = 0.0
 					velocity.z = 0.0
 				_decay_agitation(delta)
-				if agitation >= windup_threshold:
+				if (_pending_windup or agitation >= windup_threshold) and distance <= _windup_reach():
 					_begin_windup()
 		STATE_WINDUP:
 			velocity.x = 0.0
@@ -239,6 +319,59 @@ func _physics_process(delta: float) -> void:
 
 	_update_stuck(delta)
 	_update_visual()
+
+
+## 看见你抱起燃料：转头盯住并靠近（不直接攻击，只是凑过来）。
+func _watch_cargo(distance: float) -> void:
+	var carrying := target_carrying()
+	if carrying and not _was_target_carrying:
+		if state in [STATE_IDLE, STATE_FORAGE] and _last_los and distance <= spot_cargo_range:
+			_timer = 0.0
+			_pending_windup = false
+			_set_state(STATE_NOTICE)
+			spotted_cargo.emit(player)
+	_was_target_carrying = carrying
+
+
+## 贴太近时会把目标手上的燃料抢走（有预警、有冷却，不造成伤害）。
+func _try_snatch(delta: float) -> void:
+	if has_fuel or player == null:
+		_snatch_timer = 0.0
+		return
+	if state in [STATE_WINDUP, STATE_POUNCE, STATE_RECOVER, STATE_RETURN]:
+		_snatch_timer = 0.0
+		return
+	if Time.get_ticks_msec() < int(_snatch_ready_at):
+		_snatch_timer = 0.0
+		return
+	if not target_carrying() or global_position.distance_to(player.global_position) > snatch_distance:
+		_snatch_timer = maxf(0.0, _snatch_timer - delta * 1.6)
+		return
+	if loading_zone != null and bool(loading_zone.call("contains_point", player.global_position + Vector3.UP * 0.5)):
+		_snatch_timer = 0.0
+		return
+	_snatch_timer += delta
+	if _snatch_timer >= snatch_delay:
+		_snatch_timer = 0.0
+		_snatch_ready_at = Time.get_ticks_msec() + int(snatch_cooldown * 1000.0)
+		_steal_from_target()
+
+
+func _steal_from_target() -> void:
+	for entry in _fuels:
+		var fuel := entry as Node3D
+		if fuel == null or not is_instance_valid(fuel):
+			continue
+		if String(fuel.get("mode")) != "player":
+			continue
+		carried_fuel = fuel
+		has_fuel = true
+		fuel.call("carry_by_dragon", mouth_anchor())
+		if visual != null:
+			visual.call("set_carried_state", true)
+		agitation = maxf(agitation, 0.2)
+		fuel_snatched.emit(fuel)
+		return
 
 
 func _forage_tick(delta: float) -> void:
@@ -323,12 +456,14 @@ func _update_stuck(delta: float) -> void:
 		var right := global_transform.basis.x * _sidestep_dir
 		global_position += Vector3(right.x, 0.0, right.z) * 1.4 * delta
 	if _stuck_total > 3.2:
-		# 最后兜底：回到出生点，避免永久卡死。
+		# 不瞬移：先放弃追逐走回窝；如果连回窝都卡住，就用更长的侧移蹭出去。
 		_stuck_total = 0.0
 		_stuck_accum = 0.0
-		global_position = home_position
-		velocity = Vector3.ZERO
-		_set_state(STATE_IDLE)
+		if state == STATE_RETURN:
+			_sidestep_timer = 1.2
+			_sidestep_dir = -_sidestep_dir
+		else:
+			_start_return()
 
 
 func try_provoke(current_player: CharacterBody3D) -> Dictionary:
@@ -347,7 +482,11 @@ func try_provoke(current_player: CharacterBody3D) -> Dictionary:
 		return {"ok": false, "reason": "别按太快，它还没反应过来"}
 	_last_provoke_ms = now
 	_interest_timer = 0.0
-	var gain := agitation_per_provoke_holding if has_fuel else agitation_per_provoke
+	var gain := agitation_per_provoke
+	if has_fuel:
+		gain = agitation_per_provoke_holding
+	elif target_carrying():
+		gain = agitation_per_provoke_carrying
 	agitation = minf(1.0, agitation + gain)
 	if state == STATE_IDLE or state == STATE_RETURN or state == STATE_FORAGE:
 		_pending_windup = false
@@ -356,11 +495,15 @@ func try_provoke(current_player: CharacterBody3D) -> Dictionary:
 	elif state == STATE_APPROACH or state == STATE_NOTICE:
 		pass
 	if agitation >= windup_threshold:
-		if state == STATE_APPROACH:
+		_pending_windup = true
+		if state == STATE_APPROACH and global_position.distance_to(player.global_position) <= _windup_reach():
 			_begin_windup()
-		elif state == STATE_NOTICE:
-			_pending_windup = true
 	return {"ok": true, "reason": "挑衅成功", "holding_fuel": has_fuel}
+
+
+## 够得着的距离才扑：太远就先靠近，不在原地白扑（避免“扑不到人”的假动作）。
+func _windup_reach() -> float:
+	return maxf(2.4, pounce_speed * pounce_time - 0.4)
 
 
 func _begin_windup() -> void:
@@ -374,6 +517,7 @@ func _begin_windup() -> void:
 	if player != null:
 		_pounce_target = player.global_position
 	_set_state(STATE_WINDUP)
+	windup_locked.emit(_pounce_target)
 
 
 func _finish_pounce() -> void:
@@ -389,6 +533,7 @@ func _finish_pounce() -> void:
 		visual.call("set_pounce_result", last_pounce_hit)
 	_set_state(STATE_RECOVER)
 	pounce_finished.emit(last_pounce_hit)
+	pounce_ended.emit(_pounce_target)
 
 
 func _release_fuel() -> void:
@@ -485,6 +630,19 @@ func _update_visual() -> void:
 	elif state == STATE_POUNCE:
 		pounce_ratio = clampf(_timer / maxf(pounce_time, 0.01), 0.0, 1.0)
 	visual.call("set_behavior", state_name(), agitation, windup_ratio, pounce_ratio)
+	visual.call("set_look_point", _current_look_point(), player != null and is_instance_valid(player))
+	visual.call("set_snatch", snatch_progress())
+
+
+## 看着目标手里的燃料（如果它抱着），否则看着目标的脸。
+func _current_look_point() -> Vector3:
+	if player == null or not is_instance_valid(player):
+		return Vector3.ZERO
+	for entry in _fuels:
+		var fuel := entry as Node3D
+		if fuel != null and is_instance_valid(fuel) and String(fuel.get("mode")) == "player":
+			return fuel.global_position + Vector3.UP * 0.25
+	return player.global_position + Vector3.UP * 1.1
 
 
 func set_debug_ring(enabled: bool) -> void:
@@ -513,7 +671,6 @@ func debug_text() -> String:
 		"命中" if last_pounce_hit else "未命中",
 	]
 
-
 func reset_to_home() -> void:
 	global_position = home_position
 	rotation.y = home_yaw
@@ -529,6 +686,10 @@ func reset_to_home() -> void:
 	_stuck_total = 0.0
 	_sidestep_timer = 0.0
 	_forage_target = null
+	_snatch_timer = 0.0
+	_snatch_ready_at = 0
+	_was_target_carrying = false
+	_target_scan = 0.0
 	has_fuel = false
 	carried_fuel = null
 	if visual != null:

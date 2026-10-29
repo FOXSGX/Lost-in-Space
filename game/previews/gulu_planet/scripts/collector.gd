@@ -15,12 +15,14 @@ const CYAN := Color("#3fd8ff")
 const INTAKE := Color("#0d1a20")
 
 ## 接货口在世界坐标中的容错范围（比视觉开口略大，避免像素级瞄准）。
-const CATCH_MIN := Vector3(12.75, 0.0, -2.05)
-const CATCH_MAX := Vector3(15.85, 2.30, 2.05)
+const CATCH_MIN := Vector3(12.45, 0.0, -2.40)
+const CATCH_MAX := Vector3(15.90, 2.30, 2.40)
 const INTAKE_POINT := Vector3(15.15, 1.05, 0.0)
 
 var target_count := 3
 var loaded_count := 0
+## 最后一次入仓的搬运者 peer（单人时 1；保留给以后多人算贡献）
+var last_credit_peer := 0
 
 var _pips: Array[MeshInstance3D] = []
 var _pulse := 0.0
@@ -51,6 +53,7 @@ func consume(fuel: Node3D) -> void:
 	if bool(fuel.get("collected")):
 		return
 	fuel.call("collect")
+	last_credit_peer = int(fuel.get("credit_peer"))
 	loaded_count += 1
 	_flash = 1.0
 	_update_pips()
@@ -60,6 +63,7 @@ func consume(fuel: Node3D) -> void:
 
 func reset_state() -> void:
 	loaded_count = 0
+	last_credit_peer = 0
 	_flash = 0.0
 	_update_pips()
 

@@ -9,7 +9,7 @@ signal landed(fuel: FuelProp)
 
 const GRAVITY := 18.0
 const FREE_DAMPING := 6.0
-const CARRY_OFFSET := Vector3(0.40, 0.92, -0.62)
+const CARRY_OFFSET := Vector3(0.66, 0.80, -0.72)
 const DRAGON_MOUTH_OFFSET := Vector3(0.0, -0.06, -0.10)
 
 var display_name := "燃料罐"
@@ -19,6 +19,9 @@ var fuel_amount := 1
 var mode := "free"
 var carried := false
 var collected := false
+## 最近一次搬运/交付的归属（现在只有单人：peer 1；保留字段方便以后算多人贡献）
+var carrier: Node3D
+var credit_peer := 0
 
 var _home_position := Vector3.ZERO
 var _home_yaw := 0.0
@@ -27,6 +30,9 @@ var _mouth_anchor: Node3D
 var _collector: Node3D
 var _settle_timer := 0.0
 var _spin := 0.0
+var glow_light: OmniLight3D
+## 地面拾取环：只在自由状态显示（抱着它的时候不该堵住视野）。
+var base_ring: MeshInstance3D
 
 
 func _ready() -> void:
@@ -55,6 +61,13 @@ func pick_up(player: CharacterBody3D) -> void:
 	mode = "player"
 	carried = true
 	_carry_target = player
+	carrier = player
+	if glow_light != null:
+		glow_light.light_energy = 0.10
+	if base_ring != null:
+		base_ring.visible = false
+	if player.has_method("set"):
+		player.set("carrying", 1)
 	collision_layer = 0
 	collision_mask = 0
 	velocity = Vector3.ZERO
@@ -68,6 +81,7 @@ func drop_from_player(player: CharacterBody3D, forward_offset: float = 1.15) -> 
 	carried = false
 	_carry_target = null
 	if player != null:
+		player.set("carrying", 0)
 		var forward := -player.global_transform.basis.z
 		forward.y = 0.0
 		if forward.length_squared() < 0.0001:
@@ -80,15 +94,27 @@ func drop_from_player(player: CharacterBody3D, forward_offset: float = 1.15) -> 
 	collision_mask = 2
 	velocity = Vector3.ZERO
 	_settle_timer = 0.0
+	if glow_light != null:
+		glow_light.light_energy = 0.35
+	if base_ring != null:
+		base_ring.visible = true
 
 
 func carry_by_dragon(anchor: Node3D) -> void:
 	if mode == "loaded":
 		return
+	# 从玩家手上被抢走时，把玩家的携带标记清掉。
+	if mode == "player" and _carry_target != null and is_instance_valid(_carry_target):
+		_carry_target.set("carrying", 0)
+		carrier = _carry_target
 	mode = "dragon"
 	carried = false
 	_carry_target = null
 	_mouth_anchor = anchor
+	if glow_light != null:
+		glow_light.light_energy = 0.12
+	if base_ring != null:
+		base_ring.visible = false
 	collision_layer = 0
 	collision_mask = 0
 	velocity = Vector3.ZERO
@@ -120,6 +146,10 @@ func collect() -> void:
 	collected = true
 	mode = "loaded"
 	carried = false
+	if _carry_target != null and is_instance_valid(_carry_target):
+		_carry_target.set("carrying", 0)
+	_carry_target = null
+	credit_peer = peer_of(carrier)
 	collision_layer = 0
 	collision_mask = 0
 	velocity = Vector3.ZERO
@@ -128,6 +158,13 @@ func collect() -> void:
 
 func is_free() -> bool:
 	return mode == "free"
+
+
+## 归属标记：现在都是单人（1），以后接多人时换成真实 peer_id。
+static func peer_of(actor: Node3D) -> int:
+	if actor != null and is_instance_valid(actor):
+		return int(actor.get("peer_id"))
+	return 0
 
 
 func is_available_for_dragon() -> bool:
@@ -139,16 +176,22 @@ func reset_to_home() -> void:
 	if intake_tween != null and intake_tween is Tween and (intake_tween as Tween).is_valid():
 		(intake_tween as Tween).kill()
 	set_meta("intake_tween", null)
+	if _carry_target != null and is_instance_valid(_carry_target):
+		_carry_target.set("carrying", 0)
 	mode = "free"
 	carried = false
 	collected = false
 	_carry_target = null
 	_mouth_anchor = null
+	carrier = null
+	credit_peer = 0
 	velocity = Vector3.ZERO
 	global_position = _home_position
 	global_rotation = Vector3(0.0, _home_yaw, 0.0)
 	scale = Vector3.ONE
 	visible = true
+	if base_ring != null:
+		base_ring.visible = true
 	collision_layer = 1
 	collision_mask = 2
 	_settle_timer = 0.0
@@ -210,6 +253,9 @@ func _integrate_thrown(delta: float) -> void:
 		_settle_timer += delta
 		if _settle_timer > 0.22 and Vector2(velocity.x, velocity.z).length() < 0.35:
 			_land()
+	# 接货斜面：进了舱口范围就往中间滑，避免“差一点”变成像素级矦准。
+	if global_position.x > 12.0 and global_position.x < 16.2 and absf(global_position.z) < 3.2 and global_position.y < 2.4:
+		velocity.z -= signf(global_position.z) * 7.0 * delta
 	_try_collect()
 
 

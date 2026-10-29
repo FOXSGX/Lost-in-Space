@@ -26,6 +26,9 @@ var _pounce_miss := false
 var _look_target: Node3D
 var _look_point := Vector3.ZERO
 var _has_look_point := false
+var _look_override := Vector3.ZERO
+var _has_look_override := false
+var _snatch := 0.0
 
 var _body_root: Node3D
 var _torso: Node3D
@@ -71,6 +74,17 @@ func mouth_anchor() -> Node3D:
 
 func set_look_target(node: Node3D) -> void:
 	_look_target = node
+
+
+## 行为层直接指定视线落点（例如“盯着你手上那罐燃料”）。
+func set_look_point(point: Vector3, valid: bool) -> void:
+	_look_override = point
+	_has_look_override = valid
+
+
+## 抢货预警：0。。1，靠近时伸长脖子、张嘴。
+func set_snatch(progress: float) -> void:
+	_snatch = clampf(progress, 0.0, 1.0)
 
 
 func set_carried_state(carrying: bool) -> void:
@@ -226,7 +240,6 @@ func _build() -> void:
 	_ring.mesh = torus
 	_ring.material_override = _ring_material
 	_ring.position = Vector3(0.0, 0.035, 0.0)
-	_ring.rotation.x = PI * 0.5
 	_ring.visible = false
 	add_child(_ring)
 
@@ -243,7 +256,10 @@ func _process(delta: float) -> void:
 func _animate_targets(delta: float) -> void:
 	var looking_at_player := _state in ["注意", "靠近", "蓄势", "扑击", "恢复"]
 	# 头部朝向：有目标就盯住，否则缓慢左右扫视
-	if _look_target != null and is_instance_valid(_look_target):
+	if _has_look_override:
+		_look_point = _look_override
+		_has_look_point = true
+	elif _look_target != null and is_instance_valid(_look_target):
 		_look_point = _look_target.global_position + Vector3.UP * 1.1
 		_has_look_point = true
 	if looking_at_player and _has_look_point:
@@ -314,14 +330,14 @@ func _apply_pose(delta: float) -> void:
 	_body_root.scale = Vector3(1.0 / maxf(squash, 0.6), squash, 1.0 / maxf(squash, 0.6))
 
 	_head.rotation.y = _head_yaw
-	_head.rotation.x = _head_pitch
+	_head.rotation.x = _head_pitch + 0.22 * _snatch
 	_head.rotation.z = sin(_time * 1.5) * 0.02
 	# 叼货时轻微咀嚼/点头
 	if _carrying:
 		_head.rotation.x += sin(_time * 5.2) * 0.03
 		_head.rotation.z += sin(_time * 2.6) * 0.03
 
-	_jaw.rotation.x = 0.62 * _mouth_open
+	_jaw.rotation.x = 0.62 * _mouth_open + 0.35 * _snatch
 	_mouth_cavity.scale = Vector3(0.30, 0.16, 0.22) * clampf(_mouth_open * 1.4, 0.0, 1.0)
 
 	var alert := maxf(_agitation, 0.25 if _state in ["注意", "靠近"] else 0.0)
