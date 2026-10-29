@@ -3,9 +3,9 @@ extends CharacterBody3D
 # Preview adapter. Constants and two pure camera/movement methods are appended
 # verbatim from the actual SpacePlayer3D source by assemble_player.py.
 var _camera_yaw: float = -PI * 0.5
-var _camera_pitch: float = -0.18
+var _camera_pitch: float = 0.0
 var _camera_yaw_target: float = -PI * 0.5
-var _camera_pitch_target: float = -0.18
+var _camera_pitch_target: float = 0.0
 var peer_id: int = 1
 var carrying: int = 0
 var carrying_id: int = 0
@@ -48,11 +48,12 @@ func _ready() -> void:
     collider.position.y = 0.8
     add_child(collider)
     visual = (load("res://scenes/protagonist_visual.tscn") as PackedScene).instantiate() as Node3D
-    visual.scale = Vector3.ONE * 0.78
+    # 与飞船/其他星球一致：主角模型 1.0 比例（共振星洞穴缩放 0.78 是那一关的特例）。
+    visual.scale = Vector3.ONE
     add_child(visual)
     camera = Camera3D.new()
-    camera.fov = 62.0
-    camera.near = 0.04
+    camera.fov = SHIP_FIRST_PERSON_FOV
+    camera.near = SHIP_CAMERA_NEAR
     camera.far = 100.0
     camera.current = true
     add_child(camera)
@@ -186,8 +187,11 @@ func _unhandled_input(event: InputEvent) -> void:
     if not is_local_actor or paused:return
     if event is InputEventMouseMotion and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
         var mouse: InputEventMouseMotion = event as InputEventMouseMotion
-        _camera_yaw_target -= mouse.relative.x * THIRD_PERSON_MOUSE_SENSITIVITY * mouse_sensitivity
-        _camera_pitch_target = clampf(_camera_pitch_target + mouse.relative.y * THIRD_PERSON_MOUSE_SENSITIVITY * mouse_sensitivity, THIRD_PERSON_PITCH_MIN, THIRD_PERSON_PITCH_MAX)
+        var look_sensitivity: float = SHIP_LOOK_SENSITIVITY if use_first_person else THIRD_PERSON_MOUSE_SENSITIVITY
+        var pitch_min: float = -SHIP_PITCH_LIMIT if use_first_person else THIRD_PERSON_PITCH_MIN
+        var pitch_max: float = SHIP_PITCH_LIMIT if use_first_person else THIRD_PERSON_PITCH_MAX
+        _camera_yaw_target -= mouse.relative.x * look_sensitivity * mouse_sensitivity
+        _camera_pitch_target = clampf(_camera_pitch_target + mouse.relative.y * look_sensitivity * mouse_sensitivity, pitch_min, pitch_max)
     if event.is_action_pressed("release_mouse"):
         Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
     if event.is_action_pressed("capture_mouse"):
@@ -195,6 +199,9 @@ func _unhandled_input(event: InputEvent) -> void:
     if event.is_action_pressed("inspect_first_person"):
         use_first_person = not use_first_person
         visual.visible = not use_first_person
+        camera.fov = SHIP_FIRST_PERSON_FOV if use_first_person else 62.0
+        camera.near = SHIP_CAMERA_NEAR if use_first_person else 0.04
+        _camera_pitch_target = clampf(_camera_pitch_target, -SHIP_PITCH_LIMIT, SHIP_PITCH_LIMIT) if use_first_person else clampf(_camera_pitch_target, THIRD_PERSON_PITCH_MIN, THIRD_PERSON_PITCH_MAX)
 
 func update_camera(delta: float, snap: bool = false) -> void:
     var begin_us: int = Time.get_ticks_usec() if perf_capture else 0
@@ -204,8 +211,9 @@ func update_camera(delta: float, snap: bool = false) -> void:
 func _camera_impl(delta: float, snap: bool = false) -> void:
     var target: Vector3 = global_position + Vector3(0, 1.35, 0)
     if use_first_person:
-        camera.global_position = global_position + Vector3(0, 1.65, 0)
-        camera.rotation = Vector3(_camera_pitch, _camera_yaw, 0)
+        # 与 space_player_3d.gd 的飞船第一人称完全一致：眼高 1.6 m、FOV 74、俯仰 ±1.25 rad。
+        camera.global_position = global_position + Vector3(0, SHIP_EYE_HEIGHT, 0)
+        camera.global_rotation = Vector3(-_camera_pitch, _camera_yaw, 0)
         return
     var desired: Vector3 = _third_person_camera_position(target)
     desired = get_parent().call("clamp_cave_camera_position", target, desired) as Vector3
@@ -244,6 +252,13 @@ func camera_overlap() -> bool:
     query.collision_mask = 4
     query.exclude = [get_rid()]
     return not get_world_3d().direct_space_state.intersect_shape(query, 1).is_empty()
+
+# ---- 飞船第一人称（逐值对齐 game/scripts/space_player_3d.gd @ 42519ff） ----
+const SHIP_EYE_HEIGHT : float = 1.6
+const SHIP_FIRST_PERSON_FOV : float = 74.0
+const SHIP_LOOK_SENSITIVITY : float = 0.0020
+const SHIP_PITCH_LIMIT : float = 1.25
+const SHIP_CAMERA_NEAR : float = 0.05
 
 const SPEED : float = 5.8
 const SPRINT_MULTIPLIER : float = 1.65

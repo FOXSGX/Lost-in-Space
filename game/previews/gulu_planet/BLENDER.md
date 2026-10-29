@@ -3,6 +3,19 @@
 日期：2026-10-28
 状态：已安装并验证 Blender → GLB → Godot 导入；本轮不制作正式模型、不替换奶龙。
 
+## 0. 2026-10-29 更新（本轮）
+
+- 管线未改动，也未新增 Blender 资产；`assets/test/blender_link_test.glb` 继续作为
+  导入回归检查（F4 显示，headless 自检校验 4 个 mesh）。
+- 奶龙本轮仍是**程序化占位**（`scripts/milk_dragon_visual.gd`，纯 Godot 图元），
+  不是 Blender 资产；这样行为、碰撞与外观继续分离。
+- 如果下一轮要做正式奶龙，导出规范不变：Blender 源文件 Z-up、脚底 z=0、
+  面朝 +Y；导出 GLB 后在 Godot 验证 Y-up、脚底 y=0、面朝 −Z。
+  参考高度：主角模型 1.65 m 眼高，奶龙建议 1.8~1.95 m、嘴部高度约 1.35 m，
+  这样第一人称近距离能看清脸。
+- 若加骨骼，只需满足：头（转头/低头）、下颌（张嘴）、四肢（走/扑）、尾（摆动）。
+  不需要复杂面部系统；扑击位移继续由 `milk_dragon.gd` 控制，不做根运动。
+
 ## 1. 安装
 
 - 机器原先没有 Blender（`where blender`、`winget list` 均无）。

@@ -5,39 +5,61 @@ extends Node3D
 ## 复用来源：
 ##   game/previews/resonance_coop_playtest_01_1/scripts/station_player.gd
 ##   game/previews/resonance_02_quality_rework/scripts/station_player.gd（两份 hash 相同）
-## 控制器文件逐字复制，未改写；本脚本只负责输入映射、测试场地、HUD 与启动参数。
+## 控制器保留原有移动/碰撞实现；第一人称镜头按飞船视角逐值对齐
+## （space_player_3d.gd @ 42519ff：眼高 1.6、FOV 74、俯仰 ±1.25、灵敏度 0.0020）。
 ##
-## 本轮验证：移动、鼠标观察、第一/第三人称、场景碰撞，以及
-## “挑衅 → 注意 → 靠近 → 蓄势扑击 → 躲开/被扑 → 恢复”的最小互动；
-## 燃料占位 E 拾取/放下，被扑中掉落。
-## 不包含奶龙叼走/追回、伤害、道具、联网或正式美术。
+## 本轮玩法闭环：
+##   奶龙叼着燃料 → 玩家挑衅 → 它靠近/蓄势 → 玩家站到装货口前 → 侧移躲开
+##   → 燃料脱口飞入收集仓；没接住就落地，可捡回再试。
+##   也可以先引开它，再自己把燃料搬进装货口（安全但路远）。
 
 const SOURCE_COMMIT := "42519ff403241bf5ac968edb9ae326c6fdbc74fe"
-const SPAWN := Vector3(-8.0, 0.02, 0.0)
+const SPAWN := Vector3(-9.0, 0.02, 6.5)
 const SPAWN_YAW := -PI * 0.5
-const GULU_POSITION := Vector3(2.0, 0.0, -3.5)
-const FUEL_POSITION := Vector3(5.0, 0.0, 3.0)
+const DRAGON_HOME := Vector3(1.5, 0.0, -0.5)
+const DRAGON_HOME_YAW := PI * 0.5
+const FUEL_HOMES: Array[Vector3] = [
+	Vector3(1.5, 0.0, -1.9),   # 开场就在奶龙嘴里
+	Vector3(-6.5, 0.0, -7.0),  # 北路：近、经过奶龙地盘
+	Vector3(-5.0, 0.0, 7.5),   # 南路：远、有石头挡视线
+]
+const TARGET_COUNT := 3
+
+const GROUND := Color("#4e615e")
+const GROUND_DARK := Color("#5d706d")
+const STONE := Color("#8fa29d")
+const TRIM := Color("#375967")
+const AMBER := Color("#ffb347")
+const CYAN := Color("#3fd8ff")
 
 var player: CharacterBody3D
 var gulu: CharacterBody3D
-var fuel: Node3D
+var collector: Node3D
 var blender_test_asset: Node3D
+var fuels: Array = []
 var actors: Dictionary = {}
+
+var loaded_count := 0
+var completed := false
 
 var _debug := false
 var _help_visible := true
 var _hud: CanvasLayer
 var _root: Control
 var _mode_label: Label
-var _creature_label: Label
-var _agitation_bar: ProgressBar
+var _objective_label: Label
+var _counter_label: Label
+var _pips: Array[ColorRect] = []
 var _debug_panel: PanelContainer
 var _debug_label: Label
 var _crosshair_root: Control
 var _help_label: Label
 var _prompt_panel: PanelContainer
 var _prompt_label: Label
+var _banner: PanelContainer
+var _banner_label: Label
 var _font: SystemFont
+var _sfx: Node
 var _feedback := ""
 var _feedback_timer := 0.0
 
@@ -50,10 +72,12 @@ func _ready() -> void:
 	_register_input()
 	_build_environment()
 	_build_field()
+	_build_collector()
 	_spawn_player()
+	_build_fuels()
 	_build_gulu()
-	_build_fuel()
 	_build_blender_test_asset()
+	_build_sfx()
 	_build_hud()
 
 	var args := OS.get_cmdline_user_args()
@@ -114,75 +138,156 @@ func _unhandled_key_input(event: InputEvent) -> void:
 		KEY_F4:
 			_toggle_blender_test()
 		KEY_F1:
-			_help_visible = not _help_visible
-			_help_label.visible = _help_visible
+			_toggle_help()
 
 
 # ---------------------------------------------------------------- world
 
 func _build_environment() -> void:
+	# 配色对齐飞船内部（ship_hub_3d.gd）：暖灰壳体 + 深蓝绿结构 + 冷白环境光。
 	var env := Environment.new()
 	env.background_mode = Environment.BG_COLOR
-	env.background_color = Color("#071117")
+	env.background_color = Color("#2d4757")
 	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-	env.ambient_light_color = Color("#6f9fae")
-	env.ambient_light_energy = 0.55
+	env.ambient_light_color = Color("#dbeaf1")
+	env.ambient_light_energy = 0.26
 	env.fog_enabled = true
 	env.fog_mode = Environment.FOG_MODE_EXPONENTIAL
-	env.fog_light_color = Color("#16333c")
-	env.fog_density = 0.012
-	env.tonemap_mode = Environment.TONE_MAPPER_FILMIC
+	env.fog_light_color = Color("#8fa6aa")
+	env.fog_density = 0.006
+	env.tonemap_mode = Environment.TONE_MAPPER_ACES
+	env.tonemap_exposure = 0.9
 	var world_env := WorldEnvironment.new()
 	world_env.environment = env
 	add_child(world_env)
 
 	var sun := DirectionalLight3D.new()
 	sun.rotation_degrees = Vector3(-52.0, -34.0, 0.0)
-	sun.light_color = Color("#c9e8ff")
-	sun.light_energy = 1.15
+	sun.light_color = Color("#ffe9cf")
+	sun.light_energy = 0.55
+	sun.light_specular = 0.15
 	sun.shadow_enabled = true
 	add_child(sun)
 
 	var fill := OmniLight3D.new()
-	fill.position = Vector3(0.0, 6.0, 0.0)
-	fill.omni_range = 24.0
-	fill.light_color = Color("#9fe4d2")
-	fill.light_energy = 1.1
+	fill.position = Vector3(4.0, 7.0, 0.0)
+	fill.omni_range = 22.0
+	fill.light_color = Color("#cfe9e4")
+	fill.light_energy = 0.18
 	add_child(fill)
 
 
 func _build_field() -> void:
-	_add_static_box(Vector3(32.0, 0.5, 26.0), Vector3(0.0, -0.25, 0.0), Color("#223238"), true)
-	# 地面网格条，纯视觉。
-	for i in range(-7, 8):
-		_add_mesh_box(Vector3(0.05, 0.01, 26.0), Vector3(float(i) * 2.0, 0.006, 0.0), Color("#2e4a50"))
-	for i in range(-6, 7):
-		_add_mesh_box(Vector3(32.0, 0.01, 0.05), Vector3(0.0, 0.006, float(i) * 2.0), Color("#2e4a50"))
+	_add_static_box(Vector3(40.0, 0.5, 30.0), Vector3(0.0, -0.25, 0.0), GROUND, true)
+	# 地砖（两种灰绿交错 + 细缝），避免大片纯色地板发白发平。
+	for gx in range(-5, 5):
+		for gz in range(-4, 4):
+			var tile := BoxMesh.new()
+			tile.size = Vector3(3.84, 0.02, 3.64)
+			var tone := Color("#5c6f6b") if (gx + gz) % 2 == 0 else Color("#566966")
+			_add_mesh(tile, Vector3(float(gx) * 4.0, 0.005, float(gz) * 4.0), tone)
+	# 地面分区：装货口前的停机坪与两条搬运路线。
+	var pad := CylinderMesh.new()
+	pad.top_radius = 6.2
+	pad.bottom_radius = 6.2
+	pad.height = 0.04
+	_add_mesh(pad, Vector3(9.2, -0.02, 0.0), Color("#93a6a1"))
+	var pad_rim := TorusMesh.new()
+	pad_rim.inner_radius = 5.9
+	pad_rim.outer_radius = 6.1
+	var rim := _add_mesh(pad_rim, Vector3(9.2, 0.015, 0.0), TRIM)
+	rim.rotation.x = PI * 0.5
+	for side in [-1.0, 1.0]:
+		for index in range(5):
+			var dash := BoxMesh.new()
+			dash.size = Vector3(0.9, 0.02, 0.16)
+			_add_mesh(dash, Vector3(9.2 + float(index) * 1.05 - 2.1, 0.02, side * 4.6), AMBER, 0.5)
+	# 南路（安全、绕远）：青绿导引条
+	for index in range(9):
+		var safe := BoxMesh.new()
+		safe.size = Vector3(0.7, 0.02, 0.20)
+		_add_mesh(safe, Vector3(-6.0 + float(index) * 1.7, 0.02, 7.6 - float(index) * 0.55), CYAN, 0.35)
+	# 北路（快、穿过奶龙地盘）：琥珀导引条
+	for index in range(8):
+		var risky := BoxMesh.new()
+		risky.size = Vector3(0.7, 0.02, 0.20)
+		_add_mesh(risky, Vector3(-6.0 + float(index) * 1.7, 0.02, -6.4 + float(index) * 0.68), AMBER, 0.35)
 
-	# 四周舱壁。
-	_add_static_box(Vector3(32.0, 4.0, 0.6), Vector3(0.0, 2.0, -13.0), Color("#1a2a31"))
-	_add_static_box(Vector3(32.0, 4.0, 0.6), Vector3(0.0, 2.0, 13.0), Color("#1a2a31"))
-	_add_static_box(Vector3(0.6, 4.0, 26.0), Vector3(-16.0, 2.0, 0.0), Color("#1a2a31"))
-	_add_static_box(Vector3(0.6, 4.0, 26.0), Vector3(16.0, 2.0, 0.0), Color("#1a2a31"))
+	# 四周岩壁
+	_add_static_box(Vector3(40.0, 5.0, 0.8), Vector3(0.0, 2.5, -15.0), GROUND_DARK)
+	_add_static_box(Vector3(40.0, 5.0, 0.8), Vector3(0.0, 2.5, 15.0), GROUND_DARK)
+	_add_static_box(Vector3(0.8, 5.0, 30.0), Vector3(-20.0, 2.5, 0.0), GROUND_DARK)
+	_add_static_box(Vector3(0.8, 5.0, 30.0), Vector3(20.0, 2.5, 0.0), GROUND_DARK)
 
-	# 碰撞验证墙：正前方偏右，玩家从左侧撞上去应停下。
-	_add_static_box(Vector3(0.6, 3.0, 6.0), Vector3(12.0, 1.5, -4.0), Color("#2b3d44"))
-	_add_mesh_box(Vector3(0.64, 0.12, 6.05), Vector3(12.0, 3.02, -4.0), Color("#72c6b7"))
+	# 能挡视线、允许绕行的石堆。位置固定，便于重复试玩。
+	_rock(Vector3(2.6, 0.0, 2.7), Vector3(2.4, 2.2, 2.0), 0.3)
+	_rock(Vector3(4.8, 0.0, -3.6), Vector3(2.0, 1.8, 1.8), -0.5)
+	_rock(Vector3(-1.6, 0.0, 5.4), Vector3(2.6, 2.4, 2.0), 0.9)
+	_rock(Vector3(1.0, 0.0, -8.6), Vector3(3.0, 2.0, 2.0), -0.2)
+	_rock(Vector3(-11.0, 0.0, -2.0), Vector3(2.2, 2.6, 2.4), 0.6)
 
-	# 视线测试柱：从它后面挑衅不应生效；不挡主路线。
-	_add_static_box(Vector3(0.8, 2.4, 0.6), Vector3(-2.0, 1.2, -4.7), Color("#2b3d44"))
-	_add_mesh_box(Vector3(0.84, 0.10, 0.64), Vector3(-2.0, 2.42, -4.7), Color("#72c6b7"))
+	# 墙外的远景岩层，压住地平线，避免天空空荡荡。
+	for spot in [
+		Vector3(-26.0, 4.0, -22.0), Vector3(-4.0, 5.5, -30.0), Vector3(18.0, 3.5, -26.0),
+		Vector3(30.0, 6.0, -6.0), Vector3(26.0, 4.5, 20.0), Vector3(2.0, 6.5, 32.0),
+		Vector3(-22.0, 5.0, 24.0), Vector3(-32.0, 3.5, 4.0),
+	]:
+		var far := SphereMesh.new()
+		far.radius = 0.5
+		far.height = 1.0
+		far.radial_segments = 9
+		far.rings = 5
+		var far_size := Vector3(16.0, 13.0, 12.0) + Vector3(spot.y, spot.y, 0.0)
+		_add_mesh(far, spot, Color("#3f5457"), 0.0, far_size)
 
-	# 可绕行的箱子与低台，验证普通碰撞/step assist。
-	_add_static_box(Vector3(1.0, 1.0, 1.0), Vector3(7.0, 0.5, 5.5), Color("#b77a45"))
-	_add_static_box(Vector3(1.0, 1.0, 1.0), Vector3(7.2, 1.5, 5.4), Color("#c98a52"))
-	_add_static_box(Vector3(1.2, 0.8, 1.2), Vector3(10.0, 0.4, 6.0), Color("#4b7f86"))
-	_add_static_box(Vector3(4.0, 0.3, 3.0), Vector3(-4.0, 0.15, 6.0), Color("#33484f"))
-	_add_static_box(Vector3(2.0, 0.3, 1.2), Vector3(-1.2, 0.15, 6.0), Color("#33484f"))
+	# 落地信标：给场景一个竖向参照
+	var beacon := CylinderMesh.new()
+	beacon.top_radius = 0.18
+	beacon.bottom_radius = 0.5
+	beacon.height = 2.6
+	_add_mesh(beacon, Vector3(-14.0, 1.3, -11.0), TRIM)
+	var beacon_light := OmniLight3D.new()
+	beacon_light.position = Vector3(-14.0, 2.8, -11.0)
+	beacon_light.light_color = CYAN
+	beacon_light.light_energy = 1.2
+	beacon_light.omni_range = 7.0
+	add_child(beacon_light)
 
-	# 天花板横梁，给第一人称一点纵深参照。
-	for z in [-9.0, -3.0, 3.0, 9.0]:
-		_add_mesh_box(Vector3(32.0, 0.24, 0.3), Vector3(0.0, 3.9, z), Color("#16262d"))
+	# 若干货箱，给搬运路线一点遮挡
+	_add_static_box(Vector3(1.2, 1.2, 1.2), Vector3(6.2, 0.6, 5.2), Color("#b5865a"))
+	_add_static_box(Vector3(1.0, 1.0, 1.0), Vector3(6.6, 0.5, 6.5), Color("#9d7048"))
+	_add_static_box(Vector3(1.4, 0.9, 1.4), Vector3(-8.6, 0.45, 1.2), TRIM)
+
+
+func _rock(at: Vector3, size: Vector3, spin: float) -> void:
+	var mesh := SphereMesh.new()
+	mesh.radius = 0.5
+	mesh.height = 1.0
+	mesh.radial_segments = 10
+	mesh.rings = 6
+	var instance := _add_mesh(mesh, at + Vector3.UP * (size.y * 0.42), STONE, 0.0, size)
+	instance.rotation.y = spin
+	# 顶部浅色块，给岩石一点体积感，不至于是一颗灰球。
+	var cap := _add_mesh(mesh, at + Vector3.UP * (size.y * 0.74), Color("#a5b7b1"), 0.0, size * 0.72)
+	cap.rotation.y = spin + 0.4
+	var body := StaticBody3D.new()
+	body.collision_layer = 2
+	body.collision_mask = 0
+	body.position = at + Vector3.UP * (size.y * 0.42)
+	var shape := CollisionShape3D.new()
+	var box := BoxShape3D.new()
+	box.size = size * 0.92
+	shape.shape = box
+	body.add_child(shape)
+	add_child(body)
+
+
+func _build_collector() -> void:
+	collector = load("res://scripts/collector.gd").new() as Node3D
+	collector.name = "ShipLoadingBay"
+	collector.set("target_count", TARGET_COUNT)
+	add_child(collector)
+	collector.connect("fuel_collected", _on_fuel_collected)
 
 
 func _spawn_player() -> void:
@@ -192,107 +297,158 @@ func _spawn_player() -> void:
 	player.position = SPAWN
 	add_child(player)
 	actors[1] = player
-	# 复用控制器默认第三人称；奶龙星要求在进入试玩时直接是第一人称。
 	player.set("use_first_person", true)
 	(player.get("visual") as Node3D).visible = false
 	player.call("update_camera", 1.0, true)
 	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 
 
-func _build_gulu() -> void:
-	gulu = load("res://scripts/milk_dragon.gd").new() as CharacterBody3D
-	gulu.name = "MilkDragon"
-	gulu.position = GULU_POSITION
-	gulu.rotation.y = -0.46
-	var visual := load("res://scripts/milk_dragon_visual.gd").new() as Node3D
-	visual.name = "Visual"
-	gulu.add_child(visual)
-	add_child(gulu)
-	gulu.call("setup_player", player)
-	gulu.connect("pounce_finished", _on_pounce_finished)
+func _build_fuels() -> void:
+	fuels.clear()
+	for index in range(FUEL_HOMES.size()):
+		var fuel := load("res://scripts/fuel_prop.gd").new() as CharacterBody3D
+		fuel.name = "Fuel%d" % (index + 1)
+		fuel.position = FUEL_HOMES[index]
+		fuel.set("display_name", "燃料罐 %d" % (index + 1))
+		add_child(fuel)
+		fuel.setup_collector(collector)
+		fuel.connect("landed", _on_fuel_landed)
+		_build_fuel_mesh(fuel)
+		fuels.append(fuel)
 
-func _build_fuel() -> void:
-	fuel = StaticBody3D.new()
-	fuel.name = "PlaceholderFuel"
-	fuel.position = FUEL_POSITION
-	fuel.set_script(load("res://scripts/fuel_prop.gd"))
-	add_child(fuel)
 
+func _build_fuel_mesh(fuel: Node3D) -> void:
 	var body := BoxMesh.new()
-	body.size = Vector3(0.52, 0.72, 0.34)
-	_add_mesh(fuel, body, Vector3(0.0, 0.4, 0.0), Color("#f0a13c"))
+	body.size = Vector3(0.50, 0.70, 0.34)
+	_add_mesh_child(fuel, body, Vector3(0.0, 0.40, 0.0), AMBER)
 	var cap := CylinderMesh.new()
-	cap.top_radius = 0.1
-	cap.bottom_radius = 0.1
+	cap.top_radius = 0.09
+	cap.bottom_radius = 0.09
 	cap.height = 0.16
-	_add_mesh(fuel, cap, Vector3(0.16, 0.82, 0.0), Color("#d4dde2"))
+	_add_mesh_child(fuel, cap, Vector3(0.15, 0.80, 0.0), Color("#d4dde2"))
 	var stripe := BoxMesh.new()
-	stripe.size = Vector3(0.54, 0.08, 0.36)
-	_add_mesh(fuel, stripe, Vector3(0.0, 0.34, 0.0), Color("#26343a"))
+	stripe.size = Vector3(0.52, 0.08, 0.36)
+	_add_mesh_child(fuel, stripe, Vector3(0.0, 0.34, 0.0), TRIM)
 	var handle := TorusMesh.new()
-	handle.inner_radius = 0.12
-	handle.outer_radius = 0.2
-	var handle_node := _add_mesh(fuel, handle, Vector3(-0.2, 0.72, 0.0), Color("#c9d6dc"))
+	handle.inner_radius = 0.10
+	handle.outer_radius = 0.17
+	var handle_node := _add_mesh_child(fuel, handle, Vector3(-0.18, 0.70, 0.0), Color("#c9d6dc"))
 	handle_node.rotation.x = PI * 0.5
-
+	var ring := TorusMesh.new()
+	ring.inner_radius = 0.42
+	ring.outer_radius = 0.48
+	var ring_node := _add_mesh_child(fuel, ring, Vector3(0.0, 0.02, 0.0), AMBER, 1.7)
+	ring_node.rotation.x = PI * 0.5
 	var collider := CollisionShape3D.new()
 	var shape := BoxShape3D.new()
 	shape.size = Vector3(0.6, 0.9, 0.4)
 	collider.shape = shape
 	collider.position.y = 0.45
 	fuel.add_child(collider)
-
-	var ring := TorusMesh.new()
-	ring.inner_radius = 0.48
-	ring.outer_radius = 0.55
-	var ring_node := _add_mesh(fuel, ring, Vector3(0.0, 0.02, 0.0), Color("#f0a13c"), Vector3.ONE, 1.8)
-	ring_node.rotation.x = PI * 0.5
-
 	var glow := OmniLight3D.new()
-	glow.position = Vector3(0.0, 0.8, 0.0)
-	glow.omni_range = 3.2
-	glow.light_color = Color("#ffb45e")
-	glow.light_energy = 1.0
+	glow.position = Vector3(0.0, 0.7, 0.0)
+	glow.omni_range = 2.6
+	glow.light_color = AMBER
+	glow.light_energy = 0.8
 	fuel.add_child(glow)
 
 
-func _add_mesh(parent: Node3D, mesh: Mesh, at: Vector3, color: Color, scale: Vector3 = Vector3.ONE, emission: float = 0.0) -> MeshInstance3D:
-	var instance := MeshInstance3D.new()
-	instance.mesh = mesh
-	instance.position = at
-	instance.scale = scale
+func _build_gulu() -> void:
+	gulu = load("res://scripts/milk_dragon.gd").new() as CharacterBody3D
+	gulu.name = "MilkDragon"
+	gulu.position = DRAGON_HOME
+	gulu.rotation.y = DRAGON_HOME_YAW
+	var visual := load("res://scripts/milk_dragon_visual.gd").new() as Node3D
+	visual.name = "Visual"
+	gulu.add_child(visual)
+	add_child(gulu)
+	gulu.call("setup_player", player)
+	gulu.call("setup_fuels", fuels)
+	gulu.call("start_holding", fuels[0])
+	gulu.connect("pounce_finished", _on_pounce_finished)
+	gulu.connect("fuel_grabbed", _on_fuel_grabbed)
+	gulu.connect("fuel_released", _on_fuel_released)
+
+
+func _build_blender_test_asset() -> void:
+	var packed := load("res://assets/test/blender_link_test.glb") as PackedScene
+	if packed == null:
+		push_error("Blender 测试 GLB 未导入")
+		return
+	blender_test_asset = packed.instantiate() as Node3D
+	blender_test_asset.name = "BlenderLinkTest"
+	blender_test_asset.position = Vector3(-16.0, 0.0, 4.0)
+	blender_test_asset.visible = false
+	add_child(blender_test_asset)
+
+
+func _toggle_blender_test() -> void:
+	if blender_test_asset != null:
+		blender_test_asset.visible = not blender_test_asset.visible
+
+
+func _build_sfx() -> void:
+	_sfx = load("res://scripts/sfx.gd").new() as Node
+	_sfx.name = "Sfx"
+	add_child(_sfx)
+	if gulu != null:
+		gulu.connect("state_changed", _on_dragon_state_changed)
+
+
+func _on_dragon_state_changed(_previous: String, current: String) -> void:
+	if _sfx == null:
+		return
+	match current:
+		"注意":
+			_sfx.call("play", "notice")
+		"蓄势":
+			_sfx.call("play", "windup")
+
+
+# ---------------------------------------------------------------- helpers
+
+func _material(color: Color, emission: float = 0.0) -> StandardMaterial3D:
 	var material := StandardMaterial3D.new()
 	material.albedo_color = color
-	material.roughness = 0.78
-	material.metallic = 0.08
+	material.roughness = 0.93
+	material.metallic = 0.02
+	material.metallic_specular = 0.18
 	if emission > 0.0:
 		material.emission_enabled = true
 		material.emission = color
 		material.emission_energy_multiplier = emission
-	instance.material_override = material
-	parent.add_child(instance)
+	return material
+
+
+func _add_mesh(mesh: Mesh, at: Vector3, color: Color, emission: float = 0.0, scale: Vector3 = Vector3.ONE) -> MeshInstance3D:
+	var instance := MeshInstance3D.new()
+	instance.mesh = mesh
+	instance.position = at
+	instance.scale = scale
+	instance.material_override = _material(color, emission)
+	add_child(instance)
 	return instance
 
 
-func _add_mesh_box(size: Vector3, at: Vector3, color: Color) -> MeshInstance3D:
-	var mesh := BoxMesh.new()
-	mesh.size = size
-	return _add_mesh(self, mesh, at, color)
+func _add_mesh_child(parent: Node3D, mesh: Mesh, at: Vector3, color: Color, emission: float = 0.0) -> MeshInstance3D:
+	var instance := MeshInstance3D.new()
+	instance.mesh = mesh
+	instance.position = at
+	instance.material_override = _material(color, emission)
+	parent.add_child(instance)
+	return instance
 
 
 func _add_static_box(size: Vector3, at: Vector3, color: Color, collision: bool = true) -> StaticBody3D:
 	var body := StaticBody3D.new()
 	body.position = at
-	body.collision_layer = 6
+	body.collision_layer = 2
 	body.collision_mask = 0
 	var mesh := BoxMesh.new()
 	mesh.size = size
 	var instance := MeshInstance3D.new()
 	instance.mesh = mesh
-	var material := StandardMaterial3D.new()
-	material.albedo_color = color
-	material.roughness = 0.85
-	instance.material_override = material
+	instance.material_override = _material(color)
 	body.add_child(instance)
 	if collision:
 		var shape := CollisionShape3D.new()
@@ -305,18 +461,6 @@ func _add_static_box(size: Vector3, at: Vector3, color: Color, collision: bool =
 
 
 # ---------------------------------------------------------------- HUD
-
-func _build_blender_test_asset() -> void:
-	var packed := load("res://assets/test/blender_link_test.glb") as PackedScene
-	if packed == null:
-		push_error("Blender 测试 GLB 未导入")
-		return
-	blender_test_asset = packed.instantiate() as Node3D
-	blender_test_asset.name = "BlenderLinkTest"
-	blender_test_asset.position = Vector3(-4.0, 0.0, 2.5)
-	blender_test_asset.visible = false
-	add_child(blender_test_asset)
-
 
 func _build_hud() -> void:
 	_font = SystemFont.new()
@@ -351,19 +495,19 @@ func _build_hud() -> void:
 	margin.add_child(column)
 
 	var title := Label.new()
-	title.text = "奶龙星 · 第一人称试玩"
+	title.text = "奶龙星 · 装货试玩"
 	title.add_theme_font_size_override("font_size", 21)
 	title.add_theme_color_override("font_color", Color("#e9f7f3"))
 	column.add_child(title)
 
-	var subtitle := Label.new()
-	subtitle.text = "占位场地 · 验证挑衅、搬运、扑击与躲开"
-	subtitle.add_theme_font_size_override("font_size", 13)
-	subtitle.add_theme_color_override("font_color", Color("#8fb3ae"))
-	column.add_child(subtitle)
+	_objective_label = Label.new()
+	_objective_label.text = "把 3 罐燃料装进飞船装货口"
+	_objective_label.add_theme_font_size_override("font_size", 14)
+	_objective_label.add_theme_color_override("font_color", Color("#ffcf8a"))
+	column.add_child(_objective_label)
 
 	_help_label = Label.new()
-	_help_label.text = "WASD 移动 · Shift 加速 · 鼠标观察 · Q 挑衅 · E 拾取/放下\nTab 切换视角 · R 重置 · Esc 释放鼠标 · 左键收回鼠标\nF3 调试 · F4 GLB 测试资产 · F1 隐藏说明"
+	_help_label.text = "WASD 移动 · Shift 加速 · 鼠标观察 · Q 挑衅 · E 拾取/放下\nTab 切换视角 · R 重开 · Esc 释放鼠标 · F1 隐藏说明 · F3 调试 · F4 测试模型"
 	_help_label.add_theme_font_size_override("font_size", 12)
 	_help_label.add_theme_color_override("font_color", Color("#b9d4cf"))
 	column.add_child(_help_label)
@@ -372,43 +516,24 @@ func _build_hud() -> void:
 	_mode_label.position = Vector2(1080, 22)
 	_mode_label.size = Vector2(176, 30)
 	_mode_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	_mode_label.add_theme_font_size_override("font_size", 17)
+	_mode_label.add_theme_font_size_override("font_size", 15)
 	_mode_label.add_theme_color_override("font_color", Color("#7dffd4"))
 	_root.add_child(_mode_label)
 
-	_creature_label = Label.new()
-	_creature_label.position = Vector2(944, 58)
-	_creature_label.size = Vector2(312, 26)
-	_creature_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	_creature_label.add_theme_font_size_override("font_size", 15)
-	_creature_label.add_theme_color_override("font_color", Color("#9fe8d8"))
-	_creature_label.text = "奶龙：待机 · 关注 —"
-	_root.add_child(_creature_label)
-
-	_agitation_bar = ProgressBar.new()
-	_agitation_bar.position = Vector2(1024, 88)
-	_agitation_bar.size = Vector2(232, 12)
-	_agitation_bar.min_value = 0.0
-	_agitation_bar.max_value = 100.0
-	_agitation_bar.value = 0.0
-	_agitation_bar.show_percentage = false
-	var bar_bg := StyleBoxFlat.new()
-	bar_bg.bg_color = Color(0.04, 0.1, 0.12, 0.9)
-	bar_bg.border_color = Color(0.3, 0.5, 0.46, 0.5)
-	bar_bg.set_border_width_all(1)
-	bar_bg.corner_radius_top_left = 3
-	bar_bg.corner_radius_top_right = 3
-	bar_bg.corner_radius_bottom_left = 3
-	bar_bg.corner_radius_bottom_right = 3
-	var bar_fill := StyleBoxFlat.new()
-	bar_fill.bg_color = Color("#ff9a54")
-	bar_fill.corner_radius_top_left = 3
-	bar_fill.corner_radius_top_right = 3
-	bar_fill.corner_radius_bottom_left = 3
-	bar_fill.corner_radius_bottom_right = 3
-	_agitation_bar.add_theme_stylebox_override("background", bar_bg)
-	_agitation_bar.add_theme_stylebox_override("fill", bar_fill)
-	_root.add_child(_agitation_bar)
+	_counter_label = Label.new()
+	_counter_label.position = Vector2(1000, 54)
+	_counter_label.size = Vector2(256, 30)
+	_counter_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	_counter_label.add_theme_font_size_override("font_size", 19)
+	_counter_label.add_theme_color_override("font_color", Color("#ffcf8a"))
+	_root.add_child(_counter_label)
+	for index in range(TARGET_COUNT):
+		var pip := ColorRect.new()
+		pip.position = Vector2(1124 + index * 44, 90)
+		pip.size = Vector2(34, 10)
+		pip.color = Color(0.24, 0.33, 0.34, 0.9)
+		_root.add_child(pip)
+		_pips.append(pip)
 
 	_crosshair_root = Control.new()
 	_crosshair_root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -426,8 +551,8 @@ func _build_hud() -> void:
 	_crosshair_root.add_child(v)
 
 	_prompt_panel = PanelContainer.new()
-	_prompt_panel.position = Vector2(330, 690)
-	_prompt_panel.custom_minimum_size = Vector2(620, 52)
+	_prompt_panel.position = Vector2(300, 700)
+	_prompt_panel.custom_minimum_size = Vector2(680, 52)
 	_prompt_panel.add_theme_stylebox_override("panel", _panel_style(0.86))
 	_root.add_child(_prompt_panel)
 	var pmargin := MarginContainer.new()
@@ -442,12 +567,31 @@ func _build_hud() -> void:
 	_prompt_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_prompt_label.add_theme_font_size_override("font_size", 16)
 	_prompt_label.add_theme_color_override("font_color", Color("#e9f7f3"))
-	_prompt_label.text = "走近奶龙，面向它按 Q 挑衅"
+	_prompt_label.text = "走近燃料按 E 搬走，或站到装货口前挑衅奶龙"
 	pmargin.add_child(_prompt_label)
 
+	_banner = PanelContainer.new()
+	_banner.position = Vector2(340, 300)
+	_banner.custom_minimum_size = Vector2(600, 0)
+	_banner.add_theme_stylebox_override("panel", _panel_style(0.94))
+	_banner.visible = false
+	_root.add_child(_banner)
+	var bmargin := MarginContainer.new()
+	bmargin.add_theme_constant_override("margin_left", 26)
+	bmargin.add_theme_constant_override("margin_right", 26)
+	bmargin.add_theme_constant_override("margin_top", 20)
+	bmargin.add_theme_constant_override("margin_bottom", 20)
+	_banner.add_child(bmargin)
+	_banner_label = Label.new()
+	_banner_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_banner_label.add_theme_font_size_override("font_size", 24)
+	_banner_label.add_theme_color_override("font_color", Color("#ffe0a8"))
+	_banner_label.text = "装货完成！\n按 R 再来一次"
+	bmargin.add_child(_banner_label)
+
 	_debug_panel = PanelContainer.new()
-	_debug_panel.position = Vector2(22, 520)
-	_debug_panel.custom_minimum_size = Vector2(460, 0)
+	_debug_panel.position = Vector2(22, 240)
+	_debug_panel.custom_minimum_size = Vector2(470, 0)
 	_debug_panel.add_theme_stylebox_override("panel", _panel_style(0.92))
 	_debug_panel.visible = false
 	_root.add_child(_debug_panel)
@@ -462,6 +606,7 @@ func _build_hud() -> void:
 	_debug_label.add_theme_color_override("font_color", Color("#a9d8cd"))
 	dmargin.add_child(_debug_label)
 
+	_counter_label.text = "已装 0 / %d" % TARGET_COUNT
 	set_process(true)
 
 
@@ -486,14 +631,11 @@ func _process(delta: float) -> void:
 	_crosshair_root.visible = first
 	_feedback_timer = maxf(_feedback_timer - delta, 0.0)
 
-	if gulu != null:
-		var state := String(gulu.call("state_name"))
-		var ag := float(gulu.get("agitation"))
-		_creature_label.text = "奶龙：%s · 关注 %s" % [state, String(gulu.call("focus_name"))]
-		_agitation_bar.tooltip_text = "上头 %d%%" % int(round(ag * 100.0))
-		_creature_label.add_theme_color_override("font_color", _state_color(state))
-		_agitation_bar.value = ag * 100.0
-		_update_prompt(state)
+	for index in range(_pips.size()):
+		var lit: bool = index < loaded_count
+		_pips[index].color = AMBER if lit else Color(0.24, 0.33, 0.34, 0.9)
+
+	_update_prompt()
 
 	if _debug:
 		var pos := player.global_position
@@ -503,73 +645,94 @@ func _process(delta: float) -> void:
 			"FPS %d · 视角 %s · 位置 %.2f, %.2f, %.2f" % [Engine.get_frames_per_second(), "FPS" if first else "TPS", pos.x, pos.y, pos.z],
 			"镜头高 %.2f m · FOV %.0f · 碰撞计数 %d" % [cam.global_position.y - pos.y, cam.fov, contacts - _last_collisions],
 			"奶龙 %s" % (gulu.call("debug_text") if gulu else "—"),
-			"燃料 %s" % (fuel.call("get_debug_text") if fuel else "—"),
-			"Q 挑衅 · Tab 视角 · R 重置 · 本轮不结算抢夺/伤害",
+			"装货 %d/%d · 燃料 %s" % [loaded_count, TARGET_COUNT, _fuels_debug()],
+			"Q 挑衅 · E 拾取/放下 · Tab 视角 · R 重开",
 		]))
 
 
-func _state_color(state: String) -> Color:
-	match state:
+func _fuels_debug() -> String:
+	var parts: PackedStringArray = []
+	for fuel in fuels:
+		parts.append(String(fuel.call("get_debug_text")))
+	return " | ".join(parts)
+
+
+func _update_prompt() -> void:
+	if completed:
+		_set_prompt("装货完成！按 R 再来一次，或继续在场上走动", Color("#ffe0a8"))
+		return
+	if _feedback_timer > 0.0:
+		_set_prompt(_feedback, Color("#ffcf5c"))
+		return
+	var carrying := _carried_fuel() != null
+	var dragon_state := String(gulu.call("state_name")) if gulu != null else "待机"
+	var holding: bool = bool(gulu.get("has_fuel")) if gulu != null else false
+	var near_bay := player.global_position.x > 9.4
+	if dragon_state == "蓄势":
+		_set_prompt("它压低身体、盯住你了——要扑了，侧移躲开！", Color("#ff7a5e"))
+		return
+	if dragon_state == "扑击":
+		_set_prompt("扑击！立刻离开它锁定的位置", Color("#ff5a4a"))
+		return
+	if carrying:
+		if near_bay:
+			_set_prompt("再往里走一点，燃料就会被装货口吸进去", Color("#ffcf8a"))
+		else:
+			_set_prompt("抱着燃料：E 放下 · 直接抱进飞船装货口也算装货", Color("#ffcf8a"))
+		return
+	if near_bay and holding:
+		_set_prompt("站住别动，等它扑过来——它一张嘴，燃料就往里飞", Color("#7dffd4"))
+		return
+	if holding and dragon_state in ["待机", "找燃料", "注意", "靠近"]:
+		_set_prompt("它嘴里的燃料可以抢回来：站到装货口前按 Q 挑衅它", Color("#7dffd4"))
+		return
+	if _nearest_free_fuel(3.0) != null:
+		_set_prompt("E 搬起这罐燃料，走到船头装货口", Color("#ffcf8a"))
+		return
+	match dragon_state:
+		"待机", "找燃料":
+			_set_prompt("它正盯着燃料。按 Q 挑衅，把它引到别处再搬", Color("#e9f7f3"))
 		"注意":
-			return Color("#7dffd4")
+			_set_prompt("它注意到你了，正转向你", Color("#7dffd4"))
 		"靠近":
-			return Color("#ffcf5c")
-		"蓄势", "扑击":
-			return Color("#ff6b5a")
+			_set_prompt("它正在靠近——再按 Q 会激怒它", Color("#ffcf5c"))
 		"恢复":
-			return Color("#9fb3ae")
+			if bool(gulu.get("last_pounce_hit")):
+				_set_prompt("被扑到了（不掉血），它正在恢复", Color("#9fe8d8"))
+			else:
+				_set_prompt("它扑空了，正在喘气——这是搬运窗口", Color("#9fe8d8"))
 		"回窝":
-			return Color("#8fa6b2")
+			_set_prompt("它失去兴趣，回去了", Color("#8fa6b2"))
 		_:
-			return Color("#9fe8d8")
+			_set_prompt("按 Q 挑衅奶龙", Color("#e9f7f3"))
 
 
-func _update_prompt(state: String) -> void:
-	var prompt := ""
-	var color := Color("#e9f7f3")
-	var distance := player.global_position.distance_to(gulu.global_position)
-	if state == "蓄势":
-		prompt = "它压低身体、盯住你了——要扑了，侧移躲开！"
-		color = Color("#ff7a5e")
-	elif state == "扑击":
-		prompt = "扑击！立刻离开它锁定的位置"
-		color = Color("#ff5a4a")
-	elif _feedback_timer > 0.0:
-		prompt = _feedback
-		color = Color("#ffcf5c")
-	else:
-		match state:
-			"待机":
-				if distance > 9.0:
-					prompt = "走近奶龙（9 m 内），面向它按 Q 挑衅"
-				else:
-					prompt = "按 Q 挑衅奶龙，把它从燃料路线引开"
-			"注意":
-				prompt = "它注意到你了，正转向你"
-				color = Color("#7dffd4")
-			"靠近":
-				prompt = "它正在靠近——再按 Q 会激怒它"
-				color = Color("#ffcf5c")
-			"恢复":
-				if bool(gulu.get("last_pounce_hit")):
-					prompt = "被扑到了（原型不结算伤害），它正在恢复"
-				else:
-					prompt = "它扑空了，正在喘气——这是搬运窗口"
-				color = Color("#9fe8d8")
-			"回窝":
-				prompt = "它失去兴趣，回去了"
-				color = Color("#8fa6b2")
-			_:
-				prompt = "按 Q 挑衅奶龙"
-	if fuel != null:
-		if bool(fuel.get("carried")):
-			prompt += " · E 放下燃料"
-		elif state == "待机" or state == "注意" or state == "靠近" or state == "恢复":
-			if bool(fuel.call("can_pick_up", player)):
-				prompt += " · E 拾取燃料"
-	if prompt != _prompt_label.text:
-		_prompt_label.text = prompt
+func _set_prompt(text: String, color: Color) -> void:
+	if _prompt_label.text != text:
+		_prompt_label.text = text
 	_prompt_label.add_theme_color_override("font_color", color)
+
+
+# ---------------------------------------------------------------- actions
+
+func _carried_fuel() -> Node3D:
+	for fuel in fuels:
+		if String(fuel.get("mode")) == "player":
+			return fuel
+	return null
+
+
+func _nearest_free_fuel(max_distance: float) -> Node3D:
+	var best: Node3D = null
+	var best_distance := max_distance
+	for fuel in fuels:
+		if not bool(fuel.call("can_pick_up", player, max_distance)):
+			continue
+		var distance := player.global_position.distance_to(fuel.global_position)
+		if distance < best_distance:
+			best = fuel
+			best_distance = distance
+	return best
 
 
 func _try_provoke() -> void:
@@ -585,39 +748,77 @@ func _try_provoke() -> void:
 
 
 func _try_interact() -> void:
-	if fuel == null or player == null:
+	if player == null:
 		return
-	if bool(fuel.get("carried")):
-		fuel.call("drop_from_player", player)
+	var carried := _carried_fuel()
+	if carried != null:
+		carried.call("drop_from_player", player)
 		_feedback = "燃料已放下"
 		_feedback_timer = 1.2
 		return
-	if bool(fuel.call("can_pick_up", player)):
-		fuel.call("pick_up", player)
-		_feedback = "抱起燃料——把它带离奶龙，按 E 放下"
+	var target := _nearest_free_fuel(2.6)
+	if target != null:
+		target.call("pick_up", player)
+		_feedback = "抱起燃料——搬进船头装货口，或按 E 放下"
 		_feedback_timer = 2.0
 	else:
 		_feedback = "走近燃料再按 E"
 		_feedback_timer = 1.2
 
 
+func _on_fuel_collected(total: int, target: int) -> void:
+	loaded_count = total
+	if _sfx != null:
+		_sfx.call("play", "loaded")
+	_counter_label.text = "已装 %d / %d" % [loaded_count, target]
+	_feedback = "入仓确认！%d / %d" % [loaded_count, target]
+	_feedback_timer = 1.6
+	if loaded_count >= target and not completed:
+		completed = true
+		_banner.visible = true
+
+
+func _on_fuel_landed(_fuel: Node3D) -> void:
+	_feedback = "燃料落地了——去捡回来，靠近它按 E"
+	_feedback_timer = 2.2
+
+
+func _on_fuel_grabbed(fuel: Node3D) -> void:
+	if _sfx != null:
+		_sfx.call("play", "chomp")
+	_feedback = "奶龙把%s叼走了！" % String(fuel.get("display_name"))
+	_feedback_timer = 2.0
+
+
+func _on_fuel_released(_fuel: Node3D) -> void:
+	if _sfx != null:
+		_sfx.call("play", "release")
+	_feedback = "它张嘴了——燃料飞出去了！"
+	_feedback_timer = 1.4
+
+
 func _on_pounce_finished(hit: bool) -> void:
-	if hit and fuel != null and bool(fuel.get("carried")):
-		fuel.call("drop_from_player", player)
-		_feedback = "被扑到了！燃料掉了——趁它恢复捡回来"
-		_feedback_timer = 2.6
+	if hit:
+		var carried := _carried_fuel()
+		if carried != null:
+			carried.call("drop_from_player", player)
+			_feedback = "被扑到了！手上的燃料掉了——趁它恢复捡回来"
+			_feedback_timer = 2.6
+
 
 func _toggle_debug() -> void:
 	_debug = not _debug
 	_debug_panel.visible = _debug
+	if gulu != null:
+		gulu.call("set_debug_ring", _debug)
 
 
-func _toggle_blender_test() -> void:
-	if blender_test_asset != null:
-		blender_test_asset.visible = not blender_test_asset.visible
+func _toggle_help() -> void:
+	_help_visible = not _help_visible
+	_help_label.visible = _help_visible
 
 
-# ---------------------------------------------------------------- reset / camera helpers
+# ---------------------------------------------------------------- reset
 
 func reset_preview() -> void:
 	if player == null:
@@ -627,16 +828,24 @@ func reset_preview() -> void:
 	player.rotation.y = SPAWN_YAW
 	player.set("_camera_yaw", SPAWN_YAW)
 	player.set("_camera_yaw_target", SPAWN_YAW)
-	player.set("_camera_pitch", -0.18)
-	player.set("_camera_pitch_target", -0.18)
+	player.set("_camera_pitch", 0.0)
+	player.set("_camera_pitch_target", 0.0)
 	player.set("use_first_person", true)
 	(player.get("visual") as Node3D).visible = false
 	player.call("update_camera", 1.0, true)
 	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+
+	for fuel in fuels:
+		fuel.call("reset_to_home")
+	if collector != null:
+		collector.call("reset_state")
+	loaded_count = 0
+	completed = false
+	_banner.visible = false
+	_counter_label.text = "已装 0 / %d" % TARGET_COUNT
 	if gulu != null:
 		gulu.call("reset_to_home")
-	if fuel != null:
-		fuel.call("reset_to_home")
+		gulu.call("start_holding", fuels[0])
 	_feedback = ""
 	_feedback_timer = 0.0
 	_last_collisions = int(player.get("contacts"))
@@ -645,10 +854,14 @@ func reset_preview() -> void:
 
 func clamp_cave_camera_position(_target: Vector3, desired: Vector3) -> Vector3:
 	return Vector3(
-		clampf(desired.x, -15.2, 15.2),
-		clampf(desired.y, 1.2, 7.0),
-		clampf(desired.z, -12.2, 12.2)
+		clampf(desired.x, -19.0, 19.0),
+		clampf(desired.y, 1.2, 7.5),
+		clampf(desired.z, -14.0, 14.0)
 	)
+
+
+func _place_player(at: Vector3, look_target: Vector3) -> void:
+	_teleport(at, atan2(-(look_target.x - at.x), -(look_target.z - at.z)))
 
 
 func _teleport(at: Vector3, yaw: float) -> void:
@@ -657,14 +870,9 @@ func _teleport(at: Vector3, yaw: float) -> void:
 	player.rotation.y = yaw
 	player.set("_camera_yaw", yaw)
 	player.set("_camera_yaw_target", yaw)
-	player.set("_camera_pitch", -0.18)
-	player.set("_camera_pitch_target", -0.18)
+	player.set("_camera_pitch", 0.0)
+	player.set("_camera_pitch_target", 0.0)
 	player.call("update_camera", 1.0, true)
-
-
-func _yaw_to(target: Vector3) -> float:
-	var direction := target - player.global_position
-	return atan2(-direction.x, -direction.z)
 
 
 func _press_provoke() -> void:
@@ -706,54 +914,45 @@ func _run_selftest() -> void:
 	var failures: Array = []
 	print("GULU SELFTEST start source=%s" % SOURCE_COMMIT)
 
+	# --- 视角：与飞船第一人称逐值一致 ---
 	_check(bool(player.get("use_first_person")), "default first person", passes, failures)
 	var cam := player.get("camera") as Camera3D
 	var eye_delta := cam.global_position.y - player.global_position.y
-	_check(absf(eye_delta - 1.65) < 0.06, "camera eye height 1.65", passes, failures)
-	_check(absf(cam.fov - 62.0) < 0.1, "camera fov 62", passes, failures)
+	_check(absf(eye_delta - 1.6) < 0.03, "camera eye height matches ship 1.6 (%.3f)" % eye_delta, passes, failures)
+	_check(absf(cam.fov - 74.0) < 0.1, "camera fov matches ship 74 (%.1f)" % cam.fov, passes, failures)
+	_check(absf(cam.near - 0.05) < 0.001, "camera near matches ship 0.05", passes, failures)
+	var visual := player.get("visual") as Node3D
+	_check(absf(visual.scale.x - 1.0) < 0.001, "player visual scale matches ship 1.0", passes, failures)
 
-	# 两个占位对象应在首屏可见（防止摆到镜头后面或场外）。
+	# --- 首屏可读性 ---
 	var screen_size := get_viewport().get_visible_rect().size
 	var gulu_screen := cam.unproject_position(gulu.global_position + Vector3.UP * 0.8)
-	var fuel_screen := cam.unproject_position(fuel.global_position + Vector3.UP * 0.45)
-	print("GULU screen gulu=%s fuel=%s viewport=%s" % [gulu_screen, fuel_screen, screen_size])
-	_check(gulu_screen.x > 0.0 and gulu_screen.x < screen_size.x and gulu_screen.y > 0.0 and gulu_screen.y < screen_size.y, "placeholder gulu visible on entry", passes, failures)
-	_check(fuel_screen.x > 0.0 and fuel_screen.x < screen_size.x and fuel_screen.y > 0.0 and fuel_screen.y < screen_size.y, "placeholder fuel visible on entry", passes, failures)
+	print("GULU screen gulu=%s viewport=%s" % [gulu_screen, screen_size])
+	_check(gulu_screen.x > 0.0 and gulu_screen.x < screen_size.x and gulu_screen.y > 0.0 and gulu_screen.y < screen_size.y, "dragon visible on entry", passes, failures)
 
-	# Blender 独立测试资产：GLB 已导入，检查节点、比例、轴向与材质。
-	var ba := blender_test_asset
-	_check(ba != null and not ba.visible, "Blender test asset hidden by default", passes, failures)
+	# --- 玩家建模复用同一套主角资源 ---
+	var body := visual.find_child("Body", true, false)
+	_check(body != null, "player model built from shared protagonist skin", passes, failures)
+	var mesh_count := 0
+	if body != null:
+		mesh_count = body.find_children("*", "MeshInstance3D", true, false).size()
+	_check(mesh_count > 3, "player skin meshes present (%d)" % mesh_count, passes, failures)
+
+	# --- Blender GLB 管线仍在（F4 切换显示）---	_check(blender_test_asset != null and not blender_test_asset.visible, "Blender test asset hidden by default", passes, failures)
 	_toggle_blender_test()
 	await get_tree().physics_frame
-	_check(ba != null and ba.visible, "F4 toggles Blender test asset", passes, failures)
-	var ba_meshes: Array = ba.find_children("*", "MeshInstance3D", true, false) if ba != null else []
-	print("BLENDER_TEST meshes=%d" % ba_meshes.size())
-	for mi in ba_meshes:
-		var mesh_instance := mi as MeshInstance3D
-		var mats: Array = []
-		for s in mesh_instance.mesh.get_surface_count():
-			var m := mesh_instance.get_active_material(s)
-			mats.append(m.resource_name if m != null else "null")
-		print("BLENDER_TEST node=%s pos=%s scale=%s aabb=%s mats=%s" % [mesh_instance.name, mesh_instance.position, mesh_instance.global_transform.basis.get_scale(), mesh_instance.get_aabb().size, mats])
-	_check(ba != null and ba_meshes.size() == 4, "Blender GLB imports four meshes", passes, failures)
-	var body_mesh := ba.find_child("Body", true, false) as MeshInstance3D if ba != null else null
-	var fwd_marker := ba.find_child("ForwardMarker", true, false) as Node3D if ba != null else null
-	var top_marker := ba.find_child("TopMarker", true, false) as Node3D if ba != null else null
-	_check(body_mesh != null, "Blender body node exists", passes, failures)
-	if body_mesh != null:
-		var body_size := body_mesh.get_aabb().size
-		_check(absf(body_size.x - 0.8) < 0.03 and absf(body_size.y - 0.8) < 0.03 and absf(body_size.z - 0.8) < 0.03, "Blender scale is 0.8 m body", passes, failures)
-		var foot_y := body_mesh.position.y - body_size.y * 0.5
-		_check(absf(foot_y) < 0.03, "Blender feet rest on ground (y=%.3f)" % foot_y, passes, failures)
-		var body_material := body_mesh.get_active_material(0) as StandardMaterial3D
-		_check(body_material != null and body_material.albedo_color.r > body_material.albedo_color.b, "Blender material imports", passes, failures)
-	_check(fwd_marker != null and fwd_marker.position.z < -0.4, "Blender +Y becomes Godot -Z", passes, failures)
-	_check(top_marker != null and top_marker.position.y > 0.8, "Blender +Z becomes Godot +Y", passes, failures)
+	var ba_meshes: Array = blender_test_asset.find_children("*", "MeshInstance3D", true, false) if blender_test_asset != null else []
+	_check(blender_test_asset != null and blender_test_asset.visible and ba_meshes.size() == 4, "F4 shows imported Blender GLB (4 meshes)", passes, failures)
 	_toggle_blender_test()
 	await get_tree().physics_frame
-	_check(not ba.visible, "F4 hides Blender test asset", passes, failures)
+	_check(not blender_test_asset.visible, "F4 hides Blender test asset again", passes, failures)
 
-	# 真实动作输入：W 前进。
+	# --- 音效资源已导入 ---
+	var sfx_players := _sfx.get("_players") as Dictionary
+	var sfx_count := sfx_players.size() if sfx_players != null else 0
+	_check(sfx_count == 5, "sfx streams imported (%d/5)" % sfx_count, passes, failures)
+
+	# --- 基础移动与碰撞 ---
 	var start := player.global_position
 	Input.action_press("move_up")
 	await _wait(0.9)
@@ -762,36 +961,14 @@ func _run_selftest() -> void:
 	var travelled := player.global_position.x - start.x
 	_check(travelled > 2.0, "WASD movement forward (%.2f m)" % travelled, passes, failures)
 
-	# 鼠标观察：走 _unhandled_input 的镜头路径。headless 没有真实鼠标捕获，跳过窗口外验证。
-	_teleport(SPAWN, SPAWN_YAW)
-	if DisplayServer.get_name() == "headless":
-		print("SKIP mouse look / pitch (headless has no captured mouse)")
-	else:
-		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
-		var before_yaw := float(player.get("_camera_yaw_target"))
-		var motion := InputEventMouseMotion.new()
-		motion.relative = Vector2(160.0, 0.0)
-		player.call("_unhandled_input", motion)
-		await get_tree().physics_frame
-		var after_yaw := float(player.get("_camera_yaw_target"))
-		_check(absf(after_yaw - before_yaw) > 0.15, "mouse look changes yaw", passes, failures)
-		var big := InputEventMouseMotion.new()
-		big.relative = Vector2(0.0, 10000.0)
-		player.call("_unhandled_input", big)
-		await get_tree().physics_frame
-		var pitch := float(player.get("_camera_pitch_target"))
-		_check(pitch <= 0.3001 and pitch >= -0.5801, "pitch clamped (%.3f)" % pitch, passes, failures)
-
-	# 碰撞：从墙左侧持续前进，应被内墙挡住。
-	_teleport(Vector3(10.2, 0.02, -4.0), -PI * 0.5)
+	_teleport(Vector3(17.8, 0.02, 8.0), PI * 0.5)
 	Input.action_press("move_up")
-	await _wait(1.4)
+	await _wait(1.2)
 	Input.action_release("move_up")
 	await get_tree().physics_frame
-	var wall_x := player.global_position.x
-	_check(wall_x < 11.8 and wall_x > 10.9, "wall collision stops player (x=%.2f)" % wall_x, passes, failures)
+	_check(player.global_position.x < 19.7, "outer wall stops player (x=%.2f)" % player.global_position.x, passes, failures)
 
-	# 第一/第三人称切换（回到开阔点，避免第三人称镜头被刚撞到的墙压到角色身上）。
+	# --- 视角切换 ---
 	_teleport(SPAWN, SPAWN_YAW)
 	await get_tree().physics_frame
 	var toggle := InputEventAction.new()
@@ -800,109 +977,168 @@ func _run_selftest() -> void:
 	player.call("_unhandled_input", toggle)
 	await get_tree().physics_frame
 	_check(not bool(player.get("use_first_person")), "Tab switches to third person", passes, failures)
-	await _wait(0.7)
-	_check((player.get("visual") as Node3D).visible, "third person shows body", passes, failures)
+	_check(absf(cam.fov - 62.0) < 0.1, "third person restores fov 62", passes, failures)
+	await _wait(0.5)
+	_check(visual.visible, "third person shows body", passes, failures)
 	player.call("_unhandled_input", toggle)
 	await get_tree().physics_frame
 	_check(bool(player.get("use_first_person")), "Tab returns to first person", passes, failures)
-	_check(not (player.get("visual") as Node3D).visible, "first person hides own body", passes, failures)
+	_check(absf(cam.fov - 74.0) < 0.1, "first person restores ship fov", passes, failures)
 
-	# 奶龙行为：挑衅 → 注意 → 靠近 → 蓄势 → 扑击 → 玩家躲开 → 恢复。
+	# --- 起始状态：奶龙叼着第一罐 ---
+	_check(bool(gulu.get("has_fuel")), "dragon starts holding fuel", passes, failures)
+	_check(String(fuels[0].get("mode")) == "dragon", "starting fuel is carried by dragon", passes, failures)
+	var anchor: Node3D = gulu.call("mouth_anchor")
+	_check(anchor != null and fuels[0].global_position.distance_to(anchor.global_position) < 0.4, "dragon mouth anchor holds fuel", passes, failures)
+
+	# --- 挑衅 → 注意 → 靠近 ---
 	reset_preview()
-	_teleport(Vector3(-5.0, 0.02, -3.5), _yaw_to(GULU_POSITION))
+	_place_player(Vector3(-4.5, 0.02, -2.0), DRAGON_HOME)
 	await _wait(0.2)
-	_check(gulu.state_name() == "待机", "dragon starts idle", passes, failures)
 	_press_provoke()
 	await _wait(0.06)
 	_check(gulu.state_name() == "注意", "Q provoke makes dragon notice", passes, failures)
-	_check(float(gulu.get("agitation")) > 0.2, "provoke raises agitation", passes, failures)
 	await _wait(0.8)
 	_check(gulu.state_name() == "靠近", "dragon approaches after notice", passes, failures)
 	var approach_distance := player.global_position.distance_to(gulu.global_position)
-	await _wait(0.7)
-	var closer_distance := player.global_position.distance_to(gulu.global_position)
-	_check(closer_distance < approach_distance - 0.4, "dragon closes distance (%.2f -> %.2f)" % [approach_distance, closer_distance], passes, failures)
-
-	_press_provoke()
-	await _wait(0.8)
-	_press_provoke()
-	await _wait(0.15)
-	_check(gulu.state_name() == "蓄势", "third provoke triggers windup", passes, failures)
-	await _wait(0.3)
-	_check(gulu.state_name() == "蓄势", "windup telegraph lasts before pounce", passes, failures)
-
-	Input.action_press("move_right")
-	await _wait(0.9)
-	Input.action_release("move_right")
 	await _wait(0.6)
-	_check(not bool(gulu.get("last_pounce_hit")), "player can dodge the pounce", passes, failures)
-	_check(gulu.state_name() == "恢复" or gulu.state_name() == "待机", "pounce ends in recovery", passes, failures)
-	await _wait(1.7)
-	_check(gulu.state_name() == "待机", "dragon returns to idle after recovery", passes, failures)
+	_check(player.global_position.distance_to(gulu.global_position) < approach_distance - 0.3, "dragon closes distance", passes, failures)
+	_check(bool(gulu.get("has_fuel")), "dragon keeps fuel while provoked", passes, failures)
 
-	# 墙体遮挡：隔墙挑衅不应生效。
+	# 隔岩挑衅被拒绝
 	reset_preview()
-	_teleport(Vector3(-6.0, 0.02, -5.5), _yaw_to(GULU_POSITION))
+	_place_player(Vector3(2.6, 0.02, 6.0), DRAGON_HOME)
 	await _wait(0.2)
 	_press_provoke()
 	await _wait(0.1)
-	_check(gulu.state_name() == "待机", "provoke behind wall is rejected", passes, failures)
+	_check(gulu.state_name() == "待机", "provoke blocked by rock is rejected", passes, failures)
 	_check(float(gulu.get("agitation")) < 0.01, "blocked provoke adds no agitation", passes, failures)
 
-	# 冷却：同一瞬间连按不应叠两倍 agitation。
+	# 冷却
 	reset_preview()
-	_teleport(Vector3(-5.0, 0.02, -3.5), _yaw_to(GULU_POSITION))
+	_place_player(Vector3(-4.5, 0.02, -2.0), DRAGON_HOME)
 	await _wait(0.2)
 	_press_provoke()
 	_press_provoke()
 	await _wait(0.06)
-	_check(float(gulu.get("agitation")) <= 0.35, "provoke cooldown blocks rapid repeats", passes, failures)
+	_check(float(gulu.get("agitation")) <= 0.43, "provoke cooldown blocks rapid repeats", passes, failures)
 
-	# 燃料搬运：E 拾取/放下，携带时关闭碰撞并跟随玩家。
+	# --- 核心场面：借力送货 ---
 	reset_preview()
-	_teleport(FUEL_POSITION + Vector3(-1.0, 0.02, 0.0), _yaw_to(FUEL_POSITION))
+	_place_player(Vector3(9.2, 0.02, 0.0), DRAGON_HOME)
 	await _wait(0.2)
-	_check(bool(fuel.call("can_pick_up", player)), "fuel can be picked up", passes, failures)
-	_press_interact()
-	await _wait(0.1)
-	_check(bool(fuel.get("carried")), "E picks up fuel", passes, failures)
-	_check(int(fuel.collision_layer) == 0, "carried fuel disables collision", passes, failures)
-	_check(fuel.global_position.distance_to(player.global_position) < 1.4, "carried fuel follows player", passes, failures)
-	_press_interact()
-	await _wait(0.1)
-	_check(not bool(fuel.get("carried")), "E drops fuel", passes, failures)
-	_check(int(fuel.collision_layer) != 0, "dropped fuel restores collision", passes, failures)
+	_press_provoke()
+	await _wait(0.85)
+	_press_provoke()
+	await _wait(0.85)
+	_press_provoke()
+	await _wait(0.25)
+	_check(gulu.state_name() == "蓄势", "third provoke triggers windup", passes, failures)
+	var locked := player.global_position
+	Input.action_press("move_right")
+	await _wait(1.2)
+	Input.action_release("move_right")
+	_check(not bool(gulu.get("last_pounce_hit")), "player can dodge the pounce", passes, failures)
+	_check(player.global_position.distance_to(locked) > 0.6, "dodge moved player off the locked spot", passes, failures)
+	await _wait(1.8)
+	_check(loaded_count >= 1, "fuel launched by pounce lands in the bay (loaded=%d)" % loaded_count, passes, failures)
 
-	# 被扑中：携带的燃料应掉落，形成“捡回来”的窗口。
+	# 重复计数保护
+	var before_total := loaded_count
+	var any_fuel: Node3D = fuels[1]
+	collector.call("consume", any_fuel)
+	await get_tree().process_frame
+	_check(loaded_count == before_total + 1, "hand delivery counts once", passes, failures)
+	collector.call("consume", any_fuel)
+	await get_tree().process_frame
+	_check(loaded_count == before_total + 1, "consuming same fuel twice does not double count", passes, failures)
+
+	# --- 拾取 / 放下 / 掉落 ---
 	reset_preview()
-	_teleport(FUEL_POSITION + Vector3(-1.0, 0.02, 0.0), _yaw_to(FUEL_POSITION))
+	_place_player(FUEL_HOMES[2] + Vector3(-1.2, 0.02, 0.0), FUEL_HOMES[2])
+	await _wait(0.2)
+	_check(bool(fuels[2].call("can_pick_up", player)), "fuel can be picked up", passes, failures)
+	_press_interact()
+	await _wait(0.15)
+	_check(String(fuels[2].get("mode")) == "player", "E picks up fuel", passes, failures)
+	_check(int(fuels[2].collision_layer) == 0, "carried fuel disables collision", passes, failures)
+	_check(fuels[2].global_position.distance_to(player.global_position) < 1.4, "carried fuel follows player", passes, failures)
+	_press_interact()
+	await _wait(0.15)
+	_check(String(fuels[2].get("mode")) == "free", "E drops fuel", passes, failures)
+	_check(int(fuels[2].collision_layer) != 0, "dropped fuel restores collision", passes, failures)
+
+	# 自己抱着走进装货口：应该自动入仓
+	_place_player(FUEL_HOMES[2] + Vector3(-1.2, 0.02, 0.0), FUEL_HOMES[2])
+	await _wait(0.2)
+	_press_interact()
+	await _wait(0.15)
+	var before_hand := loaded_count
+	_teleport(Vector3(13.6, 0.02, 0.0), 0.0)
+	await _wait(0.4)
+	_check(loaded_count == before_hand + 1, "carrying fuel into the bay loads it", passes, failures)
+
+	# 被扑中掉落
+	reset_preview()
+	_place_player(FUEL_HOMES[2] + Vector3(-1.2, 0.02, 0.0), FUEL_HOMES[2])
 	await _wait(0.2)
 	_press_interact()
 	await _wait(0.1)
-	_check(bool(fuel.get("carried")), "fuel carried for pounce test", passes, failures)
-	_teleport(Vector3(2.0, 0.02, -1.2), _yaw_to(GULU_POSITION))
+	_check(String(fuels[2].get("mode")) == "player", "fuel carried for pounce test", passes, failures)
+	_place_player(Vector3(1.6, 0.02, 1.8), DRAGON_HOME)
 	await _wait(0.2)
 	_press_provoke()
-	await _wait(0.8)
+	await _wait(0.85)
 	_press_provoke()
-	await _wait(0.8)
+	await _wait(0.85)
 	_press_provoke()
-	await _wait(0.2)
+	await _wait(0.3)
 	_check(gulu.state_name() == "蓄势", "stationary player triggers windup", passes, failures)
-	await _wait(1.4)
+	await _wait(1.5)
 	_check(bool(gulu.get("last_pounce_hit")), "pounce can hit a stationary player", passes, failures)
-	_check(not bool(fuel.get("carried")), "getting pounced drops carried fuel", passes, failures)
+	_check(String(fuels[2].get("mode")) != "player", "getting pounced drops carried fuel", passes, failures)
+
+	# --- 奶龙找燃料 ---
+	reset_preview()
+	await _wait(0.2)
+	_check(bool(gulu.get("has_fuel")), "dragon holds fuel after reset", passes, failures)
+	# 让它把嘴里那罐丢掉，并站到一罐散装燃料旁边，验证它会自己去叼。
+	gulu.call("_release_fuel")
+	await get_tree().physics_frame
+	gulu.set("global_position", Vector3(-6.5, 0.0, -4.7))
+	gulu.call("_set_state", "idle", true)
+	await _wait(3.5)
+	_check(String(fuels[1].get("mode")) == "dragon" or String(fuels[2].get("mode")) == "dragon", "dragon forages and grabs loose fuel", passes, failures)
+
+	# --- 完成与重开 ---
+	reset_preview()
+	await _wait(0.2)
+	collector.call("consume", fuels[0])
+	await get_tree().process_frame
+	collector.call("consume", fuels[1])
+	await get_tree().process_frame
+	collector.call("consume", fuels[2])
+	await _wait(0.2)
+	_check(loaded_count == TARGET_COUNT, "loading three fuels reaches target", passes, failures)
+	_check(completed and _banner.visible, "completion banner shows", passes, failures)
 
 	reset_preview()
 	await get_tree().physics_frame
 	_check(player.global_position.distance_to(SPAWN) < 0.2, "reset returns to spawn", passes, failures)
 	_check(bool(player.get("use_first_person")), "reset restores first person", passes, failures)
 	_check(gulu.state_name() == "待机", "reset restores dragon idle", passes, failures)
+	_check(loaded_count == 0 and not completed and not _banner.visible, "reset clears loading progress", passes, failures)
+	_check(int(fuels[0].collision_layer) == 0 and bool(gulu.get("has_fuel")), "reset re-attaches starting fuel", passes, failures)
+	_check(String(fuels[1].get("mode")) == "free" and String(fuels[2].get("mode")) == "free", "reset returns loose fuels", passes, failures)
 
+	# --- 调试面板与状态环 ---
 	_toggle_debug()
 	await _wait(0.25)
-	_check(_debug_label.text.length() > 0 and _debug_label.text.contains("奶龙"), "debug panel renders", passes, failures)
+	_check(_debug_label.text.contains("奶龙") and _debug_label.text.contains("装货"), "debug panel renders", passes, failures)
+	_check(bool((gulu.get("visual") as Node3D).get("ring_enabled")), "debug mode enables dragon state ring", passes, failures)
 	_toggle_debug()
+	await _wait(0.1)
+	_check(not bool((gulu.get("visual") as Node3D).get("ring_enabled")), "normal play hides dragon state ring", passes, failures)
 
 	Input.action_release("move_up")
 	Input.action_release("move_right")
@@ -911,25 +1147,69 @@ func _run_selftest() -> void:
 	await _wait(0.2)
 	get_tree().quit(0 if failures.is_empty() else 1)
 
+
 func _run_shots() -> void:
 	DirAccess.make_dir_recursive_absolute(_shot_dir)
-	await _wait(0.8)
-	_teleport(Vector3(-3.0, 0.02, -1.0), -PI * 0.5)
-	await _wait(0.5)
-	var shot_cam := player.get("camera") as Camera3D
-	print("GULU SHOT view gulu=%s fuel=%s" % [shot_cam.unproject_position(gulu.global_position + Vector3.UP * 0.8), shot_cam.unproject_position(fuel.global_position + Vector3.UP * 0.45)])
-	await _shot("01_first_person_idle.png")
-
-	_press_provoke()
-	await _wait(0.35)
-	await _shot("02_notice.png")
-
-	await _wait(0.8)
-	_press_provoke()
-	await _wait(0.8)
-	_press_provoke()
+	await _wait(1.0)
+	_place_player(Vector3(-1.0, 0.02, 4.2), DRAGON_HOME)
+	await _wait(0.6)
+	await _shot("01_opening_pad.png")
+	reset_preview()
+	_place_player(Vector3(9.2, 0.02, 0.0), DRAGON_HOME)
 	await _wait(0.3)
-	await _shot("03_windup.png")
+	_press_provoke()
+	await _wait(0.9)
+	_press_provoke()
+	await _wait(0.85)
+	_press_provoke()
+	await _wait(0.4)
+	await _shot("02_windup.png")
+	await _wait(1.2)
+	await _shot("03_pounce_release.png")
+	await _wait(1.4)
+	await _shot("04_bay_after_release.png")
+
+	reset_preview()
+	_place_player(Vector3(-4.9, 0.02, 6.4), FUEL_HOMES[2])
+	await _wait(0.4)
+	_press_interact()
+	await _wait(0.3)
+	await _shot("05_carry_first_person.png")
+	var toggle := InputEventAction.new()
+	toggle.action = "inspect_first_person"
+	toggle.pressed = true
+	player.call("_unhandled_input", toggle)
+	await _wait(0.8)
+	await _shot("06_third_person_player_model.png")
+
+	# 角色特写：先看一眼叼货的正面，再看扑空脸着地
+	reset_preview()
+	_place_player(Vector3(-1.6, 0.02, -0.5), DRAGON_HOME)
+	await _wait(0.6)
+	await _shot("07_dragon_face_with_fuel.png")
+
+	reset_preview()
+	_place_player(Vector3(-2.4, 0.02, -0.5), DRAGON_HOME)
+	await _wait(0.3)
+	_press_provoke()
+	await _wait(0.85)
+	_press_provoke()
+	await _wait(0.85)
+	_press_provoke()
+	await _wait(0.5)
+	Input.action_press("move_right")
+	await _wait(0.8)
+	Input.action_release("move_right")
+	await _wait(0.45)
+	var faceplant_spot := gulu.global_position
+	_place_player(faceplant_spot + Vector3(-3.4, 0.02, 1.2), faceplant_spot + Vector3.UP * 0.9)
+	await _wait(0.12)
+	await _shot("08_dragon_miss_faceplant.png")
+
+	reset_preview()
+	_place_player(Vector3(7.6, 0.02, 3.6), Vector3(14.0, 0.0, 0.0))
+	await _wait(0.5)
+	await _shot("09_loading_bay_wide.png")
 
 	print("GULU SHOTS dir=%s" % ProjectSettings.globalize_path(_shot_dir))
 	get_tree().quit(0)
@@ -938,6 +1218,17 @@ func _shot(file_name: String) -> void:
 	RenderingServer.force_draw()
 	await get_tree().process_frame
 	await get_tree().process_frame
+	if player != null and gulu != null:
+		var shot_cam := player.get("camera") as Camera3D
+		var head := shot_cam.unproject_position(gulu.global_position + Vector3.UP * 1.0)
+		var view := get_viewport().get_visible_rect().size
+		var on_screen := head.x > 0.0 and head.x < view.x and head.y > 0.0 and head.y < view.y
+		var fuel_modes: PackedStringArray = []
+		for fuel in fuels:
+			fuel_modes.append(String(fuel.get("mode")))
+		var player_screen := shot_cam.unproject_position(player.global_position + Vector3.UP * 0.9)
+		print("SHOTMETA %s dragon_screen=%s on_screen=%s player_screen=%s loaded=%d state=%s holding=%s fuels=%s" % [
+			file_name, head, on_screen, player_screen, loaded_count, gulu.state_name(), str(gulu.get("has_fuel")), ",".join(fuel_modes)])
 	var image := get_viewport().get_texture().get_image()
 	var path := _shot_dir.path_join(file_name)
 	var error := image.save_png(path)

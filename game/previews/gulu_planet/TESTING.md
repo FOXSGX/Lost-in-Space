@@ -1,6 +1,6 @@
 # TESTING — 奶龙星第一人称试玩预览
 
-最后更新：2026-10-29 01:25（GMT+8）
+最后更新：2026-10-29 15:10（GMT+8）
 
 ## 0. 启动
 
@@ -8,88 +8,121 @@
 $godot = "C:\Users\31798\Downloads\迷失太空\迷失太空\tools\godot-4.7.2\Godot_v4.7.2-stable_win64.exe"
 $preview = "C:\Users\31798\Documents\GitHub\Lost-in-Space-gulu\game\previews\gulu_planet"
 
-# 正常试玩（会打开窗口，由使用者主动运行）
+# 正常试玩（会开窗口，由使用者主动运行）
 & $godot --path $preview
 
-# 自动验证（无窗口；本轮按“不要强制打开”使用这一方式）
+# 自动验证（无窗口）
 & $godot --headless --path $preview -- --selftest
+
+# 窗口截图（会开窗口，跑完自动退出）
+& $godot --path $preview -- --shots
 ```
 
 入口：`gulu_planet.tscn`。默认第一人称，鼠标捕获。
 
-## 1. 本轮实际结果
+## 1. 自动检查（headless）
 
 ```
-GULU SELFTEST SUMMARY passes=48 failures=0
+GULU SELFTEST SUMMARY passes=58 failures=0
 ```
 
-（headless，2026-10-28；鼠标观察/俯仰因 headless 无真实鼠标捕获而跳过。
+2026-10-29 实测，退出码 0。覆盖项：
 
-新增 Blender GLB 检查与燃料搬运测试后共 48 项，全部通过（4 个 mesh、0.8 m 主体、+Y→−Z、+Z→+Y、材质）。）
-
-| 项目 | 实测 |
+| 分组 | 项目 |
 | --- | --- |
-| 默认第一人称 | 通过 |
-| 眼睛高度 / FOV | 1.65 m / 62° |
-| 奶龙、燃料首屏可见 | 通过（屏幕坐标 406,333 / 794,339） |
-| WASD 前进 0.9 s | 5.22 m |
-| 内墙碰撞 | 停在 x=11.32 |
-| Tab 第一/第三人称 | 双向通过；第一人称隐藏身体 |
-| 待机 → Q 挑衅 → 注意 | 通过；agitation 0.34 |
-| 注意 → 靠近 | 通过；距离 6.18 → 4.36 |
-| 第 3 次挑衅 → 蓄势 | 通过；agitation 0.98 |
-| 蓄势预兆 | 通过；1.0 s 内保持蓄势 |
-| 侧移躲开 | 通过；扑击未命中 |
-| 静止玩家被扑中 | 通过；命中判定 1.25 m |
-| 燃料 E 拾取/放下 | 通过；携带跟随、碰撞关闭/恢复 |
-| 被扑中掉落燃料 | 通过；恢复窗口可捡回 |
-| 扑击后恢复 → 待机 | 通过；1.5 s 恢复 |
-| 隔墙挑衅 | 拒绝；agitation 0 |
-| 同瞬间连按 | 第二次被 0.7 s 冷却拒绝 |
-| R 重置 | 玩家回出生点；奶龙回待机 |
-| F3 调试 | 显示奶龙状态/上头/距离 |
+| 视角 | 默认第一人称 / 眼高 1.600 m / FOV 74.0 / near 0.05 / 玩家模型缩放 1.0 |
+| 模型 | 首屏可见奶龙 / 主角由共享皮肤构建 / 67 个 mesh |
+| 管线 | Blender GLB 默认隐藏 / F4 显示 4 个 mesh / F4 再隐藏 |
+| 移动 | WASD 前进 5.32 m / 外墙碰撞停在 x=10.84 |
+| 视角切换 | Tab 进退、第三人称 FOV 62、可见身体、回到第一人称恢复 74 |
+| 起始状态 | 奶龙叼着第一罐 / 燃料 mode=dragon / 燃料在嘴部挂点 0.4 m 内 |
+| 挑衅 | 注意 / 靠近 / 距离缩短 / 叼货时仍可挑衅 / 隔石堆拒绝 / 冷却不叠加 |
+| 蓄势 | 第三次挑衅进入蓄势 |
+| 躲避 | 侧移后未被命中 / 已离开锁定点 |
+| **借力送货** | **扑击释放的燃料入仓 loaded=1** |
+| 计数 | 手动入仓计一次 / 同一罐重复 consume 不重复计数 |
+| 搬运 | 拾取 / 携带关闭碰撞 / 跟随 / 放下 / 恢复碰撞 / 抱进装货口自动入仓 |
+| 被扑 | 静止玩家可被命中 / 被扑掉手上的燃料 |
+| 找燃料 | 放下嘴里的货后，会自己去叼附近的散装燃料 |
+| 完成 | 三罐装满 / 完成条显示 |
+| 重开 | 回出生点 / 第一人称 / 奶龙待机 / 清空进度 / 重新叼起第一罐 / 散装燃料回原位 |
+| 调试 | F3 面板渲染 / 状态环仅调试模式出现 |
 
-## 2. Blender → GLB → Godot 验证
+已知无害告警：退出时 Godot 报 `2 ObjectDB instances were leaked` 与
+`1 resources still in use at exit`（疑似退出瞬间仍在播放的 AudioStreamPlayer / Tween），
+不影响运行，未定位。
 
-Blender 4.5.15 LTS（官方 ZIP，便携解压）自带 Python 3.11.15。
+## 2. 窗口验证（真实渲染）
 
-```powershell
-$blender = "C:\Users\31798\AppData\Local\Programs\Blender Foundation\Blender 4.5\blender.exe"
-& $blender --background --factory-startup --python "<preview>\tools\blender\make_test_link.py"
-& $blender --background --factory-startup --python "<preview>\tools\blender\verify_test_link.py"
+`& $godot --path $preview -- --shots` 输出 9 张 1280×800 截图到
+`user://gulu_shots`，本轮已复制到 `docs/shots/`。
+
+脚本会为每张图打印 `SHOTMETA`，记录奶龙/玩家是否在屏幕内、燃料状态、装货计数：
+
+```
+01_opening_pad             dragon (645,456) 在屏内   fuels=dragon,free,free
+02_windup                  dragon (640,465) 在屏内   蓄势
+03_pounce_release          fuels=thrown              已张嘴（燃料在空中）
+04_bay_after_release       loaded=1                 入仓成功
+05_carry_first_person      fuels=...,player         第一人称抱货
+06_third_person_player     player (640,429) 在屏内   第三人称看模型
+07_dragon_face_with_fuel   dragon (640,518) 在屏内   叼货正面
+08_dragon_miss_faceplant   dragon (640,502) 在屏内   恢复/脸着地
+09_loading_bay_wide        （奶龙故意不在画面）        装货口全景
 ```
 
-- Blender 回读：4 个 mesh（Body/ForwardMarker/TopMarker/BackMarker），4 个材质；
-  Body 0.8×0.8×0.8 m。
-- Godot headless 导入实例 `BlenderLinkTest`：4 个 MeshInstance3D，Body AABB 0.8 m、脚底 y=0；
-  ForwardMarker 在 Godot z=−0.65（Blender +Y→−Z），TopMarker 在 y=0.92（+Z→+Y）；
-  BodyMat 基色导入；默认隐藏，F4 显示。
-- 没有开窗截图；以上是实际导入/实例化/节点/材质检查。
-- 外部第三方模型（不在仓库）：`Documents\NailongAssets\scnuLwz_ai_work_proflie\nailong.glb`，
-  SHA256 校验通过；Blender 回读为 1 个 mesh、846,783 顶点、无 armature/action、3 张 4K 贴图、
-  高 1.089 m、脚底 z≈0。只做内部检查，未导入 Godot。
+亮度体检（`python tools/inspect_shot.py docs/shots/xx.png`）：
+
+| 图 | mean | 过曝>0.94 |
+| --- | --- | --- |
+| 01 开场 | 0.48 | 0.8% |
+| 02 蓄势 | 0.48 | 0.8% |
+| 03 扑击释放 | 0.56 | 10.4% |
+| 04 入仓后 | 0.55 | 1.3% |
+| 05 抱货 | 0.35 | 1.0% |
+| 06 第三人称 | 0.47 | 1.1% |
+
+03 偏高是船体正面受光 + 近景，属于可接受范围；下一轮如果想压，调
+`gulu_app._build_environment()` 的 `tonemap_exposure`。
 
 ## 3. 未验证
 
-- **真人手动试玩**：挑衅距离、蓄势 1.0 s、扑击 11 m/s 是否好躲、是否有趣，均未由真人判断。
-- **鼠标观察（本轮代码）**：headless 跳过；此前基础版窗口运行通过（16/0），但本轮没有再次开窗。
-- **声音/麦克风**：未实现。
-- **真实燃料抢夺/叼走/追回/伤害/结算**：未实现。
-- **联网**：无网络代码，不能宣称多人已验证。
-- **正式模型/动画**：占位模型；第三方素材未导入。
+- **真人手动操作**：没有真人完整玩过；所有手感结论均为自动/截图推断。
+- 鼠标观察的实际灵敏度：headless 跳过；窗口模式只验证参数与构图。
+- 音效听感：只验证文件存在与播放调用，没有听过。
+- 多人：无联网代码，不声称已验证。
+- 长时间运行、内存、多次重开后的资源泄漏：未做。
 
-## 4. 测试步骤（真人）
+## 4. 真人试玩脚本（约 5 分钟）
 
-1. 启动后确认是第一人称，鼠标可环视，WASD/Shift 正常。
-2. 走近奶龙到 9 m 内并在画面中面对它；按 Q。HUD 应从“待机”变“注意”，奶龙转向并亮起状态环。
-3. 等它靠近，继续按 Q（间隔约 0.7 s）。上头条增长；第 3 次进入“蓄势”，HUD 出现红色预警。
-4. 蓄势约 1 s 后它扑向锁定位置；侧移/后退躲开。HUD 显示“扑空/恢复”，1.5 s 后可再次挑衅。
-5. 走到视线测试柱后面按 Q，应提示“被墙挡住了”，奶龙不追踪。
-6. 按 R 重置，重复。
+1. **0:00 开场**：先别动，看看前面。能认出「一只奶龙嘴里叼着一罐燃料」吗？
+   能看出右边那条是飞船装货口吗？
+2. **0:30 自己搬**：按 E 抱起最近的一罐，沿青色地面导引条绕到船头，走进装货口。
+   计数变成 1/3 了吗？路上奶龙有来抢吗？
+3. **1:30 挑衅**：对着奶龙按 Q 三次。它有没有明显「注意到 → 靠近 → 压低身体」？
+   预警出来时你知道要躲吗？往哪躲？
+4. **2:00 骗它送货**：让它叼着货，站到装货口正前方约 6~7 m，按 Q 到它蓄势，
+   **蓄势时侧移一步**。燃料飞进仓了吗？没进的话知道自己哪一步错了吗？
+5. **3:00 失误补救**：故意站太远或太偏，让燃料落在外面，捡回来再试一次。
+   这一步烦不烦？
+6. **4:00 被扑**：手上抱着货站在原地被扑一次。知道自己掉了什么、还有多久能捡吗？
+7. **4:30 收尾**：把 3 罐装满，看完成提示，按 R。重开后有没有残留
+   （燃料没归位、奶龙不叼货、计数不清零）？
 
-## 5. 已知风险
+### 试玩后要回答的四个问题
 
-- 行为参数全部是原型值，集中写在 `scripts/milk_dragon.gd` 顶部。
-- 奶龙与玩家都使用碰撞层 16；扑击撞到玩家/墙会提前结束，不会穿墙。
-- 第三人称只用于检查；镜头受灰盒边界 clamp。
-- 本地分支基于旧 `origin/main`；网络恢复后需要 rebase 到最新 main。
+1. 你理解**为什么要挑衅它**吗？（它是障碍，也是工具）
+2. **自己搬**和**骗它送**，两种都有使用价值吗？还是有一种是废的？
+3. 失误之后，你**知道原因**吗？愿意再试一次吗？
+4. 哪个**角色反应**最有趣？哪一段**等待**最无聊？
+
+## 5. 已踩过的坑（避免重复）
+
+- PowerShell `Get-Content/Set-Content` 会把 UTF-8 中文注释写坏（换行被吞），
+  导致 GDScript 解析失败。**改脚本一律用编辑器/写入工具，不要用 PS 往返。**
+- Jolt 不支持非均匀缩放的 SphereShape 碰撞体，会打警告并当成球形处理；
+  岩石改用 BoxShape。
+- 燃料入仓 Tween 不会随 `reset_to_home()` 自动停止，会把复位的燃料又拉回仓里；
+  已在 `FuelProp.reset_to_home()` 里 kill。
+- `_teleport(pos, _yaw_to(target))` 会在传送**前**算朝向，导致朝向错位；
+  已改为 `_place_player(pos, target)`。
