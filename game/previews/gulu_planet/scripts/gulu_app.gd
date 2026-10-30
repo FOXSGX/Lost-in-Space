@@ -360,7 +360,7 @@ func _build_gulu() -> void:
 	gulu.name = "MilkDragon"
 	gulu.position = DRAGON_HOME
 	gulu.rotation.y = DRAGON_HOME_YAW
-	var visual := load("res://scripts/milk_dragon_visual.gd").new() as Node3D
+	var visual := _make_dragon_visual()
 	visual.name = "Visual"
 	gulu.add_child(visual)
 	add_child(gulu)
@@ -375,6 +375,15 @@ func _build_gulu() -> void:
 	gulu.connect("fuel_snatched", _on_fuel_snatched)
 	gulu.connect("windup_locked", _on_windup_locked)
 	gulu.connect("pounce_ended", _on_pounce_ended)
+
+
+func _make_dragon_visual() -> Node3D:
+	# 有正式模型就用正式模型（外观层可互换），否则回退到程序化占位。
+	if ResourceLoader.exists("res://assets/characters/nailong_dl.glb"):
+		var model := load("res://scripts/milk_dragon_model.gd").new() as Node3D
+		if model != null:
+			return model
+	return load("res://scripts/milk_dragon_visual.gd").new() as Node3D
 
 
 func _build_blender_test_asset() -> void:
@@ -1059,6 +1068,14 @@ func _run_selftest() -> void:
 	_check(String(fuels[0].get("mode")) == "free" and String(fuels[1].get("mode")) == "free", "two fuels start on the ground", passes, failures)
 	var anchor: Node3D = gulu.call("mouth_anchor")
 	_check(anchor != null and fuels[2].global_position.distance_to(anchor.global_position) < 0.4, "dragon mouth anchor holds fuel", passes, failures)
+	# 新模型：确认嘴部挂点在头高、且在"脸"那一侧（模型朝 +Z，所以外观层要转 180°）
+	if anchor != null:
+		var rel := anchor.global_position - gulu.global_position
+		var flat := Vector3(rel.x, 0.0, rel.z)
+		var fwd := -gulu.global_transform.basis.z
+		var facing_dot := flat.normalized().dot(Vector3(fwd.x, 0.0, fwd.z).normalized()) if flat.length() > 0.01 else 0.0
+		_check(facing_dot > 0.85, "mouth anchor is in front of the dragon (dot=%.2f)" % facing_dot, passes, failures)
+		_check(rel.y > 1.10 and rel.y < 1.65, "mouth anchor at head height (y=%.2f m)" % rel.y, passes, failures)
 
 	# --- 挑衅 → 注意 → 靠近 ---
 	reset_preview()

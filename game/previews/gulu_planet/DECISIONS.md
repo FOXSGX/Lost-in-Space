@@ -237,3 +237,25 @@
 - 截图仍由 `--shots` 生成在 `user://gulu_shots`，但**必须复制到仓库 `docs/shots/`
   和 workspace 的可读目录**再交付，避免「Outside allowed folders」。
 - 我在当前环境仍看不到图片；视觉验收由用户完成，我只提供几何/屏幕坐标/亮度数据。
+
+# 第四轮：正式奶龙模型（2026-10-30 深夜）
+
+## D-35 采用 Sketchfab 的 nailong（CC-BY-4.0），替换程序化占位
+- 用户提供素材并明确「都授权，自己玩的项目」，因此不再走自建路线。
+- 模型：9,998 tri、1 材质、2048² 三张贴图、225 骨骼（Rigify 人形）、无动画。
+- 授权：CC-BY-4.0，必须在分发处署名 RED ANGRY BIRDS + Sketchfab 链接
+  （文本在 `assets/characters/nailong_dl_LICENSE.txt`）。
+  **CC-BY 只覆盖模型文件本身，不转移奶龙角色的 IP**；公开/商用发布前仍需确认。
+
+## D-36 模型只在 Blender 里改「绑定姿势」
+- T-pose 手臂放下 50° 后，必须**先 apply Armature 修改器、再 apply pose as rest**；
+  只做后者会把网格弹回 T-pose（本轮踩过：AABB 宽度仍是 1.68）。
+- 朝向/落地不烘进网格：GLB 仍是「朝 +Z、脚底 -0.072」，
+  由 `milk_dragon_model.gd` 外层转 180°、抬 0.072，模型文件保持可复用。
+
+## D-37 外观层可互换，行为层零改动
+- `milk_dragon_visual.gd`（程序化）与 `milk_dragon_model.gd`（正式模型）接口完全一致：
+  `mouth_anchor / set_look_target / set_look_point / set_snatch / set_carried_state /
+  set_behavior / set_pounce_result / ring_enabled`。
+- `gulu_app.gd::_make_dragon_visual()` 有 GLB 用 GLB，没有就回退占位。
+- 没有下颌骨 → 张嘴用头部下压 + 整体挤压代替；不为了让动画好看去改行为数值。

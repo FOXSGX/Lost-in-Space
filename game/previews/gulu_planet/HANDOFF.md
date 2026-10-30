@@ -3,7 +3,7 @@
 > 多日任务续点。新会话先读本文件，再读 `STATUS.md` / `TESTING.md`。
 > 每次推进后更新「当前状态 / 下一步 / 恢复命令」，不要只依赖聊天记录。
 
-最后更新：2026-10-30 22:10（GMT+8）
+最后更新：2026-10-30 23:25（GMT+8）
 
 ## 快照
 
@@ -11,9 +11,9 @@
 - 分支：`feature/gulu-planet-preview`
 - 最新提交：以 `git log -1 --oneline` 为准（本文件不绑定具体哈希）
 - 预览目录：`game/previews/gulu_planet`
-- 当前阶段：**环境美术第一步已完成，等用户看 `docs/shots/` 确认方向**（角色制作暂停）
-- 最新自测：`GULU SELFTEST SUMMARY passes=68 failures=0`（玩法规则未改）
-- 未 push、未 merge
+- 当前阶段：**正式奶龙模型已接进游戏**（外观层替换，玩法未改）；环境美术等方向确认
+- 最新自测：`GULU SELFTEST SUMMARY passes=70 failures=0`（玩法规则未改）
+- 已 merge 到 `main` 并 push
 
 ## ⚠ 能力限制
 
@@ -43,18 +43,40 @@
 - 自测：`passes=68 failures=0`（新增 2 条场景检查：环境网格数、夹臂数量）。
 - 截图 8 张在 `docs/shots/`；上一轮的 8 张移到 `docs/shots/round1_character_pass/`。
 
-## 角色制作（暂停）
+## 这一轮（2026-10-30 深夜）：换成正式奶龙模型
 
-- `assets/characters/nailong.glb` + `tools/blender/nailong.blend` 保留，不再改比例/五官/骨骼/动画。
-- 游戏内继续用程序化占位外观（`milk_dragon_visual.gd`），保证玩法可测。
-- 正式模型由用户之后提供；**不要把它当成本轮环境制作的阻碍**。
+用户提供了 `Downloads/nailong.zip`（Sketchfab "nailong" by RED ANGRY BIRDS，CC-BY-4.0），
+并明确「都授权，自己玩的项目」，所以直接把占位外观换成正式模型。
+
+- 素材：9,998 tri / 6,125 vert / 1 材质 / 2048² 贴图 ×3（baseColor / normal / metallicRoughness）
+  / 225 骨骼（Rigify 人形 biped）/ **0 动画** / 无下颅·尾巴·耳朵骨。
+- `tools/blender/build_nailong_dl.py` 做了三件事（可重跑）：
+  删掉 Sketchfab 的占位球、把 T-pose 手臂放下 50° 并 **烘成 rest pose**、7 层 UV 合 1 层，
+  导出 `assets/characters/nailong_dl.glb`（1.60 MB，贴图内嵌，无动画）。
+- 新外观层 `scripts/milk_dragon_model.gd`（接口与 `milk_dragon_visual.gd` 完全一致）：
+  - 模型朝 +Z、脚底 y=-0.072 → 外层绕 Y 转 180°、整体抬 0.072，脸朝 -Z 并踩地；
+  - 头部用 `DEF-spine.006` 骨骼做转头/低头，脖子 `DEF-spine.005` 跟一点，
+    手臂 `DEF-upper_arm.*` 做小摆动；腿骨不动（避免破坏接地）；
+  - 没有下颅骨，所以「张嘴」用 **头部下压 + 整体挤压** 代替，罐子仍挂 `MouthAnchor`；
+  - 上头不改贴图，只叠暖色（albedo_color 相乘）。
+- `gulu_app.gd` 改成 `_make_dragon_visual()`：GLB 在就用新外观，不在就回退程序化占位。
+- 自测新增两条：嘴部挂点在前方（dot=1.00）、高度 1.36 m → `passes=70 failures=0`。
+- 截图 8 张已按新模型重拍（`docs/shots/`）；模型四视图在 `docs/model/dl_nailong_posed_*.png`。
+- 授权文本：`assets/characters/nailong_dl_LICENSE.txt`（CC-BY-4.0，需署名）。
+  注意 CC-BY 只覆盖这个 3D 模型本身，不转移奶龙角色的 IP；公开发布前仍需确认。
+
+## 角色模型
+
+- 游戏内当前用的是**正式模型** `assets/characters/nailong_dl.glb`；
+  自建的静态模型 `assets/characters/nailong.glb` 与 `tools/blender/nailong.blend` 保留但不再使用。
+- 程序化占位 `milk_dragon_visual.gd` 仍保留，作为 GLB 缺失时的回退。
 
 ## 下一步（按优先级）
 
-1. **用户看 `docs/shots/` 的 8 张图**，确认整体方向（配色 / 形体 / 构图 / 装货口辨识度）。
-2. 只改他点出来的地方，仍不铺满小装饰。
-3. 方向确认后第二阶段：材质细化、装货反馈动画、窝区细节、燃料罐近景。
-4. 真人试玩：抢货是否恼人（`snatch_delay` / `snatch_distance`）。
+1. **用户看 `docs/shots/` 的 8 张图**：新模型有没有穿模/浮空/朝向错，头部动作会不会怪。
+2. 有问题就改外观层（`milk_dragon_model.gd`），**不要动 `milk_dragon.gd` 的行为**。
+3. 环境第二步（材质细化 / 装货反馈动画 / 窝区细节）等方向确认。
+4. 可选：给模型加下颅骨（现在张嘴是头部下压代替），再把 idle/蓄势/扑击做成真正的骨骼动画。
 
 ## 已知问题（玩法层）
 

@@ -1,14 +1,27 @@
 # STATUS — 奶龙星第一人称试玩预览
 
-最后更新：2026-10-30 22:10（GMT+8）
+最后更新：2026-10-30 23:25（GMT+8）
 分支：`feature/gulu-planet-preview`
 目录：`game/previews/gulu_planet/`（内部路径沿用上一轮）
 
 ## 当前阶段
 
-**环境美术第一步已完成（2026-10-30 晚），等用户看 `docs/shots/` 确认方向。**
-角色制作暂停：正式模型由用户之后提供，游戏内继续用占位外观。
-玩法已闭环（`passes=68 failures=0`），本轮**未改任何玩法规则**。
+**正式奶龙模型已接进游戏**（2026-10-30 深夜）——只换了外观层，玩法一行没改。
+环境美术第一步也已交付，等用户看 `docs/shots/` 确认方向。
+玩法自测 `passes=70 failures=0`。
+
+## 本轮（2026-10-30 深夜）—— 正式奶龙模型
+
+| 项 | 结果 |
+| --- | --- |
+| 来源 | `Downloads/nailong.zip`（Sketchfab "nailong" by RED ANGRY BIRDS，CC-BY-4.0） |
+| 网格 | 9,998 tri / 6,125 vert / 1 材质 / 2048² 贴图 ×3 |
+| 骨骼 | 225 根（Rigify 人形 biped），**0 动画**，无下颅/尾巴/耳朵骨 |
+| 处理 | 删占位球；T-pose 手臂放下 50° 并烘成 rest pose；7 层 UV → 1 层 |
+| 产物 | `assets/characters/nailong_dl.glb`（1.60 MB）+ `..._LICENSE.txt` |
+| 外观层 | `scripts/milk_dragon_model.gd`（与占位外观同接口，GLB 缺失时自动回退） |
+| 表演 | 转头/低头（DEF-spine.006）、脖子跟动、手臂小摆、蹲伏/前倾/挤压；无下颅开合 |
+| 自测 | `passes=70 failures=0`（新增：嘴部挂点正前方 dot=1.00、高度 1.36 m） |
 
 ## 本轮（2026-10-30 晚）—— 场景美术第一步
 

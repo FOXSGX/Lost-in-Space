@@ -1,0 +1,24 @@
+nailong — 3D model attribution
+================================
+
+Model: "nailong"
+Author: RED ANGRY BIRDS (https://sketchfab.com/ab6640473)
+Source: https://sketchfab.com/3d-models/nailong-1e1426b1e35f4b939ca5c1a039e7dd48
+License: CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
+
+Required credit text (keep it wherever this build is shared):
+
+  This work is based on "nailong"
+  (https://sketchfab.com/3d-models/nailong-1e1426b1e35f4b939ca5c1a039e7dd48)
+  by RED ANGRY BIRDS (https://sketchfab.com/ab6640473)
+  licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/).
+
+Local changes applied by tools/blender/build_nailong_dl.py:
+  - removed the placeholder icosphere shipped in the Sketchfab export
+  - T-pose arms lowered by 50 deg and baked into the rest pose
+  - 7 UV layers reduced to 1 (only the first is used by the material)
+  - exported as GLB with embedded textures, no animations
+
+Note: CC-BY-4.0 covers this 3D asset as published by the uploader. It does not
+transfer any rights to the underlying character IP. This project is a private
+course/practice preview; ask before any public or commercial release.
