@@ -1,0 +1,258 @@
+extends CharacterBody3D
+class_name SpaceEnemy3D
+
+# Only the frost caller opts in; other planets keep their existing combat rules.
+const FROST_WINDUP := 0.75
+const FROST_RECOVERY := 1.25
+const FROST_STRIKE_RADIUS := 1.6
+var frost_windup := 0.0
+var frost_recovery := 0.0
+var frost_strike_position := Vector3.ZERO
+var _strike_marker: MeshInstance3D
+
+var enemy_id := 0
+var display_name := "霜噬生物"
+var hint_text := "追踪热量 · 空格攻击"
+var _name_label: Label3D
+var health := 3
+var max_health := 3
+var move_speed := 1.8
+var attack_damage := 1
+var attack_timer := 0.0
+var _target_position := Vector3.ZERO
+var _has_target_position := false
+
+func setup(id: int, player_count: int = 1) -> void:
+    enemy_id = id
+    name = "Enemy3D_%d" % id
+    max_health = 4 + maxi((player_count - 1) / 2, 0)
+    health = max_health
+    move_speed = 3.05 + maxi(player_count - 1, 0) * 0.15
+    attack_damage = 1
+    _build_visual()
+
+func _enter_tree() -> void:
+    set_multiplayer_authority(1)
+
+func _ready() -> void:
+    collision_layer = 1
+    collision_mask = 2
+    var shape := CollisionShape3D.new()
+    var capsule := CapsuleShape3D.new()
+    capsule.radius = 0.45
+    capsule.height = 1.0
+    shape.shape = capsule
+    shape.position.y = 0.58
+    add_child(shape)
+
+func set_creature_label(next_name: String, next_hint: String) -> void:
+    display_name = next_name
+    hint_text = next_hint
+    if _name_label != null:
+        _name_label.text = "【%s】\n%s" % [display_name, hint_text]
+
+func _build_visual() -> void:
+    var body := MeshInstance3D.new()
+    var mesh := CapsuleMesh.new()
+    mesh.radius = 0.43
+    mesh.height = 0.9
+    body.position.y = 0.62
+    body.mesh = mesh
+    body.material_override = _material(Color("#ff5a62"))
+    body.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
+    add_child(body)
+    var eye := MeshInstance3D.new()
+    var eye_mesh := SphereMesh.new()
+    eye_mesh.radius = 0.14
+    eye_mesh.height = 0.28
+    eye.position = Vector3(0.0, 0.85, -0.38)
+    eye.mesh = eye_mesh
+    eye.material_override = _glow_material(Color("#ffea5c"))
+    add_child(eye)
+    for side in [-1.0, 1.0]:
+        var horn := MeshInstance3D.new()
+        var horn_mesh := CylinderMesh.new()
+        horn_mesh.top_radius = 0.02
+        horn_mesh.bottom_radius = 0.12
+        horn_mesh.height = 0.38
+        horn_mesh.radial_segments = 6
+        horn.position = Vector3(side * 0.28, 1.08, 0.0)
+        horn.rotation_degrees = Vector3(0.0, 0.0, side * -24.0)
+        horn.mesh = horn_mesh
+        horn.material_override = _material(Color("#b8414e"))
+        add_child(horn)
+    var warning_ring := MeshInstance3D.new()
+    var ring_mesh := TorusMesh.new()
+    ring_mesh.inner_radius = 0.62
+    ring_mesh.outer_radius = 0.68
+    ring_mesh.rings = 20
+    ring_mesh.ring_segments = 8
+    warning_ring.position.y = 0.08
+    warning_ring.mesh = ring_mesh
+    warning_ring.material_override = _glow_material(Color("#ff4858"))
+    add_child(warning_ring)
+    var danger_light := OmniLight3D.new()
+    danger_light.name = "EnemyGlow"
+    danger_light.light_color = Color("#ff5563")
+    danger_light.light_energy = 1.8
+    danger_light.omni_range = 3.2
+    danger_light.position.y = 0.8
+    add_child(danger_light)
+    var label := Label3D.new()
+    label.text = "【%s】\n%s" % [display_name, hint_text]
+    _name_label = label
+    label.position = Vector3(0.0, 1.85, 0.0)
+    label.font_size = 46
+    label.pixel_size = 0.011
+    label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+    label.modulate = Color("#ffe8a6")
+    label.outline_size = 10
+    label.outline_modulate = Color("#4a0a0f")
+    label.shaded = false
+    add_child(label)
+
+func _material(color: Color) -> StandardMaterial3D:
+    var material := StandardMaterial3D.new()
+    material.albedo_color = color
+    material.roughness = 0.8
+    return material
+
+func _glow_material(color: Color) -> StandardMaterial3D:
+    var material := StandardMaterial3D.new()
+    material.albedo_color = color
+    material.emission_enabled = true
+    material.emission = color
+    material.emission_energy_multiplier = 1.4
+    material.roughness = 0.38
+    return material
+
+func server_tick(delta: float, players: Dictionary, lure_position := Vector3.ZERO, lure_active := false, storm_active := false, goofy_lures: Array = [], frost_combat := false) -> Dictionary:
+    if players.is_empty():
+        return {"sync": false}
+    if frost_combat and frost_windup > 0.0:
+        velocity = Vector3.ZERO
+        frost_windup = maxf(frost_windup - delta, 0.0)
+        if frost_windup <= 0.0:
+            var leap := frost_strike_position - global_position
+            leap.y = 0.0
+            move_and_collide(leap)
+            var controller := get_parent() as Main3D
+            for value in players.values():
+                var victim := value as SpacePlayer3D
+                if victim == null or victim.downed:
+                    continue
+                var offset := victim.global_position - global_position
+                if Vector2(offset.x, offset.z).length() <= FROST_STRIKE_RADIUS and absf(offset.y) < 2.0:
+                    if controller != null:
+                        controller.damage_player(victim.peer_id, attack_damage)
+            frost_recovery = FROST_RECOVERY
+            sync_frost_attack.rpc(false, frost_strike_position)
+            sync_transform.rpc(global_position)
+        return {"sync": true}
+    if frost_combat and frost_recovery > 0.0:
+        frost_recovery = maxf(frost_recovery - delta, 0.0)
+        velocity = Vector3.ZERO
+        if frost_recovery <= 0.0:
+            sync_frost_attack.rpc(false, frost_strike_position, true)
+        return {"sync": false}
+    var selected_lure := lure_position
+    var has_lure := lure_active
+    var nearest_lure_distance := global_position.distance_to(lure_position) if lure_active else INF
+    for raw_position in goofy_lures:
+        var candidate := Vector3(raw_position)
+        var candidate_distance := global_position.distance_to(candidate)
+        if candidate_distance < nearest_lure_distance:
+            nearest_lure_distance = candidate_distance
+            selected_lure = candidate
+            has_lure = true
+    if has_lure:
+        var lure_direction := selected_lure - global_position
+        lure_direction.y = 0.0
+        if lure_direction.length() > 1.0:
+            velocity = lure_direction.normalized() * move_speed * (1.30 if storm_active else 1.15)
+            move_and_slide()
+        else:
+            velocity = Vector3.ZERO
+        if Engine.get_physics_frames() % 2 == 0:
+            sync_transform.rpc(global_position)
+            return {"sync": true}
+        return {"sync": false}
+    var nearest: SpacePlayer3D
+    var nearest_distance := INF
+    for value in players.values():
+        var player := value as SpacePlayer3D
+        if player == null or player.downed:
+            continue
+        var distance := global_position.distance_to(player.global_position)
+        # 霜噬生物会优先追踪携带热能电池、体温较高的目标，
+        # 让搬运路线成为需要队友掩护和临场判断的风险选择。
+        var heat_bias := float(player.carrying) * 3.0 + player.warmth * 1.2
+        var weighted_distance := distance - heat_bias
+        if weighted_distance < nearest_distance:
+            nearest_distance = weighted_distance
+            nearest = player
+    if nearest == null:
+        velocity = Vector3.ZERO
+        return {"sync": false}
+    var direction := nearest.global_position - global_position
+    direction.y = 0.0
+    var actual_distance := global_position.distance_to(nearest.global_position)
+    var storm_speed_scale := 1.32 if storm_active else 1.0
+    if frost_combat and actual_distance <= 2.8:
+        # Commit to the ground point, never follow a dodging player during windup.
+        frost_strike_position = nearest.global_position
+        frost_strike_position.y = global_position.y
+        frost_windup = FROST_WINDUP
+        velocity = Vector3.ZERO
+        sync_frost_attack.rpc(true, frost_strike_position)
+        return {"sync": true}
+    if actual_distance > 1.35:
+        velocity = direction.normalized() * move_speed * storm_speed_scale
+        move_and_slide()
+    else:
+        velocity = Vector3.ZERO
+        attack_timer -= delta
+        if attack_timer <= 0.0:
+            attack_timer = 0.72 if storm_active else 1.0
+            var controller := get_parent() as Main3D
+            if controller != null:
+                controller.damage_player(nearest.peer_id, attack_damage)
+    if Engine.get_physics_frames() % 2 == 0:
+        sync_transform.rpc(global_position)
+        return {"sync": true}
+    return {"sync": false}
+
+@rpc("authority", "reliable", "call_local")
+func sync_frost_attack(active: bool, target: Vector3, recovered := false) -> void:
+    if _strike_marker == null:
+        _strike_marker = MeshInstance3D.new()
+        var ring := TorusMesh.new()
+        ring.inner_radius = FROST_STRIKE_RADIUS - 0.14
+        ring.outer_radius = FROST_STRIKE_RADIUS
+        ring.rings = 32
+        ring.ring_segments = 8
+        _strike_marker.mesh = ring
+        _strike_marker.material_override = _glow_material(Color("#ffb347"))
+        add_child(_strike_marker)
+        _strike_marker.top_level = true
+    _strike_marker.global_position = target + Vector3(0, 0.12, 0)
+    _strike_marker.visible = active
+    if _name_label != null:
+        _name_label.text = "扑击蓄力 · 离开橙圈！" if active else "%s\n扑击后停顿 · 趁机反击" % display_name
+        if recovered:
+            _name_label.text = "%s\n靠近会扑击 · 留意橙圈" % display_name
+
+func take_damage(amount: int) -> bool:
+    health = maxi(health - amount, 0)
+    return health <= 0
+
+@rpc("authority", "unreliable_ordered", "call_remote")
+func sync_transform(next_position: Vector3) -> void:
+    if multiplayer.is_server():
+        return
+    _target_position = next_position
+    _has_target_position = true
+
+func _process(delta: float) -> void:
+    if not multiplayer.is_server() and _has_target_position:
+        global_position = global_position.lerp(_target_position, 1.0 - exp(-12.0 * delta))

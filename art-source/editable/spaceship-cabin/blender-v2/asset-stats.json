@@ -1,0 +1,10 @@
+{
+  "blender": "4.5.3 LTS",
+  "original_meshes": 634,
+  "original_triangles": 149572,
+  "editable_meshes": 911,
+  "runtime_meshes": 109,
+  "runtime_triangles": 217276,
+  "source": "D:\\Projects\\Lost in Space\\art-source\\editable\\spaceship-cabin\\blender-v2\\ship_hub.blend",
+  "runtime": "D:\\Projects\\Lost in Space\\game\\assets\\ship-hub\\ship_hub_blender_v2.glb"
+}
