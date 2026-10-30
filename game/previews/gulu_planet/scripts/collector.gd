@@ -153,8 +153,12 @@ func _build_intake() -> void:
 
 
 func _build_pips() -> void:
+	# 三格装货指示灯：装在舱门上沿的厚框上，远处靠"亮了几格"读数，不靠文字。
 	for index in range(3):
-		_pips.append(_box(Vector3(0.10, 0.24, 0.52), Vector3(13.94, 2.05, -1.5 + float(index) * 1.5), TRIM, false))
+		var z := -1.5 + float(index) * 1.5
+		_box(Vector3(0.08, 0.54, 0.54), Vector3(13.62, 3.62, z), INTAKE, false)
+		var lens := _box(Vector3(0.10, 0.34, 0.34), Vector3(13.54, 3.62, z), TRIM, false)
+		_pips.append(lens)
 
 
 func _update_pips() -> void:
@@ -174,7 +178,7 @@ func _process(delta: float) -> void:
 	_pulse += delta
 	_flash = maxf(0.0, _flash - delta * 2.2)
 	if _intake_material != null:
-		_intake_material.emission_energy_multiplier = 1.2 + 0.35 * sin(_pulse * 2.4) + _flash * 3.2
+		_intake_material.emission_energy_multiplier = 1.2 + 0.35 * sin(_pulse * 2.4) + _flash * 1.6
 
 
 func _material(color: Color, emission: float) -> StandardMaterial3D:

@@ -36,6 +36,7 @@ const CYAN := Color("#3fd8ff")
 var player: CharacterBody3D
 var gulu: CharacterBody3D
 var collector: Node3D
+var env_art: Node3D
 var blender_test_asset: Node3D
 var _lock_marker: Node3D
 var _lock_material: StandardMaterial3D
@@ -194,107 +195,11 @@ func _build_environment() -> void:
 
 
 func _build_field() -> void:
-	_add_static_box(Vector3(40.0, 0.5, 30.0), Vector3(0.0, -0.25, 0.0), GROUND, true)
-	# 地砖（两种灰绿交错 + 细缝），避免大片纯色地板发白发平。
-	for gx in range(-5, 5):
-		for gz in range(-4, 4):
-			var tile := BoxMesh.new()
-			tile.size = Vector3(3.84, 0.02, 3.64)
-			var tone := Color("#5c6f6b") if (gx + gz) % 2 == 0 else Color("#566966")
-			_add_mesh(tile, Vector3(float(gx) * 4.0, 0.005, float(gz) * 4.0), tone)
-	# 地面分区：装货口前的停机坪与两条搬运路线。
-	var pad := CylinderMesh.new()
-	pad.top_radius = 6.2
-	pad.bottom_radius = 6.2
-	pad.height = 0.04
-	_add_mesh(pad, Vector3(9.2, -0.02, 0.0), Color("#93a6a1"))
-	var pad_rim := TorusMesh.new()
-	pad_rim.inner_radius = 5.9
-	pad_rim.outer_radius = 6.1
-	_add_mesh(pad_rim, Vector3(9.2, 0.015, 0.0), TRIM)
-	for side in [-1.0, 1.0]:
-		for index in range(5):
-			var dash := BoxMesh.new()
-			dash.size = Vector3(0.9, 0.02, 0.16)
-			_add_mesh(dash, Vector3(9.2 + float(index) * 1.05 - 2.1, 0.02, side * 4.6), AMBER, 0.5)
-	# 南路（安全、绕远）：青绿导引条，从教学罐一直指到停机坪
-	for index in range(9):
-		var safe := BoxMesh.new()
-		safe.size = Vector3(0.7, 0.02, 0.20)
-		_add_mesh(safe, Vector3(-7.9 + float(index) * 1.98, 0.02, 4.4 - float(index) * 0.33), CYAN, 0.35)
-	# 北路（快、穿过奶龙地盘）：琥珀导引条
-	for index in range(8):
-		var risky := BoxMesh.new()
-		risky.size = Vector3(0.7, 0.02, 0.20)
-		_add_mesh(risky, Vector3(-6.0 + float(index) * 1.7, 0.02, -6.4 + float(index) * 0.68), AMBER, 0.35)
-
-	# 四周岩壁
-	_add_static_box(Vector3(40.0, 5.0, 0.8), Vector3(0.0, 2.5, -15.0), GROUND_DARK)
-	_add_static_box(Vector3(40.0, 5.0, 0.8), Vector3(0.0, 2.5, 15.0), GROUND_DARK)
-	_add_static_box(Vector3(0.8, 5.0, 30.0), Vector3(-20.0, 2.5, 0.0), GROUND_DARK)
-	_add_static_box(Vector3(0.8, 5.0, 30.0), Vector3(20.0, 2.5, 0.0), GROUND_DARK)
-
-	# 能挡视线、允许绕行的石堆。位置固定，便于重复试玩。
-	_rock(Vector3(2.2, 0.0, 6.2), Vector3(2.4, 2.2, 2.0), 0.3)
-	_rock(Vector3(4.8, 0.0, -3.6), Vector3(2.0, 1.8, 1.8), -0.5)
-	_rock(Vector3(-1.6, 0.0, 5.4), Vector3(2.6, 2.4, 2.0), 0.9)
-	_rock(Vector3(1.0, 0.0, -8.6), Vector3(3.0, 2.0, 2.0), -0.2)
-	_rock(Vector3(-11.0, 0.0, -2.0), Vector3(2.2, 2.6, 2.4), 0.6)
-
-	# 墙外的远景岩层，压住地平线，避免天空空荡荡。
-	for spot in [
-		Vector3(-26.0, 4.0, -22.0), Vector3(-4.0, 5.5, -30.0), Vector3(18.0, 3.5, -26.0),
-		Vector3(30.0, 6.0, -6.0), Vector3(26.0, 4.5, 20.0), Vector3(2.0, 6.5, 32.0),
-		Vector3(-22.0, 5.0, 24.0), Vector3(-32.0, 3.5, 4.0),
-	]:
-		var far := SphereMesh.new()
-		far.radius = 0.5
-		far.height = 1.0
-		far.radial_segments = 9
-		far.rings = 5
-		var far_size := Vector3(16.0, 13.0, 12.0) + Vector3(spot.y, spot.y, 0.0)
-		_add_mesh(far, spot, Color("#3f5457"), 0.0, far_size)
-
-	# 落地信标：给场景一个竖向参照
-	var beacon := CylinderMesh.new()
-	beacon.top_radius = 0.18
-	beacon.bottom_radius = 0.5
-	beacon.height = 2.6
-	_add_mesh(beacon, Vector3(-14.0, 1.3, -11.0), TRIM)
-	var beacon_light := OmniLight3D.new()
-	beacon_light.position = Vector3(-14.0, 2.8, -11.0)
-	beacon_light.light_color = CYAN
-	beacon_light.light_energy = 1.2
-	beacon_light.omni_range = 7.0
-	add_child(beacon_light)
-
-	# 若干货箱，给搬运路线一点遮挡
-	_add_static_box(Vector3(1.2, 1.2, 1.2), Vector3(6.2, 0.6, 5.2), Color("#b5865a"))
-	_add_static_box(Vector3(1.0, 1.0, 1.0), Vector3(6.6, 0.5, 6.5), Color("#9d7048"))
-	_add_static_box(Vector3(1.4, 0.9, 1.4), Vector3(-8.6, 0.45, 1.2), TRIM)
-
-
-func _rock(at: Vector3, size: Vector3, spin: float) -> void:
-	var mesh := SphereMesh.new()
-	mesh.radius = 0.5
-	mesh.height = 1.0
-	mesh.radial_segments = 10
-	mesh.rings = 6
-	var instance := _add_mesh(mesh, at + Vector3.UP * (size.y * 0.42), STONE, 0.0, size)
-	instance.rotation.y = spin
-	# 顶部浅色块，给岩石一点体积感，不至于是一颗灰球。
-	var cap := _add_mesh(mesh, at + Vector3.UP * (size.y * 0.74), Color("#a5b7b1"), 0.0, size * 0.72)
-	cap.rotation.y = spin + 0.4
-	var body := StaticBody3D.new()
-	body.collision_layer = 2
-	body.collision_mask = 0
-	body.position = at + Vector3.UP * (size.y * 0.42)
-	var shape := CollisionShape3D.new()
-	var box := BoxShape3D.new()
-	box.size = size * 0.92
-	shape.shape = box
-	body.add_child(shape)
-	add_child(body)
+	# 场景美术放到独立模块（scripts/nailong_environment.gd）。
+	# 本文件只做玩法对象；碰撞边界、装货判定 AABB 都不变。
+	env_art = load("res://scripts/nailong_environment.gd").new() as Node3D
+	env_art.name = "EnvironmentArt"
+	add_child(env_art)
 
 
 ## 蓄势锁定的地面标记：一出现就说明「这块地要被扑了」，比文字直观。
@@ -384,26 +289,32 @@ func _build_fuels() -> void:
 
 
 func _build_fuel_mesh(fuel: Node3D) -> void:
-	var body := BoxMesh.new()
-	body.size = Vector3(0.50, 0.70, 0.34)
-	_add_mesh_child(fuel, body, Vector3(0.0, 0.40, 0.0), AMBER)
-	var cap := CylinderMesh.new()
-	cap.top_radius = 0.09
-	cap.bottom_radius = 0.09
-	cap.height = 0.16
-	_add_mesh_child(fuel, cap, Vector3(0.15, 0.80, 0.0), Color("#d4dde2"))
-	var stripe := BoxMesh.new()
-	stripe.size = Vector3(0.52, 0.08, 0.36)
-	_add_mesh_child(fuel, stripe, Vector3(0.0, 0.34, 0.0), TRIM)
-	var handle := TorusMesh.new()
-	handle.inner_radius = 0.10
-	handle.outer_radius = 0.17
-	var handle_node := _add_mesh_child(fuel, handle, Vector3(-0.18, 0.70, 0.0), Color("#c9d6dc"))
+	# 三级可读性：远处看剪影（罐体 + 提手 + 阀），中景看加强筋与标签，近景看能量窗。
+	_add_mesh_child(fuel, _boxm(Vector3(0.52, 0.08, 0.38)), Vector3(0.0, 0.05, 0.0), TRIM)
+	_add_mesh_child(fuel, _boxm(Vector3(0.56, 0.46, 0.40)), Vector3(0.0, 0.31, 0.0), AMBER)
+	_add_mesh_child(fuel, _boxm(Vector3(0.50, 0.16, 0.36)), Vector3(0.0, 0.62, 0.0), Color("#e39338"))
+	_add_mesh_child(fuel, _boxm(Vector3(0.40, 0.10, 0.30)), Vector3(0.0, 0.74, 0.0), Color("#d4dde2"))
+	# 能量窗：正反两面都有，近距离才看得出的「能量部分」
+	for side in [-1.0, 1.0]:
+		_add_mesh_child(fuel, _boxm(Vector3(0.34, 0.34, 0.01)), Vector3(0.0, 0.42, side * 0.196), TRIM)
+		_add_mesh_child(fuel, _boxm(Vector3(0.30, 0.26, 0.02)), Vector3(0.0, 0.42, side * 0.205), CYAN, 1.3)
+	# 加强筋
+	for height in [0.14, 0.38, 0.56]:
+		_add_mesh_child(fuel, _boxm(Vector3(0.58, 0.035, 0.42)), Vector3(0.0, height, 0.0), TRIM)
+	# 接口：颈 + 阀体 + 阀轮
+	_add_mesh_child(fuel, _cylm(0.075, 0.075, 0.12), Vector3(0.13, 0.82, 0.0), Color("#c9d6dc"))
+	_add_mesh_child(fuel, _cylm(0.055, 0.055, 0.09), Vector3(0.13, 0.90, 0.0), TRIM)
+	_add_mesh_child(fuel, _torusm(0.055, 0.095), Vector3(0.13, 0.96, 0.0), Color("#c9d6dc"))
+	# 提手
+	var handle_node := _add_mesh_child(fuel, _torusm(0.10, 0.17), Vector3(-0.16, 0.86, 0.0), Color("#c9d6dc"))
 	handle_node.rotation.x = PI * 0.5
-	var ring := TorusMesh.new()
-	ring.inner_radius = 0.42
-	ring.outer_radius = 0.48
-	var ring_node := _add_mesh_child(fuel, ring, Vector3(0.0, 0.02, 0.0), AMBER, 1.7)
+	# 侧面标签
+	_add_mesh_child(fuel, _boxm(Vector3(0.20, 0.10, 0.02)), Vector3(-0.16, 0.48, 0.205), TRIM)
+	# 底座脚
+	for side in [-1.0, 1.0]:
+		_add_mesh_child(fuel, _boxm(Vector3(0.12, 0.06, 0.30)), Vector3(side * 0.18, 0.03, 0.0), TRIM)
+	# 地面光环（玩法用 base_ring：被抱起来时隐藏）
+	var ring_node := _add_mesh_child(fuel, _torusm(0.42, 0.48), Vector3(0.0, 0.02, 0.0), AMBER, 1.7)
 	fuel.set("base_ring", ring_node)
 	var collider := CollisionShape3D.new()
 	var shape := BoxShape3D.new()
@@ -418,6 +329,30 @@ func _build_fuel_mesh(fuel: Node3D) -> void:
 	glow.light_energy = 0.35
 	fuel.add_child(glow)
 	fuel.set("glow_light", glow)
+
+
+func _boxm(size: Vector3) -> BoxMesh:
+	var mesh := BoxMesh.new()
+	mesh.size = size
+	return mesh
+
+
+func _cylm(r_top: float, r_bottom: float, height: float) -> CylinderMesh:
+	var mesh := CylinderMesh.new()
+	mesh.top_radius = r_top
+	mesh.bottom_radius = r_bottom
+	mesh.height = height
+	mesh.radial_segments = 16
+	return mesh
+
+
+func _torusm(inner: float, outer: float) -> TorusMesh:
+	var mesh := TorusMesh.new()
+	mesh.inner_radius = inner
+	mesh.outer_radius = outer
+	mesh.rings = 24
+	mesh.ring_segments = 8
+	return mesh
 
 
 func _build_gulu() -> void:
@@ -872,6 +807,8 @@ func _on_fuel_collected(total: int, target: int) -> void:
 	_counter_label.text = "已装 %d / %d" % [loaded_count, target]
 	_feedback = "入仓确认！%d / %d" % [loaded_count, target]
 	_feedback_timer = 1.6
+	if env_art != null and is_instance_valid(env_art):
+		env_art.call("on_loaded", loaded_count)
 	if loaded_count >= target and not completed:
 		completed = true
 		_banner.visible = true
@@ -1071,6 +1008,12 @@ func _run_selftest() -> void:
 	_toggle_blender_test()
 	await get_tree().physics_frame
 	_check(not blender_test_asset.visible, "F4 hides Blender test asset again", passes, failures)
+
+	# --- 场景美术模块 ---
+	var env_meshes: Array = env_art.find_children("*", "MeshInstance3D", true, false) if env_art != null else []
+	_check(env_art != null and env_meshes.size() > 150, "environment art module built (%d meshes)" % env_meshes.size(), passes, failures)
+	var arms: Array = env_art.get("_clamp_arms") if env_art != null else []
+	_check(arms.size() == 2, "loading-bay clamp arms present (%d)" % arms.size(), passes, failures)
 
 	# --- 音效资源已导入 ---
 	var sfx_players := _sfx.get("_players") as Dictionary
@@ -1298,77 +1241,81 @@ func _run_shots() -> void:
 	DirAccess.make_dir_recursive_absolute(_shot_dir)
 	await _wait(1.0)
 
-	# 01 开场：出生点同时看得见燃料、奶龙、装货口
+	# 01 出生点：燃料、奶龙、装货口同屏（验收项 1）
 	_teleport(SPAWN, SPAWN_YAW)
-	await _wait(0.6)
-	await _shot("01_opening_three_way.png")
+	await _wait(0.7)
+	await _shot("01_spawn_fuel_dragon_bay.png")
 
-	# 02 抱起第一罐（教学罐）朝船头走
+	# 02 搬运途中：抱着教学罐走在中场，能看清通路（验收项 2）
 	_place_player(FUEL_HOMES[0] + Vector3(0.9, 0.02, 0.5), Vector3(13.0, 0.0, 0.0))
 	await _wait(0.3)
 	_press_interact()
 	await _wait(0.3)
 	Input.action_press("move_up")
-	await _wait(0.6)
+	await _wait(0.9)
 	Input.action_release("move_up")
 	await _wait(0.2)
-	await _shot("02_carry_first_can.png")
+	# 换到一个能同时看见「通路 + 装货口 + 奶龙凑过来」的站位
+	_place_player(Vector3(-2.0, 0.02, -0.8), Vector3(12.0, 1.2, 0.0))
+	await _wait(0.25)
+	_press_provoke()
+	await _wait(0.55)
+	await _shot("02_carry_midfield.png")
 
-	# 03 它看见你手里的燃料（凑过来盯住）
+	# 03 奶龙看见你手里的燃料，凑过来
 	reset_preview()
 	_place_player(Vector3(3.2, 0.02, -4.2), DRAGON_HOME)
 	await _wait(0.25)
 	_press_interact()
-	await _wait(0.32)
-	await _shot("03_dragon_sees_your_fuel.png")
-
-	# 04 它叼着燃料、压低身体准备扑击
-	reset_preview()
-	_place_player(Vector3(5.6, 0.02, -2.5), DRAGON_HOME)
-	await _wait(0.3)
-	_press_provoke()
-	await _wait(0.8)
-	_press_provoke()
-	await _await_state("蓄势", 4.0)
 	await _wait(0.45)
-	await _shot("04_dragon_windup_with_fuel.png")
+	await _shot("03_dragon_approach.png")
 
-	# 05 扑空抬头 + 燃料落入收集仓
+	# 04 舱口前：蓄势、躲避区、燃料还挂在嘴上（验收项 3）
 	reset_preview()
 	_place_player(Vector3(9.2, 0.02, 0.0), DRAGON_HOME)
 	await _wait(0.3)
 	_press_provoke()
-	await _wait(0.8)
+	await _wait(0.85)
 	_press_provoke()
 	await _await_state("蓄势", 4.0)
+	await _wait(0.4)
+	await _shot("04_bay_front_windup.png")
+
+	# 05 侧移躲开之后把镜头转向舱口，抓燃料飞行中的一帧
 	Input.action_press("move_right")
-	await _wait(1.1)
+	await _wait(0.9)
 	Input.action_release("move_right")
-	await _await_state("恢复", 2.0)
-	_place_player(Vector3(11.9, 0.02, 7.4), Vector3(11.9, 0.7, 0.0))
+	var guard := 0
+	while String(fuels[2].get("mode")) != "thrown" and guard < 200:
+		await _wait(0.02)
+		guard += 1
+	_place_player(Vector3(6.0, 0.02, 2.6), Vector3(13.5, 1.2, 0.0))
+	await _wait(0.10)
+	await _shot("05_fuel_in_flight.png")
+
+	# 06 入仓反馈：夹臂 + 三格指示灯 + 舱内打光（抓到入仓那一拍）
+	guard = 0
+	while loaded_count < 1 and guard < 300:
+		await _wait(0.02)
+		guard += 1
+	_place_player(Vector3(9.6, 0.02, 4.8), Vector3(13.4, 1.7, 0.0))
 	await _wait(0.12)
-	await _shot("05_miss_fuel_into_bay.png")
+	await _shot("06_bay_load_feedback.png")
 
-	# 06 入仓确认 / 指示灯
-	await _wait(1.0)
-	await _shot("06_bay_feedback.png")
-
-	# 07 装货口全景
+	# 07 窝区近景：压扁的货箱、拖痕、散落包装（验收项 4）
 	reset_preview()
-	_place_player(Vector3(7.6, 0.02, 3.6), Vector3(14.0, 0.0, 0.0))
-	await _wait(0.5)
-	await _shot("07_loading_bay_wide.png")
+	_place_player(Vector3(4.9, 0.02, 0.4), Vector3(1.0, 0.6, -2.6))
+	await _wait(0.6)
+	await _shot("07_nest_closeup.png")
 
-	# 08 第三人称：玩家模型与其他星球同源
-	var toggle := InputEventAction.new()
-	toggle.action = "inspect_first_person"
-	toggle.pressed = true
-	player.call("_unhandled_input", toggle)
-	await _wait(0.8)
-	await _shot("08_third_person_player_model.png")
+	# 08 场地全景：装货口—搬运场地—窝，一次看全
+	_place_player(Vector3(-6.5, 0.02, 8.4), Vector3(8.0, 1.0, -2.0))
+	await _wait(0.5)
+	await _shot("08_yard_wide.png")
 
 	print("GULU SHOTS dir=%s" % ProjectSettings.globalize_path(_shot_dir))
 	get_tree().quit(0)
+
 
 func _shot(file_name: String) -> void:
 	RenderingServer.force_draw()

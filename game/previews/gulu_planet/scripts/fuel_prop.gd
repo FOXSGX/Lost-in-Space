@@ -172,7 +172,7 @@ func is_available_for_dragon() -> bool:
 
 
 func reset_to_home() -> void:
-	var intake_tween: Variant = get_meta("intake_tween", null)
+	var intake_tween: Variant = get_meta("intake_tween") if has_meta("intake_tween") else null
 	if intake_tween != null and intake_tween is Tween and (intake_tween as Tween).is_valid():
 		(intake_tween as Tween).kill()
 	set_meta("intake_tween", null)
