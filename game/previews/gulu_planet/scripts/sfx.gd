@@ -1,37 +1,25 @@
 extends Node
 class_name GuluSfx
 
-## 极简音效层：5 个短音，全部由 tools/audio/make_sfx.py 本地合成（无第三方素材）。
-## 每种音有最短间隔，避免连续状态切换时变成噪音。
+## 极简音效层：3 个短音，全部由 tools/audio/make_sfx.py 本地合成（无第三方素材）。
+## 每种音有最短间隔，避免连续触发时变成噪音。
 
 const STREAMS := {
-	"notice": "res://assets/audio/dragon_notice.wav",
-	"windup": "res://assets/audio/dragon_windup.wav",
-	"release": "res://assets/audio/fuel_release.wav",
+	"kick": "res://assets/audio/ball_kick.wav",
+	"block": "res://assets/audio/dragon_block.wav",
 	"loaded": "res://assets/audio/fuel_loaded.wav",
-	"chomp": "res://assets/audio/dragon_chomp.wav",
-	"snatch_warn": "res://assets/audio/dragon_snatch_warn.wav",
-	"stunned": "res://assets/audio/dragon_stunned.wav",
 }
 
 const MIN_INTERVAL := {
-	"notice": 0.45,
-	"windup": 0.9,
-	"release": 0.5,
+	"kick": 0.12,
+	"block": 0.35,
 	"loaded": 0.25,
-	"chomp": 0.6,
-	"snatch_warn": 1.4,
-	"stunned": 1.6,
 }
 
 const VOLUME_DB := {
-	"notice": -9.0,
-	"windup": -11.0,
-	"release": -7.0,
+	"kick": -6.0,
+	"block": -8.0,
 	"loaded": -6.0,
-	"chomp": -9.0,
-	"snatch_warn": -8.0,
-	"stunned": -7.0,
 }
 
 var _players: Dictionary = {}
@@ -42,6 +30,7 @@ func _ready() -> void:
 	for key in STREAMS:
 		var path: String = STREAMS[key]
 		if not ResourceLoader.exists(path):
+			push_warning("音效缺失：%s" % path)
 			continue
 		var stream := load(path) as AudioStream
 		if stream == null:
@@ -59,7 +48,7 @@ func play(key: String) -> void:
 	if player == null:
 		return
 	var now := Time.get_ticks_msec()
-	var interval := int(float(MIN_INTERVAL.get(key, 0.4)) * 1000.0)
+	var interval := int(float(MIN_INTERVAL.get(key, 0.3)) * 1000.0)
 	if now - int(_last_ms.get(key, -100000)) < interval:
 		return
 	_last_ms[key] = now

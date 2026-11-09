@@ -1,6 +1,6 @@
-# TESTING — 奶龙星第一人称试玩预览
+# TESTING — 奶龙星 · 射门试玩
 
-最后更新：2026-11-10 00:5x（GMT+8）
+最后更新：2026-11-10
 
 ## 0. 启动
 
@@ -8,112 +8,97 @@
 $godot = "C:\Users\31798\Downloads\迷失太空\迷失太空\tools\godot-4.7.2\Godot_v4.7.2-stable_win64.exe"
 $preview = "C:\Users\31798\Documents\GitHub\Lost-in-Space-gulu\game\previews\gulu_planet"
 
-& $godot --path $preview                            # 试玩
 & $godot --headless --path $preview -- --selftest   # 自动检查
-& $godot --path $preview -- --shots                 # 截图到 user://gulu_shots
-& $godot --path $preview -- --record                # 录像帧到 user://gulu_record
-python tools\record_video.py "<帧目录>" docs\record\gulu_snatch_loop.mp4
+& $godot --path $preview                            # 试玩
+& $godot --path $preview -- --shots                 # 截图 → user://gulu_shots
+& $godot --path $preview -- --record                # 录像帧 → user://gulu_record
+python tools\record_video.py "<帧目录>" docs\record\gulu_kick_loop.mp4
 ```
 
-新增音效/贴图后第一次跑前先 `& $godot --headless --path $preview --import`，
-否则 `ResourceLoader.exists()` 会给旧值（本轮踩过：5/7 个音效）。
-
 入口 `gulu_planet.tscn`，默认第一人称。
+**新增音效/贴图后先跑一次** `& $godot --headless --path $preview --import`。
 
 ## 1. 自动检查（headless）
 
 ```
-GULU SELFTEST SUMMARY passes=81 failures=0      ← 2026-11-10 00:5x，退出码 0
+GULU SELFTEST SUMMARY passes=35 failures=0      ← 2026-11-10，退出码 0
 ```
 
 覆盖：
 
-- 视角四项（眼高 1.600 / FOV 74.0 / near 0.05 / 玩家缩放 1.0）、第三人称切换与 FOV 复原
-- 玩家模型复用共享皮肤（67 mesh）、Blender GLB 管线（F4，4 mesh）、5 个音效流已导入
-- 移动 5.22 m、外墙碰撞
-- 起始状态：奶龙叼第三罐、前两罐在地面、嘴部挂点 0.4 m 内
-- 挑衅：注意 / 靠近 / 距离缩短 / 叼货时仍可挑衅 / 隔岩拒绝 / 冷却不叠加
-- **远距离激怒后先靠近再蓄势**（`agitated dragon closes in, then winds up`）
-- **蓄势时地面出现锁定红圈**（位置误差 < 0.4 m）
-- 侧移躲开 / 离开锁定点 / **借力投货入仓 loaded=1**
-- 入仓只计一次（重复 consume 不叠加）
-- 拾取 / 关闭碰撞 / 跟随 / 放下 / 恢复碰撞 / **抱进舱口自动入仓**
-- 静止被扑命中 / 被扑掉手上的燃料
-- **舱内挑衅被拒绝**（agitation 不增加，提示含“装货口”）
-- **看见你抱货 → 注意**、**贴太近会抢走燃料**
-- 找燃料（放下嘴里的货后会自己去叼）
-- 完成 3/3 + 横幅；R 重开（位置、第一人称、奶龙、计数、燃料、挂点）
-- 调试面板 + 状态环只在 F3 出现
-- **抢货不能隔墙**（临时 6 m 宽墙黑盒验证）、**刚捡起 1.1 s 内不被抢**、
-  **抢货会先发 `snatch_warning` 预兆**
-- **扑空后进入 0.85 s 呆滞**，且视线落在装货口（±₂ m）
-- **投出的燃料飞行中高亮环可见**（`thrown` 期间 `base_ring.visible`）
-- **绕行线有一处遮挡，但不整条安全**（两条射线：一条被挡、一条通）
-
-已知无害告警：退出时 `2 ObjectDB instances were leaked`、`1 resources still in use at exit`。
+- 控制器：默认第一人称、眼高 1.600、FOV 74、near 0.05、WASD 位移 > 2 m
+- 首屏：球 / 奶龙 / 装货口 三个 `unproject_position` 都在 1280×800 内
+- 旧玩法已移除：`provoke` 动作不存在、HUD 只有一句踢球提示
+- **远距离踢不到**（6 m 外 `_try_kick()` 返回 false，球速 0）
+- **近距离可踢**：初速 15 m/s，方向与镜头夹角 < 25°
+- **减速**（12.0 → 4.4 m/s）、**停止**、**停球后可再踢**
+- **边界反弹**：朝墙踢，`velocity.z` 由正变负
+- **奶龙拦直线射门**：球被弹回，且从未到达 `x ≥ 12.4`
+- **不会连击**（1.6 s 内 1 次拦球）、**不会压死球**（球心距离 > 0.75 或仍在动）
+- **打空当能进球**（`loaded=1`）
+- **门框外侧不计分**、**同一颗球不会计两次**
+- **卡球自救**（装货口侧袋停 3.5 s 后被放回场内）
+- **完成横幅**、**R 重置球/奶龙/比分**、**连续重置安全**
+- 资源：3 个音效已导入、奶龙骨架存在、模型保持 1.0 缩放且身体不离地
 
 ## 2. 窗口验证（真实渲染）
 
-`--shots` 会打印 `SHOTMETA`（奶龙/玩家/飞行中燃料的屏幕坐标、状态、计数），截图存
-`user://gulu_shots`，本次已复制到 `docs/shots/`（10 张，1280×800）。
+`--shots` 打印 `SHOTMETA`（奶龙/球的屏幕坐标、状态、球速），截图在 `user://gulu_shots`，
+本次复制到 `docs/shots/`（7 张，1280×800）。
 
 ```
-01_spawn_fuel_dragon_bay   dragon(308,424) 在屏内  fuels=free,free,dragon
-02_carry_midfield          dragon(298,527)         状态=靠近
-03_dragon_approach         dragon(640,505)         状态=注意
-04_bay_front_windup        dragon(640,469)         状态=蓄势 holding=true
-05_fuel_in_flight          dragon(448,475) + 燃料(604,422) 状态=恢复 thrown
-06_bay_load_feedback       loaded=1                状态=恢复
-07_nest_closeup            窝区近景（新增压瘪燃料罐）
-08_yard_wide               场地全景（车辙/铜钉/货箱垤）
-09_snatch_telegraph        dragon(640,564)         状态=靠近 fuels=free,player,free
-10_miss_dazed              dragon(241,500)         状态=恢复 thrown
+01_spawn_ball_dragon_goal  dragon(515,416) ball(341,499)  state=待机
+02_near_ball               dragon(710,420) ball(617,663)
+03_kick_moment             dragon(604,421) ball(589,582)  ball_speed=13.1
+04_keeper_block            dragon(643,518) ball(393,752)  state=拦球
+05_goal_loaded             dragon(274,474) ball(660,505)  loaded=1
+06_yard_wide               dragon(697,418) ball(734,412)  loaded=1
+07_keeper_closeup          dragon(426,539) ball(20,770)
 ```
 
-亮度（`tools/inspect_shot.py`）：mean 0.41–0.55，过曝 >0.94 在 2–6%。
-`09` 里奶龙离镜头只有 1.4 m，头部可能贴近屏幕下沿——**这是待用户看图确认的一项**。
+亮度（`tools/inspect_shot.py`）：以实际输出为准；本轮未做色调改动，沿用上一轮参数
+（mean 约 0.42–0.52，过曝 < 6%）。
 
-录像：`--record` → 154 帧 @8fps → `docs/record/gulu_snatch_loop.mp4`（~700 KB）。
-**这是脚本驱动，不是真人操作**；只能证明流程完整、反馈能看见，不能代替手感评价。
-
-**历史轮次实际踩到并修掉的画面问题**（留档）：
-- 天空被雾整片染成浅灰（`fog_sky_affect` 默认 1.0）→ 改 ProceduralSky，过曝从 10.4% 降到 0.5%
-- 地面圆环全都是竖着的（TorusMesh 默认就在 XZ 平面，多余旋转）→ 去掉 `rotation.x`
-- 抱着的燃料带 0.96 m 光环 + 0.35 强度灯 → 半个屏幕发琥珀色 → 光环仅在落地时显示、灯调到 0.10
-- 新增 wav 后未重新导入 → `ResourceLoader.exists()` 返回假 → 先跑 `--import`
+录像：`--record` → 93 帧 @8fps → `docs/record/gulu_kick_loop.mp4`（约 530 KB）。
+流程是「走到球边 → 第一脚被拦 → 换到侧面 → 第二脚进球 → 重开」，
+**脚本驱动（`Input.action_press` + 精确站位），不是真人操作**。
 
 ## 3. 未验证
 
-- **真人手动操作**：没有真人完整玩过；手感、抢货是否恼人、乐趣都未被真人确认。
-- **图像人工审阅**：本环境无法显示图片，构图结论来自屏幕坐标断言 + 类别图 + 亮度统计。
-- 声音听感（只验证流已加载与播放调用）。
-- 多人（无网络代码）。
+- **真人手动试玩**：手感、难度、乐趣都没被真人确认。
+- **图像人工审阅**：本环境看不到图片；构图结论来自屏幕坐标与像素统计。
+- 声音听感（只验证流已加载、播放调用发生）。
+- 球在极端角度下的多次反弹是否会有肉眼可见抖动。
 
 ## 4. 五分钟试玩脚本
 
-1. **0:00** 先别动：能看到脚前那罐、中间的奶龙、右边的装货口吗？三者关系清楚吗？
-2. **0:20** 按 E 抱起脚前那罐，沿青色地标走到船头，走进装货口。计数变 1/3 了吗？
-   奶龙来抢了吗？（这一罐应该**不会**被抢，是教学）
-3. **1:20** 去拿北边那罐（奶龙窝旁）。抱起后它应该有反应：转头看你、走过来。
-   站住不动 1 秒试试 —— 会被抢走吗？被抢后它嘴里的罐子还能骗回来吗？
-4. **2:20** 站到装货口前约 4 米，按 Q。看它靠近、压低身体、脚边出现红圈 → **侧移出圈**。
-   燃料进仓了吗？红圈出现那一刻你知道要躲吗？
-5. **3:20** 故意站太远（离舱口 8 米外）再来一次，看燃料落在哪儿，捡回来重试。烦不烦？
-6. **4:00** 被扑一次（站着不动）。知道自己掉了什么、还有多久能捡吗？
-7. **4:30** 装满 3/3 → 看“返航准备完成” → 按 R。重开有没有残留？
+1. **0:00** 出生点：能同时看到球、奶龙、装货口吗？球够不够显眼？
+2. **0:20** 走近球，左键踢一脚。踢得动吗？方向跟你瞄的一致吗？
+3. **0:50** 正面再踢一脚，看奶龙横移拦截。它拦得「像活的」还是「瞬移」？
+4. **1:30** 绕到侧面，对着空当踢。进得去吗？进不去是太远、太偏还是被拦？
+5. **2:30** 故意踢到墙上：反弹自然吗？球会不会卡在角落？
+6. **3:10** 进一球：看到「燃料已装载」和夹臂/灯带了吗？
+7. **3:40** 按 R：球、奶龙、比分都回来了吗？连按几次 R 会不会残留？
+8. **4:20** 用 Tab 切第三人称再切回来，确认镜头没被本轮改动弄坏。
 
 ### 试玩后回答
 
-1. 你理解为什么挑衅它吗？（它是障碍，也是工具）
-2. 自己搬和骗它送，两种都有用吗？哪一种更划算？
-3. 失误后知道原因吗？愿意再试吗？
-4. 哪个角色反应最有趣？哪段等待最无聊？
+1. 你第一次踢球时，知不知道要瞄哪儿？
+2. 奶龙拦球的成功率大概几成？太难还是太软？
+3. 输了/被拦了，你知道下一步该怎么做吗（换边、靠近、等它移开）？
+4. 进球那一下的反馈（声音/灯/横幅）够不够明确？
 
 ## 5. 已踩过的坑
 
 - PowerShell `Get-Content/Set-Content` 会把 UTF-8 中文源码写坏（换行被吞 → 解析失败）。
-  改脚本一律用编辑器/写入工具。**例外**：如果显式 `-Encoding UTF8` 读写，可安全往返。
+  改脚本一律用编辑器/写入工具；必须用 PowerShell 时显式 `-Encoding UTF8`。
 - Jolt 不支持非均匀缩放的 SphereShape（岩石改 BoxShape）。
-- 燃料入仓 Tween 会把已复位的燃料又拉回仓里 → `reset_to_home()` 里 kill。
-- `_teleport(pos, _yaw_to(target))` 会在传送前算朝向 → 改用 `_place_player(pos, target)`。
-- 注释行末尾用 Tab 接 `_check(...)` 会把检查吞进注释（本轮发现 1 处，已修）。
+- 装货口入口原来有 0.22 m 门槛：**球滚不进去**（旧玩法需要它挡燃料）。本轮改成贴地标线。
+- 装货口两侧接货斜面原来在 z ±2.45（正在球门口内），会把必进球弹回来 → 外移到 ±2.95。
+- 新增 wav 后未 `--import`：`ResourceLoader.exists()` 返回假，音效只认到 5 个。
+- 第一人称相机是**全局旋转**（`camera.global_rotation = (-pitch, yaw, 0)`），
+  改玩家身体朝向不影响它；脚本里要改视线必须写 `_camera_yaw` / `_camera_yaw_target`。
+  但只改镜头不改身体时，控制器会在移动中把镜头拉回身体朝向 —— 自动化里两者一起写。
+- `unproject_position` 对位于相机背后的点会报错并返回 (0,0)：先 `is_position_behind` 再取坐标。
+- GDScript 的 lambda 对局部变量是**值捕获**；要跨 lambda 回传结果用 `[false]` 数组。
+- 编辑工具里 `oldText` 带尾部换行、`newText` 不带，会把下一行拼到上一行（本轮踩到 3 次）。

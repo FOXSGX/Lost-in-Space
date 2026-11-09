@@ -9,8 +9,8 @@
 | --- | --- | --- | --- |
 | **奶龙静态模型（本轮）** | `assets/characters/nailong.glb`、`tools/blender/nailong.blend` | 本仓库 `tools/blender/build_nailong.py` 程序化建模（Blender 4.5.15） | 随项目；未使用任何第三方模型/贴图 |
 | 模型预览图 | `docs/model/nailong_{front,side,back,three_quarter,first_person}.png` | 同脚本 Cycles 渲染 | 随项目 |
-| 5 个短音效 | `assets/audio/*.wav` | 本仓库脚本 `tools/audio/make_sfx.py` 用 Python 标准库合成（正弦/噪声 + 包络） | 随项目；无第三方素材 |
-| 奶龙旧占位外观 | `scripts/milk_dragon_visual.gd` | 程序化生成（球体/圆柱/圆环），**本轮起仅作为未替换时的回退** | 随项目；非官方模型 |
+| 3 个短音效 | `assets/audio/*.wav` | 本仓库脚本 `tools/audio/make_sfx.py` 用 Python 标准库合成（正弦/噪声 + 包络） | 随项目；无第三方素材 |
+| 能源球 | `scripts/energy_ball.gd` | 程序化几何（球壳 + 发光核心 + 经线框 + 赤道灯带） | 随项目 |
 | 装货口与飞船 | `scripts/collector.gd` | 程序化方块/圆柱拼装，配色参考本作飞船内部 | 随项目 |
 | 场地、岩石、燃料、货箱 | `scripts/gulu_app.gd` | 程序化几何 | 随项目 |
 | 截图 | `docs/shots/*.png` | 本机 Godot 4.7.2 窗口渲染 | 随项目（含占位角色） |
@@ -19,11 +19,9 @@
 
 | 文件 | 用途 | 时长 |
 | --- | --- | --- |
-| `dragon_notice.wav` | 奶龙注意到你 | 0.20 s |
-| `dragon_windup.wav` | 蓄势预警 | 0.55 s |
-| `fuel_release.wav` | 张嘴 / 燃料脱口 | 0.40 s |
-| `fuel_loaded.wav` | 入仓确认 | 0.45 s |
-| `dragon_chomp.wav` | 叼走燃料 | 0.18 s |
+| `ball_kick.wav` | 踢球（低频咚 + 摩擦） | 0.16 s |
+| `dragon_block.wav` | 奶龙拦球（闷响） | 0.24 s |
+| `fuel_loaded.wav` | 入仓确认（两声上行） | 0.45 s |
 
 重新生成：
 

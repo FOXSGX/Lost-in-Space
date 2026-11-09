@@ -1,9 +1,10 @@
-"""生成奶龙星试玩用的短音效（纯 stdlib，无第三方素材）。
+"""生成奶龙星射门试玩用的短音效（纯 stdlib，无第三方素材）。
 
 音色全部由正弦/噪声合成，来源为本仓库脚本，可直接复现：
     python make_sfx.py <输出目录>
 
 输出：22050 Hz / 单声道 / 16-bit PCM WAV。
+本轮只保留三个：踢球、拦球、入仓确认。
 """
 import math
 import os
@@ -40,66 +41,33 @@ def make(name, seconds, fn):
     print("wrote %s (%d bytes)" % (path, os.path.getsize(path)))
 
 
-def notice(t, total):
-    freq = 340.0 + 260.0 * (t / total) ** 0.7
-    env = envelope(t, total, 0.008, 0.09)
-    return 0.42 * env * math.sin(2 * math.pi * freq * t)
+def ball_kick(t, total):
+    # 踢球：低频“咚” + 鞋面摩擦的短噪声，0.16 s 内收干净
+    thump = math.sin(2 * math.pi * (95.0 - 30.0 * (t / total)) * t)
+    click = random.uniform(-1.0, 1.0) * max(0.0, 1.0 - t / 0.03)
+    env = envelope(t, total, 0.002, 0.08)
+    return 0.46 * env * (0.9 * thump + 0.5 * click)
 
 
-def windup(t, total):
-    freq = 110.0 + 130.0 * (t / total)
-    trem = 0.6 + 0.4 * math.sin(2 * math.pi * 11.0 * t)
-    env = envelope(t, total, 0.05, 0.18)
-    return 0.34 * env * trem * math.sin(2 * math.pi * freq * t)
-
-
-def release(t, total):
-    # 气流噪声 + 下滑音，模拟“张嘴、货飞出去”
-    noise = random.uniform(-1.0, 1.0) * max(0.0, 1.0 - t / total) ** 2
-    freq = 520.0 - 300.0 * (t / total)
-    env = envelope(t, total, 0.004, 0.20)
-    return 0.30 * env * (0.75 * noise + 0.55 * math.sin(2 * math.pi * freq * t))
+def dragon_block(t, total):
+    # 拦球：更低更闷的一记，加一点身体摩擦
+    thud = math.sin(2 * math.pi * (150.0 - 60.0 * (t / total)) * t)
+    rustle = random.uniform(-1.0, 1.0) * 0.35 * max(0.0, 1.0 - t / total)
+    env = envelope(t, total, 0.004, 0.12)
+    return 0.34 * env * (0.8 * thud + rustle)
 
 
 def loaded(t, total):
-    # 两声上行提示音，明确“入仓确认”
+    # 入仓确认：两声上行提示音
     first = math.sin(2 * math.pi * 660.0 * t) if t < 0.13 else 0.0
     second = math.sin(2 * math.pi * 990.0 * max(0.0, t - 0.13)) if t >= 0.13 else 0.0
     env = envelope(t, total, 0.006, 0.16)
     return 0.26 * env * (first + second)
 
 
-def chomp(t, total):
-    noise = random.uniform(-1.0, 1.0)
-    env = math.exp(-t * 26.0)
-    return 0.30 * env * (0.6 * noise + 0.7 * math.sin(2 * math.pi * 150.0 * t))
-
-
-def snatch_warn(t, total):
-    # 抢货预兆：低吼下滑 + 一点气声，短到不会拖慢节奏
-    freq = 126.0 - 46.0 * (t / total)
-    env = envelope(t, total, 0.02, 0.10)
-    growl = 0.72 * math.sin(2 * math.pi * freq * t)
-    growl += 0.28 * math.sin(2 * math.pi * freq * 2.02 * t)
-    air = 0.10 * random.uniform(-1.0, 1.0)
-    return 0.34 * env * (growl + air)
-
-
-def stunned(t, total):
-    # 扑空后的「咕？」：一声上翘滑音，带轻微颤音，像愣住
-    freq = 300.0 + 190.0 * (t / total)
-    wobble = math.sin(2 * math.pi * 9.0 * t) * 12.0
-    env = envelope(t, total, 0.012, 0.13)
-    return 0.28 * env * math.sin(2 * math.pi * (freq + wobble) * t)
-
-
 OUT = sys.argv[1] if len(sys.argv) > 1 else "."
 os.makedirs(OUT, exist_ok=True)
-random.seed(20261029)
-make("dragon_notice.wav", 0.20, notice)
-make("dragon_windup.wav", 0.55, windup)
-make("fuel_release.wav", 0.40, release)
+random.seed(20261110)
+make("ball_kick.wav", 0.16, ball_kick)
+make("dragon_block.wav", 0.24, dragon_block)
 make("fuel_loaded.wav", 0.45, loaded)
-make("dragon_chomp.wav", 0.18, chomp)
-make("dragon_snatch_warn.wav", 0.32, snatch_warn)
-make("dragon_stunned.wav", 0.34, stunned)

@@ -123,15 +123,15 @@ func _build_hull() -> void:
 func _build_scoop() -> void:
 	# 接货平台（与地面齐平，可走进去）
 	_box(Vector3(4.6, 0.3, 5.8), Vector3(13.55, -0.15, 0.0), HULL_DARK, true)
-	# 入口门槛：0.22 m，步进辅助可跨过，但能挡住滚出去的燃料
-	_box(Vector3(0.42, 0.22, 5.8), Vector3(11.5, 0.11, 0.0), TRIM, true)
+	# 入口标线：贴地、无碰撞，球可以直接滚进装货口（旧玩法的 0.22 m 门槛会挡球）
+	_box(Vector3(0.42, 0.02, 5.8), Vector3(11.5, 0.014, 0.0), AMBER, false, 0.55)
 	# 地面导引条
 	for side in [-1.0, 1.0]:
 		_box(Vector3(4.2, 0.02, 0.20), Vector3(13.6, 0.015, side * 1.45), AMBER, false, 0.5, Vector3(0, side * 0.10, 0))
 	# 两侧接货斜面（漏斗），碰撞跟着一起旋转
 	for side in [-1.0, 1.0]:
-		_box(Vector3(3.9, 1.10, 0.34), Vector3(13.5, 0.55, side * 2.45), HULL, true, 0.0, Vector3(0, side * 0.42, 0))
-		_box(Vector3(3.9, 0.14, 0.44), Vector3(13.5, 1.16, side * 2.45), AMBER, false, 0.7, Vector3(0, side * 0.42, 0))
+		_box(Vector3(3.9, 1.10, 0.34), Vector3(13.5, 0.55, side * 2.95), HULL, true, 0.0, Vector3(0, side * 0.42, 0))
+		_box(Vector3(3.9, 0.14, 0.44), Vector3(13.5, 1.16, side * 2.95), AMBER, false, 0.7, Vector3(0, side * 0.42, 0))
 	# 平台边缘灯
 	_box(Vector3(0.12, 0.10, 5.6), Vector3(11.36, 0.03, 0.0), AMBER, false, 1.0)
 

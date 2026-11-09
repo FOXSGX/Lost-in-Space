@@ -167,54 +167,27 @@ func _ridge(at: Vector3, size: Vector3, spin: float) -> void:
 # ---------------------------------------------------------------- 搬运场地
 
 func _build_yard() -> void:
-	# 中景岩石：其中 (2.2, 6.2) 那块是挑衅视线测试用的遮挡，尺寸保持原样。
-	_rock(Vector3(2.2, 0.0, 6.2), Vector3(2.4, 2.2, 2.0), 0.3)
-	_rock(Vector3(5.4, 0.0, -3.9), Vector3(1.9, 1.7, 1.7), -0.5)
-	_rock(Vector3(-1.6, 0.0, 5.4), Vector3(2.6, 2.4, 2.0), 0.9)
-	_rock(Vector3(1.0, 0.0, -8.8), Vector3(3.0, 2.0, 2.0), -0.2)
-	_rock(Vector3(-11.0, 0.0, -2.0), Vector3(2.2, 2.6, 2.4), 0.6)
+	# 场地现在要踢球：中央完全留空，道具全部移到边线外。
+	_rock(Vector3(-12.2, 0.0, -2.0), Vector3(2.2, 2.6, 2.4), 0.6)
+	_rock(Vector3(-13.6, 0.0, 9.8), Vector3(2.0, 2.2, 1.8), -0.4)
+	_rock(Vector3(2.4, 0.0, 13.4), Vector3(2.4, 2.0, 1.8), 0.9)
 
-	# 路线不靠彩色箭头：绕行线是两道磨暗的车辙（连续、无发光），穿场线是更浅的拖痕。
-	var a := Vector3(-9.8, 0.0, 4.9)
-	var b := Vector3(-3.0, 0.0, 5.5)
-	var c := Vector3(4.8, 0.0, 1.9)
-	for index in range(18):
-		var t := float(index) / 17.0
-		var p := a.lerp(b, t).lerp(b.lerp(c, t), t)
-		_box(Vector3(0.95, 0.018, 0.20), p + Vector3(0.34, 0.05, 0.0), SCUFF)
-		_box(Vector3(0.95, 0.018, 0.20), p + Vector3(-0.34, 0.05, 0.0), SCUFF)
-	# 每隔几米一枚压进地面的钢钉，近处才读得出方向
-	for index in range(5):
-		var t := float(index) / 4.0
-		var p := a.lerp(b, t).lerp(b.lerp(c, t), t)
-		_box(Vector3(0.16, 0.02, 0.16), p + Vector3.UP * 0.06, AMBER, false, 0.22)
-	# 穿场线：奶龙地盘上的拖痕，比绕行线更浅、更碎
-	for index in range(10):
-		var t := float(index) / 9.0
-		var p := Vector3(-6.2 + t * 10.4, 0.0, -6.4 + t * 5.2)
-		_box(Vector3(1.0, 0.015, 0.13), p + Vector3.UP * 0.04, GROUND_WARM, false, 0.0, Vector3(0.0, 0.22, 0.0))
+	# 边线货箱堆：不进场，球撞上会弹回场内（有碰撞）
+	_crate(Vector3(-5.6, 0.0, 10.6), 1.35, 0.12)
+	_crate(Vector3(-6.1, 0.0, 11.8), 1.05, -0.35)
+	_crate(Vector3(-5.7, 1.35, 10.7), 0.95, 0.55)
+	_crate(Vector3(6.6, 0.0, 10.2), 1.2, 0.40)
+	_crate(Vector3(7.4, 0.0, 11.1), 0.9, -0.20)
+	_crate(Vector3(-9.0, 0.0, -12.2), 1.0, 0.32)
 
-	# 绕行线上的货箱垤：能踡一小段视线，但绕过去就會被看见（不是永久安全区）。
-	_crate(Vector3(-5.6, 0.0, 3.1), 1.35, 0.12)
-	_crate(Vector3(-6.1, 0.0, 4.3), 1.05, -0.35)
-	_crate(Vector3(-5.7, 1.35, 3.2), 0.95, 0.55)
-	_crate(Vector3(-6.6, 0.0, 4.9), 0.85, 0.9)
+	# 两盏工作灯：给场地一个竖向参照，也让夜景有暖色支点
+	_lamp_post(Vector3(-9.4, 0.0, 8.6))
+	_lamp_post(Vector3(6.2, 0.0, -9.4))
 
-	# 货箱堆：只放在场地边缘，不挡绕行与躲避。
-	_crate(Vector3(6.2, 0.0, 5.2), 1.2, 0.10)
-	_crate(Vector3(6.9, 0.0, 6.4), 0.9, -0.25)
-	_crate(Vector3(5.2, 0.0, 6.5), 0.8, 0.55)
-	_crate(Vector3(-8.6, 0.0, 1.2), 1.0, 0.32)
-	_crate(Vector3(-7.4, 0.0, 0.6), 0.7, -0.15)
-
-	# 两盏工作灯：给场地一个竖向参照，也让夜景有暖色支点。
-	_lamp_post(Vector3(-4.6, 0.0, 7.8))
-	_lamp_post(Vector3(7.4, 0.0, -7.6))
-
-	# 场地边界的矮挡块（可跨过，不阻挡视线）
-	for spot in [Vector3(-9.6, 0.0, -6.6), Vector3(-9.6, 0.0, 2.2), Vector3(8.6, 0.0, 3.0)]:
-		_box(Vector3(0.5, 0.42, 0.5), spot + Vector3.UP * 0.21, TRIM)
-		_box(Vector3(0.52, 0.10, 0.52), spot + Vector3.UP * 0.40, AMBER, false, 0.5)
+	# 场地标线：中圈 + 门前弧，细、暗、不发光，只用来读距离
+	_ring(3.80, 3.95, Vector3(-2.0, 0.03, 1.2), TRIM)
+	_ring(5.60, 5.74, Vector3(11.6, 0.03, 0.0), TRIM)
+	_box(Vector3(0.14, 0.018, 21.0), Vector3(-2.0, 0.03, 0.0), TRIM)
 
 
 func _crate(at: Vector3, size: float, yaw: float, tilt: float = 0.0) -> void:
