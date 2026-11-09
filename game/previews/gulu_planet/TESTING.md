@@ -1,6 +1,6 @@
 # TESTING — 奶龙星第一人称试玩预览
 
-最后更新：2026-10-29 23:35（GMT+8）
+最后更新：2026-11-10 00:5x（GMT+8）
 
 ## 0. 启动
 
@@ -11,14 +11,19 @@ $preview = "C:\Users\31798\Documents\GitHub\Lost-in-Space-gulu\game\previews\gul
 & $godot --path $preview                            # 试玩
 & $godot --headless --path $preview -- --selftest   # 自动检查
 & $godot --path $preview -- --shots                 # 截图到 user://gulu_shots
+& $godot --path $preview -- --record                # 录像帧到 user://gulu_record
+python tools\record_video.py "<帧目录>" docs\record\gulu_snatch_loop.mp4
 ```
+
+新增音效/贴图后第一次跑前先 `& $godot --headless --path $preview --import`，
+否则 `ResourceLoader.exists()` 会给旧值（本轮踩过：5/7 个音效）。
 
 入口 `gulu_planet.tscn`，默认第一人称。
 
 ## 1. 自动检查（headless）
 
 ```
-GULU SELFTEST SUMMARY passes=66 failures=0      ← 2026-10-29 23:2x，退出码 0
+GULU SELFTEST SUMMARY passes=81 failures=0      ← 2026-11-10 00:5x，退出码 0
 ```
 
 覆盖：
@@ -39,31 +44,43 @@ GULU SELFTEST SUMMARY passes=66 failures=0      ← 2026-10-29 23:2x，退出码
 - 找燃料（放下嘴里的货后会自己去叼）
 - 完成 3/3 + 横幅；R 重开（位置、第一人称、奶龙、计数、燃料、挂点）
 - 调试面板 + 状态环只在 F3 出现
+- **抢货不能隔墙**（临时 6 m 宽墙黑盒验证）、**刚捡起 1.1 s 内不被抢**、
+  **抢货会先发 `snatch_warning` 预兆**
+- **扑空后进入 0.85 s 呆滞**，且视线落在装货口（±₂ m）
+- **投出的燃料飞行中高亮环可见**（`thrown` 期间 `base_ring.visible`）
+- **绕行线有一处遮挡，但不整条安全**（两条射线：一条被挡、一条通）
 
 已知无害告警：退出时 `2 ObjectDB instances were leaked`、`1 resources still in use at exit`。
 
 ## 2. 窗口验证（真实渲染）
 
 `--shots` 会打印 `SHOTMETA`（奶龙/玩家/飞行中燃料的屏幕坐标、状态、计数），截图存
-`user://gulu_shots`，本次已复制到 `docs/shots/`（8 张，1280×800）。
+`user://gulu_shots`，本次已复制到 `docs/shots/`（10 张，1280×800）。
 
 ```
-01_opening_three_way      dragon(308,424) 在屏内   fuels=free,free,dragon
-02_carry_first_can        dragon(184,448)          fuels=player,free,dragon
-03_dragon_sees_your_fuel  dragon(640,505) 在屏内   状态=注意
-04_dragon_windup_with_fuel dragon(652,474) 在屏内  状态=蓄势 holding=true
-05_miss_fuel_into_bay     dragon(447,440) + 燃料(581,427) 在屏内  状态=恢复 thrown
-06_bay_feedback           dragon(447,440)          状态=待机 loaded=1
-07_loading_bay_wide       装货口全景
-08_third_person_player     player(640,429) 在屏内
+01_spawn_fuel_dragon_bay   dragon(308,424) 在屏内  fuels=free,free,dragon
+02_carry_midfield          dragon(298,527)         状态=靠近
+03_dragon_approach         dragon(640,505)         状态=注意
+04_bay_front_windup        dragon(640,469)         状态=蓄势 holding=true
+05_fuel_in_flight          dragon(448,475) + 燃料(604,422) 状态=恢复 thrown
+06_bay_load_feedback       loaded=1                状态=恢复
+07_nest_closeup            窝区近景（新增压瘪燃料罐）
+08_yard_wide               场地全景（车辙/铜钉/货箱垤）
+09_snatch_telegraph        dragon(640,564)         状态=靠近 fuels=free,player,free
+10_miss_dazed              dragon(241,500)         状态=恢复 thrown
 ```
 
-亮度（`tools/inspect_shot.py`）：mean 0.41–0.55，过曝 >0.94 仅 0.5–2.1%。
+亮度（`tools/inspect_shot.py`）：mean 0.41–0.55，过曝 >0.94 在 2–6%。
+`09` 里奶龙离镜头只有 1.4 m，头部可能贴近屏幕下沿——**这是待用户看图确认的一项**。
 
-**本轮实际踩到并修掉的画面问题**（靠上面的工具发现）：
+录像：`--record` → 154 帧 @8fps → `docs/record/gulu_snatch_loop.mp4`（~700 KB）。
+**这是脚本驱动，不是真人操作**；只能证明流程完整、反馈能看见，不能代替手感评价。
+
+**历史轮次实际踩到并修掉的画面问题**（留档）：
 - 天空被雾整片染成浅灰（`fog_sky_affect` 默认 1.0）→ 改 ProceduralSky，过曝从 10.4% 降到 0.5%
 - 地面圆环全都是竖着的（TorusMesh 默认就在 XZ 平面，多余旋转）→ 去掉 `rotation.x`
 - 抱着的燃料带 0.96 m 光环 + 0.35 强度灯 → 半个屏幕发琥珀色 → 光环仅在落地时显示、灯调到 0.10
+- 新增 wav 后未重新导入 → `ResourceLoader.exists()` 返回假 → 先跑 `--import`
 
 ## 3. 未验证
 

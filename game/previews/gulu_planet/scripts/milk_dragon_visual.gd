@@ -29,6 +29,7 @@ var _has_look_point := false
 var _look_override := Vector3.ZERO
 var _has_look_override := false
 var _snatch := 0.0
+var _dazed := false
 
 var _body_root: Node3D
 var _torso: Node3D
@@ -103,6 +104,11 @@ func set_behavior(state_name: String, agitation: float, windup_ratio: float, pou
 
 func set_pounce_result(hit: bool) -> void:
 	_pounce_miss = not hit
+
+
+## 扑空后的“愣住”（占位外观没有头骨，只用整体扭一下代替）。
+func set_dazed(active: bool) -> void:
+	_dazed = active
 
 
 # ------------------------------------------------------------------ 模型

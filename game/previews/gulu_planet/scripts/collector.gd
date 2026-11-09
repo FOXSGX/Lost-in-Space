@@ -47,6 +47,11 @@ func contains_point(point: Vector3) -> bool:
 	)
 
 
+## 吸入点：翻空后奶龙的“发懵视线”对着这里，玩家的镜头也能对得上。
+func intake_point() -> Vector3:
+	return INTAKE_POINT
+
+
 func consume(fuel: Node3D) -> void:
 	if fuel == null or not is_instance_valid(fuel):
 		return

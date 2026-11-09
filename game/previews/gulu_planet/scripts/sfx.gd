@@ -10,6 +10,8 @@ const STREAMS := {
 	"release": "res://assets/audio/fuel_release.wav",
 	"loaded": "res://assets/audio/fuel_loaded.wav",
 	"chomp": "res://assets/audio/dragon_chomp.wav",
+	"snatch_warn": "res://assets/audio/dragon_snatch_warn.wav",
+	"stunned": "res://assets/audio/dragon_stunned.wav",
 }
 
 const MIN_INTERVAL := {
@@ -18,6 +20,8 @@ const MIN_INTERVAL := {
 	"release": 0.5,
 	"loaded": 0.25,
 	"chomp": 0.6,
+	"snatch_warn": 1.4,
+	"stunned": 1.6,
 }
 
 const VOLUME_DB := {
@@ -26,6 +30,8 @@ const VOLUME_DB := {
 	"release": -7.0,
 	"loaded": -6.0,
 	"chomp": -9.0,
+	"snatch_warn": -8.0,
+	"stunned": -7.0,
 }
 
 var _players: Dictionary = {}

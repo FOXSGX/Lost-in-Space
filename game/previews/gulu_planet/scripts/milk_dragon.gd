@@ -18,6 +18,8 @@ signal fuel_snatched(fuel: Node3D)
 signal windup_locked(point: Vector3)
 ## 扑击结束（无论命中/扑空）
 signal pounce_ended(point: Vector3)
+## 抢货预兆：已经开始计时，快要抢走手上的燃料了（供 HUD/音效预警）
+signal snatch_warning(progress: float)
 
 const STATE_IDLE := "idle"
 const STATE_FORAGE := "forage"
@@ -63,8 +65,15 @@ const STATE_NAMES := {
 @export var gravity := 18.0
 ## 看见你抱着燃料后会凑过来；贴太近会被它抢走
 @export var snatch_distance := 2.1
-@export var snatch_delay := 0.75
+## 预兆时长：从贴身到真正抢走，留够反应（可后退、可绕到石头后）
+@export var snatch_delay := 0.95
 @export var snatch_cooldown := 4.0
+## 刚把燃料捡回手里的保护时间：避免“刚拿回就又被抢”
+@export var snatch_pickup_grace := 1.1
+## 预兆进度到多少时给提示音/文字（0..1）
+@export var snatch_warn_at := 0.45
+## 扑空后愣住的时长（纯表演，不延长恢复时间）
+@export var stun_time := 0.85
 ## 它能“注意到你手里的货”的距离（比挑衅范围短，保证教学罐是安全的）
 @export var spot_cargo_range := 7.5
 ## 找燃料
@@ -107,6 +116,9 @@ var _last_position := Vector3.ZERO
 var _target_scan := 0.0
 var _snatch_timer := 0.0
 var _snatch_ready_at := 0.0
+var _snatch_warned := false
+var _stun_timer := 0.0
+var _stun_point := Vector3.ZERO
 var _was_target_carrying := false
 
 
@@ -290,6 +302,10 @@ func _physics_process(delta: float) -> void:
 			velocity.x = 0.0
 			velocity.z = 0.0
 			_timer += delta
+			if _stun_timer > 0.0:
+				_stun_timer = maxf(0.0, _stun_timer - delta)
+				if _stun_timer == 0.0 and visual != null:
+					visual.call("set_dazed", false)
 			if _timer >= recover_time:
 				agitation = 0.0
 				_pending_windup = false
@@ -325,6 +341,8 @@ func _physics_process(delta: float) -> void:
 func _watch_cargo(distance: float) -> void:
 	var carrying := target_carrying()
 	if carrying and not _was_target_carrying:
+		# 刚捡起来的一瞬间不算“贴身”：给一段保护时间，避免刚夺回就被抢。
+		_snatch_ready_at = maxf(_snatch_ready_at, float(Time.get_ticks_msec()) + snatch_pickup_grace * 1000.0)
 		if state in [STATE_IDLE, STATE_FORAGE] and _last_los and distance <= spot_cargo_range:
 			_timer = 0.0
 			_pending_windup = false
@@ -333,28 +351,46 @@ func _watch_cargo(distance: float) -> void:
 	_was_target_carrying = carrying
 
 
-## 贴太近时会把目标手上的燃料抢走（有预警、有冷却，不造成伤害）。
+## 贴太近时会把目标手上的燃料抢走（有预兆、有视线检查、有冷却，不造成伤害）。
 func _try_snatch(delta: float) -> void:
 	if has_fuel or player == null:
-		_snatch_timer = 0.0
+		_reset_snatch()
 		return
 	if state in [STATE_WINDUP, STATE_POUNCE, STATE_RECOVER, STATE_RETURN]:
-		_snatch_timer = 0.0
+		_reset_snatch()
 		return
 	if Time.get_ticks_msec() < int(_snatch_ready_at):
-		_snatch_timer = 0.0
+		_reset_snatch()
 		return
-	if not target_carrying() or global_position.distance_to(player.global_position) > snatch_distance:
-		_snatch_timer = maxf(0.0, _snatch_timer - delta * 1.6)
+	if not target_carrying() or not _last_los:
+		# 看不见就不抢：隔着岩石/船体不会隔空把货吸走。
+		_snatch_timer = maxf(0.0, _snatch_timer - delta * 2.4)
+		if _snatch_timer <= 0.01:
+			_snatch_warned = false
+		return
+	if global_position.distance_to(player.global_position) > snatch_distance:
+		# 后退可以拉开，计时会快速回落。
+		_snatch_timer = maxf(0.0, _snatch_timer - delta * 1.8)
+		if _snatch_timer <= 0.01:
+			_snatch_warned = false
 		return
 	if loading_zone != null and bool(loading_zone.call("contains_point", player.global_position + Vector3.UP * 0.5)):
-		_snatch_timer = 0.0
+		_reset_snatch()
 		return
 	_snatch_timer += delta
-	if _snatch_timer >= snatch_delay:
-		_snatch_timer = 0.0
-		_snatch_ready_at = Time.get_ticks_msec() + int(snatch_cooldown * 1000.0)
+	var progress := snatch_progress()
+	if progress >= snatch_warn_at and not _snatch_warned:
+		_snatch_warned = true
+		snatch_warning.emit(progress)
+	if progress >= 1.0:
+		_snatch_ready_at = float(Time.get_ticks_msec()) + snatch_cooldown * 1000.0
+		_reset_snatch()
 		_steal_from_target()
+
+
+func _reset_snatch() -> void:
+	_snatch_timer = 0.0
+	_snatch_warned = false
 
 
 func _steal_from_target() -> void:
@@ -529,11 +565,24 @@ func _finish_pounce() -> void:
 	velocity = Vector3.ZERO
 	if has_fuel:
 		_release_fuel()
+	if not last_pounce_hit:
+		# 扑空：愣一下，并扭头发懵地看着装货口（纯表演，不拖长恢复窗口）。
+		_stun_timer = stun_time
+		_stun_point = _stun_look_point()
+		if visual != null:
+			visual.call("set_dazed", true)
 	if visual != null:
 		visual.call("set_pounce_result", last_pounce_hit)
 	_set_state(STATE_RECOVER)
 	pounce_finished.emit(last_pounce_hit)
 	pounce_ended.emit(_pounce_target)
+
+
+## 扑空后看着货飞去的方向 / 装货口——“我明明扑到了？”
+func _stun_look_point() -> Vector3:
+	if loading_zone != null and is_instance_valid(loading_zone) and loading_zone.has_method("intake_point"):
+		return loading_zone.call("intake_point") as Vector3
+	return global_position + (-global_transform.basis.z) * 6.0 + Vector3.UP * 1.0
 
 
 func _release_fuel() -> void:
@@ -635,7 +684,10 @@ func _update_visual() -> void:
 
 
 ## 看着目标手里的燃料（如果它抱着），否则看着目标的脸。
+## 扑空后的短暂呆滞期先看装货口（喜剧反应）。
 func _current_look_point() -> Vector3:
+	if _stun_timer > 0.0:
+		return _stun_point
 	if player == null or not is_instance_valid(player):
 		return Vector3.ZERO
 	for entry in _fuels:
@@ -652,6 +704,15 @@ func set_debug_ring(enabled: bool) -> void:
 
 func state_name() -> String:
 	return STATE_NAMES.get(state, state)
+
+
+## 扑空后是否处于“愣住”表演中（自测/调试用）。
+func stun_active() -> bool:
+	return _stun_timer > 0.0
+
+
+func stun_look_point() -> Vector3:
+	return _stun_point
 
 
 func focus_name() -> String:
@@ -687,12 +748,16 @@ func reset_to_home() -> void:
 	_sidestep_timer = 0.0
 	_forage_target = null
 	_snatch_timer = 0.0
-	_snatch_ready_at = 0
+	_snatch_ready_at = 0.0
+	_snatch_warned = false
+	_stun_timer = 0.0
+	_stun_point = Vector3.ZERO
 	_was_target_carrying = false
 	_target_scan = 0.0
 	has_fuel = false
 	carried_fuel = null
 	if visual != null:
 		visual.call("set_carried_state", false)
+		visual.call("set_dazed", false)
 	state = STATE_RETURN
 	_set_state(STATE_IDLE, true)

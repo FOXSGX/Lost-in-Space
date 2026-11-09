@@ -174,13 +174,31 @@ func _build_yard() -> void:
 	_rock(Vector3(1.0, 0.0, -8.8), Vector3(3.0, 2.0, 2.0), -0.2)
 	_rock(Vector3(-11.0, 0.0, -2.0), Vector3(2.2, 2.6, 2.4), 0.6)
 
-	# 两条搬运路线：青色＝安全绕远，琥珀＝穿过奶龙地盘。
-	for index in range(9):
-		var t := float(index)
-		_box(Vector3(1.0, 0.02, 0.22), Vector3(-7.9 + t * 1.98, 0.055, 4.4 - t * 0.33), CYAN, false, 0.35)
-	for index in range(8):
-		var t := float(index)
-		_box(Vector3(1.0, 0.02, 0.22), Vector3(-6.0 + t * 1.7, 0.055, -6.4 + t * 0.68), AMBER, false, 0.35)
+	# 路线不靠彩色箭头：绕行线是两道磨暗的车辙（连续、无发光），穿场线是更浅的拖痕。
+	var a := Vector3(-9.8, 0.0, 4.9)
+	var b := Vector3(-3.0, 0.0, 5.5)
+	var c := Vector3(4.8, 0.0, 1.9)
+	for index in range(18):
+		var t := float(index) / 17.0
+		var p := a.lerp(b, t).lerp(b.lerp(c, t), t)
+		_box(Vector3(0.95, 0.018, 0.20), p + Vector3(0.34, 0.05, 0.0), SCUFF)
+		_box(Vector3(0.95, 0.018, 0.20), p + Vector3(-0.34, 0.05, 0.0), SCUFF)
+	# 每隔几米一枚压进地面的钢钉，近处才读得出方向
+	for index in range(5):
+		var t := float(index) / 4.0
+		var p := a.lerp(b, t).lerp(b.lerp(c, t), t)
+		_box(Vector3(0.16, 0.02, 0.16), p + Vector3.UP * 0.06, AMBER, false, 0.22)
+	# 穿场线：奶龙地盘上的拖痕，比绕行线更浅、更碎
+	for index in range(10):
+		var t := float(index) / 9.0
+		var p := Vector3(-6.2 + t * 10.4, 0.0, -6.4 + t * 5.2)
+		_box(Vector3(1.0, 0.015, 0.13), p + Vector3.UP * 0.04, GROUND_WARM, false, 0.0, Vector3(0.0, 0.22, 0.0))
+
+	# 绕行线上的货箱垤：能踡一小段视线，但绕过去就會被看见（不是永久安全区）。
+	_crate(Vector3(-5.6, 0.0, 3.1), 1.35, 0.12)
+	_crate(Vector3(-6.1, 0.0, 4.3), 1.05, -0.35)
+	_crate(Vector3(-5.7, 1.35, 3.2), 0.95, 0.55)
+	_crate(Vector3(-6.6, 0.0, 4.9), 0.85, 0.9)
 
 	# 货箱堆：只放在场地边缘，不挡绕行与躲避。
 	_crate(Vector3(6.2, 0.0, 5.2), 1.2, 0.10)
@@ -248,6 +266,11 @@ func _build_nest() -> void:
 	_flattened_crate(c + Vector3(2.9, 0.0, 0.6), Vector3(1.2, 0.18, 0.9), 1.1, false)
 	_flattened_crate(c + Vector3(-1.2, 0.0, 2.4), Vector3(1.0, 0.16, 0.8), -0.9, false)
 
+	# 窝里躺着几罐被压瘪的燃料：证明它真的抢过东西，也把“嘴里的货”和“窝里的货”连起来。
+	_crushed_can(c + Vector3(-1.4, 0.0, 0.9), 0.7)
+	_crushed_can(c + Vector3(-0.6, 0.0, 1.7), -0.4)
+	_crushed_can(c + Vector3(1.9, 0.0, -0.6), 1.4)
+
 	# 拖拽痕迹：从窝口朝装货口方向拉出去，说明货是被拖进来的。
 	for index in range(4):
 		var offset := -1.5 + float(index) * 1.05
@@ -277,6 +300,13 @@ func _flattened_crate(at: Vector3, size: Vector3, yaw: float, solid: bool = true
 		Vector3(size.x * 0.12, size.y * 0.5 + 0.005, 0.0), PACK)
 
 
+## 窝里被压瘪的燃料罐：只有形体和一块能量窗，不抢眼。
+func _crushed_can(at: Vector3, yaw: float) -> void:
+	var node := _box(Vector3(0.46, 0.15, 0.34), at + Vector3.UP * 0.075, AMBER, false, 0.0, Vector3(0.0, yaw, 0.0))
+	_child(node, _box_mesh(Vector3(0.48, 0.03, 0.36)), Vector3(0.0, 0.085, 0.0), TRIM)
+	_child(node, _box_mesh(Vector3(0.26, 0.02, 0.02)), Vector3(0.0, 0.02, 0.17), CYAN)
+
+
 # ---------------------------------------------------------------- 装货口
 
 func _build_bay_frame() -> void:
@@ -301,6 +331,9 @@ func _build_bay_frame() -> void:
 	# 接货坡道：防滑纹 + 侧导轨（细，不挡走位）
 	for index in range(6):
 		_box(Vector3(0.44, 0.03, 5.20), Vector3(11.75 + float(index) * 0.42, 0.035, 0.0), Color("#6e807c"))
+	# 平台内嵌底板 + 入口压条：把工作区从地面上分出来，不用大色块
+	_box(Vector3(4.10, 0.02, 5.20), Vector3(13.55, 0.020, 0.0), Color("#4a5a58"))
+	_box(Vector3(0.06, 0.03, 5.20), Vector3(11.52, 0.030, 0.0), TRIM)
 	for side in [-1.0, 1.0]:
 		_box(Vector3(2.4, 0.07, 0.07), Vector3(12.65, 0.72, side * 2.72), TRIM)
 		for index in range(3):

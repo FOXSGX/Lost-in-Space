@@ -72,8 +72,9 @@ $preview = "C:\Users\31798\Documents\GitHub\Lost-in-Space-gulu\game\previews\gul
 
 ## 角色模型（2026-10-30 起）
 
-- 游戏内目前**仍是程序化占位**；新的自建静态模型已入库但未替换（等外观确认）。
-- 自建资产：`assets/characters/nailong.glb`（13 网格 / 30,400 三角面 / 9 材质）、
+- 游戏内当前用的是**正式模型** `assets/characters/nailong_dl.glb`（Sketchfab "nailong"，CC-BY-4.0，
+  见 `assets/characters/nailong_dl_LICENSE.txt`）；程序化占位只在 GLB 缺失时回退。
+- 自建资产（保留但不再使用）：`assets/characters/nailong.glb`（13 网格 / 30,400 三角面 / 9 材质）、
   可编辑源文件 `tools/blender/nailong.blend`，由 `tools/blender/build_nailong.py` 生成。
 - 预览图（正交正/侧/背 + 3/4 + 游戏同参数第一人称）：`docs/model/`。
 - 构建与校验命令见 `BLENDER.md` 第 0.5 节；来源与许可见 `ASSETS.md` 第 7 节。
@@ -84,14 +85,17 @@ $preview = "C:\Users\31798\Documents\GitHub\Lost-in-Space-gulu\game\previews\gul
 gulu_planet.tscn            入口
 scripts/gulu_app.gd         关卡、场地、HUD、自动化检查
 scripts/milk_dragon.gd      奶龙状态机（含找燃料 / 叼货 / 扑击释放 / 卡住恢复）
-scripts/milk_dragon_visual.gd  奶龙程序化外观与表演（当前仍在用）
+scripts/milk_dragon_visual.gd  奶龙程序化占位外观（GLB 缺失时回退）
+scripts/milk_dragon_model.gd   奶龙正式模型外观层（当前在用）
 scripts/fuel_prop.gd        燃料罐（拾取/携带/抛出/入仓）
 scripts/collector.gd        飞船装货口（漏斗 + 容错判定 + 计数指示灯）
-scripts/sfx.gd              5 个短音效
+scripts/sfx.gd              7 个短音效
 scripts/station_player.gd   复用共振星独立预览控制器（第一人称镜头已对齐飞船）
 assets/audio/*.wav          本地合成音效（见 ASSETS.md）
-assets/characters/nailong.glb   自建奶龙静态模型（尚未替换游戏外观）
-docs/shots/*.png            本轮窗口截图
+assets/characters/nailong_dl.glb 正式奶龙模型（当前使用，CC-BY-4.0）
+assets/characters/nailong.glb   自建奶龙静态模型（保留，不再使用）
+docs/shots/*.png            本轮窗口截图（10 张）
+docs/record/*.mp4           脚本驱动的流程录像（非真人操作）
 docs/model/*.png            角色四视图 + 第一人称预览
 tools/blender/build_nailong.py  奶龙模型生成脚本（Blender 4.5）
 tools/blender/nailong.blend     可编辑源文件

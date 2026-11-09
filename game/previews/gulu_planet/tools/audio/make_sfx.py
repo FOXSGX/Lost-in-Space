@@ -75,6 +75,24 @@ def chomp(t, total):
     return 0.30 * env * (0.6 * noise + 0.7 * math.sin(2 * math.pi * 150.0 * t))
 
 
+def snatch_warn(t, total):
+    # 抢货预兆：低吼下滑 + 一点气声，短到不会拖慢节奏
+    freq = 126.0 - 46.0 * (t / total)
+    env = envelope(t, total, 0.02, 0.10)
+    growl = 0.72 * math.sin(2 * math.pi * freq * t)
+    growl += 0.28 * math.sin(2 * math.pi * freq * 2.02 * t)
+    air = 0.10 * random.uniform(-1.0, 1.0)
+    return 0.34 * env * (growl + air)
+
+
+def stunned(t, total):
+    # 扑空后的「咕？」：一声上翘滑音，带轻微颤音，像愣住
+    freq = 300.0 + 190.0 * (t / total)
+    wobble = math.sin(2 * math.pi * 9.0 * t) * 12.0
+    env = envelope(t, total, 0.012, 0.13)
+    return 0.28 * env * math.sin(2 * math.pi * (freq + wobble) * t)
+
+
 OUT = sys.argv[1] if len(sys.argv) > 1 else "."
 os.makedirs(OUT, exist_ok=True)
 random.seed(20261029)
@@ -83,3 +101,5 @@ make("dragon_windup.wav", 0.55, windup)
 make("fuel_release.wav", 0.40, release)
 make("fuel_loaded.wav", 0.45, loaded)
 make("dragon_chomp.wav", 0.18, chomp)
+make("dragon_snatch_warn.wav", 0.32, snatch_warn)
+make("dragon_stunned.wav", 0.34, stunned)

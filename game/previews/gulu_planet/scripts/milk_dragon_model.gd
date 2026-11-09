@@ -33,6 +33,8 @@ var _has_look_point := false
 var _look_override := Vector3.ZERO
 var _has_look_override := false
 var _snatch := 0.0
+var _dazed := false
+var _daze_blend := 0.0
 
 var _body: Node3D
 var _facing: Node3D
@@ -100,6 +102,11 @@ func set_behavior(state_name: String, agitation: float, windup_ratio: float, pou
 
 func set_pounce_result(hit: bool) -> void:
 	_pounce_miss = not hit
+
+
+## 扑空后的“愣住”：头一歪、看着装货口（只在恢复期里播放，不加长操作等待）。
+func set_dazed(active: bool) -> void:
+	_dazed = active
 
 
 # ------------------------------------------------------------------ 组装
@@ -242,11 +249,21 @@ func _animate_targets(delta: float) -> void:
 	if _carrying:
 		target_open = maxf(target_open, 0.7)
 		target_crouch -= 0.03
+	if _dazed:
+		target_lean = 0.10
+		target_crouch = -0.03
+		target_open = 0.18
+	if _snatch > 0.02:
+		# 抢货预兆：向前伸脖子、略压低、张嘴——玩家能看见“它要动手了”。
+		target_lean -= 0.26 * _snatch
+		target_crouch -= 0.05 * _snatch
+		target_open = maxf(target_open, 0.35 + 0.65 * _snatch)
 
 	_crouch = lerpf(_crouch, target_crouch, 1.0 - exp(-11.0 * delta))
 	_lean = lerpf(_lean, target_lean, 1.0 - exp(-12.0 * delta))
 	_mouth_open = lerpf(_mouth_open, target_open, 1.0 - exp(-14.0 * delta))
 	_hop = lerpf(_hop, target_hop, 1.0 - exp(-18.0 * delta))
+	_daze_blend = lerpf(_daze_blend, 1.0 if _dazed else 0.0, 1.0 - exp(-9.0 * delta))
 
 
 func _apply_pose() -> void:
@@ -254,7 +271,9 @@ func _apply_pose() -> void:
 	_body.position.y = _crouch + _hop + sin(_time * 2.1) * 0.012
 	_body.position.x = sin(_time * 46.0) * 0.018 * _windup if _state == "蓄势" else 0.0
 	_body.rotation.x = _lean
-	_body.rotation.z = 0.0
+	_body.rotation.z = 0.055 * _daze_blend * sin(_time * 2.2)
+	# 抢货预兆：沿朝向把脖子/身体拉长一点，看上去是“探头上去了”。
+	_facing.scale = Vector3(1.0, 1.0, 1.0 + 0.09 * _snatch)
 	var squash := 1.0
 	if _state == "蓄势":
 		squash = 0.95 + 0.02 * sin(_time * 18.0)
@@ -269,7 +288,9 @@ func _apply_pose() -> void:
 		var pitch := _head_pitch + open_dip
 		if _carrying:
 			pitch += sin(_time * 5.2) * 0.03
-		_skeleton.set_bone_pose_rotation(_head_bone, Quaternion(Vector3.UP, yaw) * Quaternion(Vector3.RIGHT, pitch))
+		var roll := 0.32 * _daze_blend * sin(_time * 2.4)
+		_skeleton.set_bone_pose_rotation(_head_bone,
+			Quaternion(Vector3.UP, yaw) * Quaternion(Vector3.RIGHT, pitch) * Quaternion(Vector3.BACK, roll))
 		if _neck_bone >= 0:
 			_skeleton.set_bone_pose_rotation(_neck_bone, Quaternion(Vector3.UP, yaw * 0.35))
 		var flail := 0.0

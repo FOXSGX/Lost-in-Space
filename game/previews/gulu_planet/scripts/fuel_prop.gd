@@ -30,6 +30,7 @@ var _mouth_anchor: Node3D
 var _collector: Node3D
 var _settle_timer := 0.0
 var _spin := 0.0
+var _air_time := 0.0
 var glow_light: OmniLight3D
 ## 地面拾取环：只在自由状态显示（抱着它的时候不该堵住视野）。
 var base_ring: MeshInstance3D
@@ -138,6 +139,13 @@ func release_from_dragon(direction: Vector3, speed: float, lift: float) -> void:
 	velocity = flat * speed + Vector3.UP * lift
 	_spin = 2.4
 	_settle_timer = 0.0
+	_air_time = 0.0
+	# 飞行中要看得见：地面光环重新亮起并放大，灯也提亮，避免被身体/特效吃掉。
+	if base_ring != null:
+		base_ring.visible = true
+		base_ring.scale = Vector3.ONE * 1.7
+	if glow_light != null:
+		glow_light.light_energy = 0.85
 
 
 func collect() -> void:
@@ -196,6 +204,7 @@ func reset_to_home() -> void:
 	collision_mask = 2
 	_settle_timer = 0.0
 	_spin = 0.0
+	_air_time = 0.0
 
 
 func _physics_process(delta: float) -> void:
@@ -237,6 +246,9 @@ func _sync_carried(snap: bool) -> void:
 func _integrate_thrown(delta: float) -> void:
 	velocity.y -= GRAVITY * delta
 	rotation.z += _spin * delta
+	_air_time += delta
+	if base_ring != null:
+		base_ring.scale = Vector3.ONE * (1.55 + 0.30 * sin(_air_time * 22.0))
 	var motion := velocity * delta
 	var before := global_position
 	move_and_slide()
@@ -278,6 +290,11 @@ func _land() -> void:
 	mode = "free"
 	velocity = Vector3.ZERO
 	rotation.z = 0.0
+	_air_time = 0.0
+	if base_ring != null:
+		base_ring.scale = Vector3.ONE
+	if glow_light != null:
+		glow_light.light_energy = 0.35
 	collision_layer = 1
 	collision_mask = 2
 	landed.emit(self)

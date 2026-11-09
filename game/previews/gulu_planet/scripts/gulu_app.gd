@@ -61,16 +61,27 @@ var _crosshair_root: Control
 var _help_label: Label
 var _prompt_panel: PanelContainer
 var _prompt_label: Label
+var _snatch_bar_back: ColorRect
+var _snatch_fill: ColorRect
 var _banner: PanelContainer
 var _banner_label: Label
 var _font: SystemFont
 var _sfx: Node
 var _feedback := ""
 var _feedback_timer := 0.0
+## 入仓时计数跳一下（短促反馈，不用弹窗）
+var _counter_punch := 0.0
 
 var _automation := false
 var _shot_dir := "user://gulu_shots"
 var _last_collisions := 0
+
+# --- 自动录制（连续截图，后可合成为 GIF/视频）---
+var _recording := false
+var _record_dir := "user://gulu_record"
+var _record_index := 0
+var _record_accum := 0.0
+const RECORD_INTERVAL := 0.125
 
 
 func _ready() -> void:
@@ -93,6 +104,9 @@ func _ready() -> void:
 	elif args.has("--shots"):
 		_automation = true
 		call_deferred("_run_shots")
+	elif args.has("--record"):
+		_automation = true
+		call_deferred("_run_record")
 
 	set_process(true)
 
@@ -373,6 +387,7 @@ func _build_gulu() -> void:
 	gulu.connect("fuel_released", _on_fuel_released)
 	gulu.connect("spotted_cargo", _on_spotted_cargo)
 	gulu.connect("fuel_snatched", _on_fuel_snatched)
+	gulu.connect("snatch_warning", _on_snatch_warning)
 	gulu.connect("windup_locked", _on_windup_locked)
 	gulu.connect("pounce_ended", _on_pounce_ended)
 
@@ -586,6 +601,19 @@ func _build_hud() -> void:
 	_prompt_label.text = "走近燃料按 E 搬走，或站到装货口前挑衅奶龙"
 	pmargin.add_child(_prompt_label)
 
+	# 抢货预兆条：进度只跟“它盯着你手上的货”绑定，看得见还剩多久。
+	_snatch_bar_back = ColorRect.new()
+	_snatch_bar_back.position = Vector2(300, 758)
+	_snatch_bar_back.size = Vector2(680, 6)
+	_snatch_bar_back.color = Color(0.06, 0.10, 0.11, 0.88)
+	_snatch_bar_back.visible = false
+	_root.add_child(_snatch_bar_back)
+	_snatch_fill = ColorRect.new()
+	_snatch_fill.position = Vector2.ZERO
+	_snatch_fill.size = Vector2(0, 6)
+	_snatch_fill.color = Color("#ff9a5e")
+	_snatch_bar_back.add_child(_snatch_fill)
+
 	_banner = PanelContainer.new()
 	_banner.position = Vector2(340, 300)
 	_banner.custom_minimum_size = Vector2(600, 0)
@@ -639,6 +667,11 @@ func _panel_style(alpha: float = 0.82) -> StyleBoxFlat:
 
 
 func _process(delta: float) -> void:
+	if _recording:
+		_record_accum += delta
+		if _record_accum >= RECORD_INTERVAL:
+			_record_accum = 0.0
+			_record_frame()
 	if player == null:
 		return
 	var first := bool(player.get("use_first_person"))
@@ -653,6 +686,9 @@ func _process(delta: float) -> void:
 
 	_lock_pulse(delta)
 	_update_prompt()
+	_update_snatch_bar()
+	_counter_punch = maxf(0.0, _counter_punch - delta * 3.0)
+	_counter_label.add_theme_font_size_override("font_size", 19 + int(round(8.0 * _counter_punch)))
 
 	if _debug:
 		var pos := player.global_position
@@ -693,8 +729,9 @@ func _update_prompt() -> void:
 	if dragon_state == "扑击":
 		_set_prompt("扑击！立刻离开它锁定的位置", Color("#ff5a4a"))
 		return
-	if snatching > 0.05:
-		_set_prompt("它要抢你手上的燃料了——快走开，或按 E 放下", Color("#ff8a5e"))
+	if snatching > 0.02:
+		var seconds_left := maxf(0.0, 1.0 - snatching) * float(gulu.get("snatch_delay"))
+		_set_prompt("它伸长脖子要抢了——后退，或绕到石头后面（%.1f s）" % seconds_left, Color("#ff9a5e"))
 		return
 	if carrying:
 		if in_bay:
@@ -749,6 +786,19 @@ func _set_prompt(text: String, color: Color) -> void:
 	if _prompt_label.text != text:
 		_prompt_label.text = text
 	_prompt_label.add_theme_color_override("font_color", color)
+
+
+func _update_snatch_bar() -> void:
+	var progress := 0.0
+	if gulu != null:
+		progress = float(gulu.call("snatch_progress"))
+	var show := progress > 0.02 and not completed
+	_snatch_bar_back.visible = show
+	if not show:
+		return
+	var clamped := clampf(progress, 0.0, 1.0)
+	_snatch_fill.size = Vector2(680.0 * clamped, 6)
+	_snatch_fill.color = Color("#ff9a5e").lerp(Color("#ff3a2a"), clampf((clamped - 0.35) / 0.65, 0.0, 1.0))
 
 
 # ---------------------------------------------------------------- actions
@@ -814,6 +864,7 @@ func _on_fuel_collected(total: int, target: int) -> void:
 	if _sfx != null:
 		_sfx.call("play", "loaded")
 	_counter_label.text = "已装 %d / %d" % [loaded_count, target]
+	_counter_punch = 1.0
 	_feedback = "入仓确认！%d / %d" % [loaded_count, target]
 	_feedback_timer = 1.6
 	if env_art != null and is_instance_valid(env_art):
@@ -856,6 +907,11 @@ func _on_fuel_snatched(fuel: Node3D) -> void:
 	_feedback_timer = 3.0
 
 
+func _on_snatch_warning(_progress: float) -> void:
+	if _sfx != null:
+		_sfx.call("play", "snatch_warn")
+
+
 func _on_pounce_finished(hit: bool) -> void:
 	if hit:
 		var carried := _carried_fuel()
@@ -863,6 +919,11 @@ func _on_pounce_finished(hit: bool) -> void:
 			carried.call("drop_from_player", player)
 			_feedback = "被扑到了！手上的燃料掉了——趁它恢复捡回来"
 			_feedback_timer = 2.6
+	else:
+		if _sfx != null:
+			_sfx.call("play", "stunned")
+		_feedback = "它扑空了，正懵着看装货口——快跑"
+		_feedback_timer = 1.2
 
 
 func _toggle_debug() -> void:
@@ -1027,7 +1088,7 @@ func _run_selftest() -> void:
 	# --- 音效资源已导入 ---
 	var sfx_players := _sfx.get("_players") as Dictionary
 	var sfx_count := sfx_players.size() if sfx_players != null else 0
-	_check(sfx_count == 5, "sfx streams imported (%d/5)" % sfx_count, passes, failures)
+	_check(sfx_count == 7, "sfx streams imported (%d/7)" % sfx_count, passes, failures)
 
 	# --- 基础移动与碰撞 ---
 	var start := player.global_position
@@ -1100,6 +1161,12 @@ func _run_selftest() -> void:
 	_check(gulu.state_name() == "待机", "provoke blocked by rock is rejected", passes, failures)
 	_check(float(gulu.get("agitation")) < 0.01, "blocked provoke adds no agitation", passes, failures)
 
+	# 绕行路线：有遮挡（可以躲），但不是一整条永久安全区
+	var route_covered := not bool(gulu.call("_has_los_to", Vector3(-8.0, 1.1, 4.9)))
+	var route_open := bool(gulu.call("_has_los_to", Vector3(-3.0, 1.1, 4.8)))
+	_check(route_covered, "outer route has a covered stretch", passes, failures)
+	_check(route_open, "outer route is not a permanent hiding strip", passes, failures)
+
 	# 冷却
 	reset_preview()
 	_place_player(Vector3(-4.5, 0.02, -2.0), DRAGON_HOME)
@@ -1125,7 +1192,26 @@ func _run_selftest() -> void:
 	Input.action_release("move_right")
 	_check(not bool(gulu.get("last_pounce_hit")), "player can dodge the pounce", passes, failures)
 	_check(player.global_position.distance_to(locked) > 0.6, "dodge moved player off the locked spot", passes, failures)
-	await _wait(1.8)
+	var dazed_seen := false
+	for _probe in range(40):
+		if bool(gulu.call("stun_active")):
+			dazed_seen = true
+			break
+		await _wait(0.05)
+	_check(dazed_seen, "missed pounce leaves the dragon briefly dazed", passes, failures)
+	if dazed_seen:
+		var daze_target: Vector3 = gulu.call("stun_look_point") as Vector3
+		_check(daze_target.distance_to(Vector3(15.15, 1.05, 0.0)) < 2.0, "dazed dragon looks at the loading bay", passes, failures)
+	var ring_seen := false
+	var wait_left := 1.8
+	while wait_left > 0.0:
+		if String(fuels[2].get("mode")) == "thrown":
+			var flight_ring := fuels[2].get("base_ring") as MeshInstance3D
+			if flight_ring != null and flight_ring.visible:
+				ring_seen = true
+		await _wait(0.05)
+		wait_left -= 0.05
+	_check(ring_seen, "thrown fuel stays highlighted in flight", passes, failures)
 	_check(loaded_count >= 1, "fuel launched by pounce lands in the bay (loaded=%d)" % loaded_count, passes, failures)
 
 	# 重复计数保护
@@ -1201,8 +1287,44 @@ func _run_selftest() -> void:
 	_check(String(fuels[1].get("mode")) == "player", "fuel picked up near dragon", passes, failures)
 	_check(gulu.state_name() == "注意", "dragon spots the carried fuel", passes, failures)
 	_teleport(gulu.global_position + Vector3(1.6, 0.02, 0.0), 0.0)
-	await _wait(1.6)
+	await _wait(2.8)
 	_check(String(fuels[1].get("mode")) == "dragon", "dragon snatches the carried fuel", passes, failures)
+
+	# --- 抢货的三条新规则：视线 / 刚捡回的保护 / 预兆 ---
+	reset_preview()
+	gulu.call("_release_fuel")
+	await get_tree().physics_frame
+	_place_player(FUEL_HOMES[1] + Vector3(-1.0, 0.02, 0.0), FUEL_HOMES[1])
+	await _wait(0.2)
+	_press_interact()
+	await _wait(0.2)
+	_teleport(gulu.global_position + Vector3(1.4, 0.02, 0.0), 0.0)
+	await _wait(0.3)
+	_check(float(gulu.call("snatch_progress")) <= 0.01, "pickup grace blocks an instant snatch", passes, failures)
+	# 隔墙不抢：临时立一面 6 m 宽的墙挡在中间（黑盒，靠真实射线）
+	var wall := StaticBody3D.new()
+	wall.collision_layer = 2
+	wall.collision_mask = 0
+	wall.position = (gulu.global_position + player.global_position) * 0.5
+	var wall_shape := CollisionShape3D.new()
+	var wall_box := BoxShape3D.new()
+	wall_box.size = Vector3(0.5, 3.0, 6.0)
+	wall_shape.shape = wall_box
+	wall.add_child(wall_shape)
+	add_child(wall)
+	await get_tree().physics_frame
+	await _wait(1.3)
+	_check(String(fuels[1].get("mode")) == "player" and float(gulu.call("snatch_progress")) < 0.05, "no snatch through a wall", passes, failures)
+	wall.queue_free()
+	await get_tree().physics_frame
+	# 撤掉墙、清掉保护时间后，应先给预兆再抢
+	var warn_state := [false]
+	var warn_probe := func(_p: float) -> void: warn_state[0] = true
+	gulu.connect("snatch_warning", warn_probe)
+	gulu.set("_snatch_ready_at", 0.0)
+	await _wait(0.7)
+	_check(bool(warn_state[0]), "snatch emits a warning before taking the fuel", passes, failures)
+	gulu.disconnect("snatch_warning", warn_probe)
 
 	# --- 奶龙找燃料 ---
 	reset_preview()
@@ -1215,6 +1337,26 @@ func _run_selftest() -> void:
 	gulu.call("_set_state", "idle", true)
 	await _wait(4.5)
 	_check(String(fuels[1].get("mode")) == "dragon", "dragon forages and grabs loose fuel", passes, failures)
+
+	# --- 借力失败：燃料落地后能捡回，不会消失 ---
+	reset_preview()
+	_place_player(Vector3(4.0, 0.02, 4.6), DRAGON_HOME)
+	await _wait(0.2)
+	_press_provoke()
+	await _wait(0.85)
+	_press_provoke()
+	var got_windup3: bool = await _await_state("蓄势", 4.0)
+	_check(got_windup3, "windup for the failed-launch test", passes, failures)
+	Input.action_press("move_right")
+	await _wait(1.0)
+	Input.action_release("move_right")
+	var miss_guard := 0
+	while String(fuels[2].get("mode")) != "free" and miss_guard < 300:
+		await _wait(0.02)
+		miss_guard += 1
+	var dropped: Node3D = fuels[2]
+	_check(String(dropped.get("mode")) == "free" and not bool(dropped.get("collected")), "failed launch leaves the fuel on the ground", passes, failures)
+	_check(bool(dropped.call("can_pick_up", player, 60.0)), "failed-launch fuel can be picked up again", passes, failures)
 
 	# --- 完成与重开 ---
 	reset_preview()
@@ -1330,6 +1472,41 @@ func _run_shots() -> void:
 	await _wait(0.5)
 	await _shot("08_yard_wide.png")
 
+	# 09 抢货预兆：脖子前伸、进度条快满（“看得见它要动手了”）
+	reset_preview()
+	gulu.call("_release_fuel")
+	await get_tree().physics_frame
+	_place_player(FUEL_HOMES[1] + Vector3(-1.0, 0.02, 0.0), FUEL_HOMES[1])
+	await _wait(0.25)
+	_press_interact()
+	await _wait(0.2)
+	_place_player(Vector3(2.4, 0.02, -1.4), gulu.global_position)
+	await _wait(0.3)
+	var guard_t := 0
+	while float(gulu.call("snatch_progress")) < 0.55 and guard_t < 250:
+		await _wait(0.02)
+		guard_t += 1
+	await _shot("09_snatch_telegraph.png")
+
+	# 10 扑空发懵：愣住并把头扭向装货口
+	reset_preview()
+	_place_player(Vector3(9.2, 0.02, 0.0), DRAGON_HOME)
+	await _wait(0.25)
+	_press_provoke()
+	await _wait(0.85)
+	_press_provoke()
+	await _await_state("蓄势", 4.0)
+	Input.action_press("move_right")
+	await _wait(1.0)
+	Input.action_release("move_right")
+	var guard_d := 0
+	while not bool(gulu.call("stun_active")) and guard_d < 250:
+		await _wait(0.02)
+		guard_d += 1
+	_place_player(Vector3(8.6, 0.02, 3.6), Vector3(12.4, 1.1, 0.0))
+	await _wait(0.12)
+	await _shot("10_miss_dazed.png")
+
 	print("GULU SHOTS dir=%s" % ProjectSettings.globalize_path(_shot_dir))
 	get_tree().quit(0)
 
@@ -1346,7 +1523,10 @@ func _shot(file_name: String) -> void:
 		var fuel_modes: PackedStringArray = []
 		for fuel in fuels:
 			fuel_modes.append(String(fuel.get("mode")))
-		var player_screen := shot_cam.unproject_position(player.global_position + Vector3.UP * 0.9)
+		var player_screen := Vector2(-1.0, -1.0)
+		var player_probe := player.global_position + Vector3.UP * 0.9
+		if not shot_cam.is_position_behind(player_probe):
+			player_screen = shot_cam.unproject_position(player_probe)
 		var fuel_note := ""
 		for fuel in fuels:
 			if String(fuel.get("mode")) == "thrown":
@@ -1357,3 +1537,92 @@ func _shot(file_name: String) -> void:
 	var path := _shot_dir.path_join(file_name)
 	var error := image.save_png(path)
 	print("SHOT %s %s" % [file_name, "ok" if error == OK else error_string(error)])
+
+
+# ---------------------------------------------------------------- 录制（连续截图）
+
+func _record_frame() -> void:
+	var image := get_viewport().get_texture().get_image()
+	if image == null:
+		return
+	image.resize(640, 400, Image.INTERPOLATE_BILINEAR)
+	var path := _record_dir.path_join("f%04d.png" % _record_index)
+	image.save_png(path)
+	_record_index += 1
+
+
+## 自动跑一遍完整流程并连续截图；录像由这些帧合成（脚本操作，不是真人试玩）。
+func _run_record() -> void:
+	DirAccess.make_dir_recursive_absolute(_record_dir)
+	for name in DirAccess.get_files_at(_record_dir):
+		if name.ends_with(".png"):
+			DirAccess.remove_absolute(_record_dir.path_join(name))
+	_record_index = 0
+	await _wait(1.0)
+	_recording = true
+
+	# 1) 开场：脚前燃料 / 奶龙 / 装货口
+	_teleport(SPAWN, SPAWN_YAW)
+	await _wait(1.2)
+
+	# 2) 抱起第一罐，沿绕行线走（能看到它是怎么走到船头的）
+	_place_player(FUEL_HOMES[0] + Vector3(0.8, 0.02, 0.2), Vector3(6.0, 0.6, 0.0))
+	await _wait(0.25)
+	_press_interact()
+	await _wait(0.2)
+	await _walk_to(Vector3(-6.0, 0.02, 4.6), 1.6)
+	await _walk_to(Vector3(4.0, 0.02, 2.6), 1.4)
+	await _walk_to(Vector3(12.0, 0.02, 0.2), 1.2)
+	await _wait(0.3)
+
+	# 3) 去窝边拿第二罐：抱起后被看见
+	reset_preview()
+	_place_player(FUEL_HOMES[1] + Vector3(-1.1, 0.02, 0.2), FUEL_HOMES[1])
+	await _wait(0.3)
+	_press_interact()
+	await _wait(1.4)
+
+	# 4) 转身走开，让它“够不着”（预兆消失）
+	await _walk_to(Vector3(-2.0, 0.02, 3.0), 1.0)
+	await _wait(0.6)
+
+	# 5) 故意停下被抢
+	_place_player(gulu.global_position + Vector3(1.5, 0.02, 0.0), gulu.global_position)
+	await _wait(2.6)
+
+	# 6) 把它引到舱口前 → 蓄势 → 侧移
+	_place_player(Vector3(9.2, 0.02, 0.0), DRAGON_HOME)
+	await _wait(0.3)
+	_press_provoke()
+	await _wait(0.85)
+	_press_provoke()
+	await _await_state("蓄势", 4.0)
+	await _wait(0.5)
+	Input.action_press("move_right")
+	await _wait(1.1)
+	Input.action_release("move_right")
+	await _wait(1.6)
+
+	# 7) 看燃料进仓 + 重开
+	await _wait(0.6)
+	reset_preview()
+	await _wait(1.2)
+
+	_recording = false
+	print("GULU RECORD dir=%s frames=%d" % [ProjectSettings.globalize_path(_record_dir), _record_index])
+	get_tree().quit(0)
+
+
+## 自动走一小段（按方向键，靠真实控制器移动，保留碰撞与手感）。
+func _walk_to(target: Vector3, seconds: float) -> void:
+	var dir := target - player.global_position
+	var yaw := atan2(-dir.x, -dir.z)
+	player.rotation.y = yaw
+	player.set("_camera_yaw", yaw)
+	player.set("_camera_yaw_target", yaw)
+	Input.action_press("move_up")
+	Input.action_press("sprint")
+	await _wait(seconds)
+	Input.action_release("sprint")
+	Input.action_release("move_up")
+	await _wait(0.1)
