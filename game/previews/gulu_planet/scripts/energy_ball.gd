@@ -1,95 +1,99 @@
-extends CharacterBody3D
+extends RigidBody3D
 class_name EnergyBall
 
-## 能量球：地面滚动、平滑减速、墙面/门框/奶龙反弹。
+## 能源球：真正的刚体（RigidBody3D + 球形碰撞体）。
 ##
-## 本轮只做“地面球”：不做重力、不弹跳、不做旋转球与空气动力学。
-## 踢球输入（gulu_app.gd）、球的运动（本文件）、入仓判定（collector.gd）三者分开，
-## 以后要加高空球/旋转/重力，只需要换掉这里的积分方式，不用动输入与任务流程。
+## 重力、碰撞、弹跳、旋转全部交给 Godot 物理解算，本文件不写任何角度积分、
+## 不每帧覆盖速度、不在低速时强制归零；滚动由物理摩擦自然产生。
+##
+## 三层职责仍然分开：
+##   踢球输入 → gulu_app.gd（只决定有无冲量与方向）
+##   球运动   → 本文件（冲量、阻尼、出界检测）
+##   入仓判定 → collector.gd（球心越过门口平面）
 
 signal kicked(speed: float)
-signal bounced(point: Vector3, speed: float)
-signal reached_goal()
-signal stuck(point: Vector3)
+signal out_of_bounds(position: Vector3)
 
-## 球半径：0.34 m。比真实足球大，第一人称更容易看见与踢中。
+## 半径 0.34 m：比真实足球大一点，第一人称容易看见、容易踢中。
 const RADIUS := 0.34
-## 指数衰减系数：v(t) = v0 * exp(-FRICTION * t)。1.0 → 15 m/s 的球约 15 m 停下。
-const FRICTION := 1.0
-const STOP_SPEED := 0.30
-const MAX_SPEED := 20.0
-const WALL_RESTITUTION := 0.72
-## 停在同一个地方太久（角落/被堵）→ 交给上层把球挪回可玩位置。
-const STILL_RESCUE_TIME := 3.5
+## 单击固定力度：冲量 = 质量 × 目标初速。质量 1.2 kg → 16.0 N·s 约 13.3 m/s。
+const KICK_IMPULSE := 19.0
 
-var mode := "free"          ## free / moving / scored
 var collected := false
-## 保留给以后多人计分（现在恒为 0）
 var credit_peer := 0
 
 var _visual: Node3D
-var _goal: Node3D
-var _home := Vector3.ZERO
-var _still_time := 0.0
-var _goal_reported := false
-var _last_kick_ms := -100000
-var _bounce_cooldown := 0.0
+var _time := 0.0
+## 物理冲量必须在本节点的物理回调里施加，否则对休眠中的刚体会被丢掉。
+var _pending_impulse := Vector3.ZERO
 
 
 func _ready() -> void:
+	# --- 物理参数：滚动可信、停得住、不过度弹跳 ---
+	mass = 1.2
+	gravity_scale = 1.0
+	linear_damp_mode = RigidBody3D.DAMP_MODE_REPLACE
+	linear_damp = 0.45
+	angular_damp_mode = RigidBody3D.DAMP_MODE_REPLACE
+	angular_damp = 0.55
+	can_sleep = true
+	continuous_cd = true          # 高速射门不穿门柱/墙
+	contact_monitor = true
+	max_contacts_reported = 4
 	collision_layer = 1
-	collision_mask = 2 | 16
-	motion_mode = CharacterBody3D.MOTION_MODE_FLOATING
-	floor_stop_on_slope = false
+	collision_mask = 2 | 4 | 16   # 场景 / 玩家 / 奶龙
+
+	var material := PhysicsMaterial.new()
+	material.friction = 0.7
+	material.bounce = 0.5
+	physics_material_override = material
+
 	var shape := SphereShape3D.new()
 	shape.radius = RADIUS
 	var collider := CollisionShape3D.new()
 	collider.shape = shape
 	add_child(collider)
-	_home = global_position
+
 	_build_visual()
 	set_physics_process(true)
 
 
-func setup_goal(goal: Node3D) -> void:
-	_goal = goal
-
-
-## 踢球：direction 只取水平分量，force 直接作为初速度。
-func kick(direction: Vector3, force: float) -> void:
-	if mode == "scored":
+## 踢球：只施加一次中心冲量，不改位置、不覆盖速度。
+func kick(direction: Vector3, impulse: float = KICK_IMPULSE) -> void:
+	if collected:
 		return
 	var flat := Vector3(direction.x, 0.0, direction.z)
 	if flat.length_squared() < 0.0001:
 		flat = Vector3.FORWARD
 	flat = flat.normalized()
-	velocity = flat * clampf(force, 0.0, MAX_SPEED)
-	mode = "moving"
-	_still_time = 0.0
-	_last_kick_ms = Time.get_ticks_msec()
-	kicked.emit(velocity.length())
+	sleeping = false
+	_pending_impulse += flat * impulse
+	kicked.emit(impulse / maxf(mass, 0.01))
 
 
-## 被奶龙拦下：从 contact 点往 away 方向弹回场内。
-func rebound(away: Vector3, speed: float) -> void:
-	if mode == "scored":
+## 奶龙的“拨球”：独立触发、独立冷却，由行为层调用；不是碰撞反射。
+func swat(direction: Vector3, impulse: float) -> void:
+	if collected:
 		return
-	var flat := Vector3(away.x, 0.0, away.z)
+	var flat := Vector3(direction.x, 0.0, direction.z)
 	if flat.length_squared() < 0.0001:
 		flat = Vector3.LEFT
-	velocity = flat.normalized() * clampf(speed, 1.5, MAX_SPEED)
-	mode = "moving"
-	_still_time = 0.0
-	_bounce_cooldown = 0.0
-	bounced.emit(global_position, velocity.length())
+	flat = flat.normalized()
+	sleeping = false
+	_pending_impulse += flat * impulse
 
 
 func speed() -> float:
-	return velocity.length()
+	return linear_velocity.length()
 
 
-func is_moving() -> bool:
-	return velocity.length() > STOP_SPEED
+func collect() -> void:
+	if collected:
+		return
+	collected = true
+	freeze = true
+	linear_velocity = Vector3.ZERO
+	angular_velocity = Vector3.ZERO
 
 
 func reset_to(at: Vector3) -> void:
@@ -97,113 +101,27 @@ func reset_to(at: Vector3) -> void:
 	if old_tween != null and old_tween is Tween and (old_tween as Tween).is_valid():
 		(old_tween as Tween).kill()
 	set_meta("intake_tween", null)
-	global_position = Vector3(at.x, RADIUS + 0.02, at.z)
-	velocity = Vector3.ZERO
-	mode = "free"
 	collected = false
-	_goal_reported = false
-	_still_time = 0.0
-	_bounce_cooldown = 0.0
+	freeze = false
+	sleeping = false
+	linear_velocity = Vector3.ZERO
+	angular_velocity = Vector3.ZERO
+	global_position = Vector3(at.x, RADIUS + 0.05, at.z)
+	rotation = Vector3.ZERO
 	visible = true
 	scale = Vector3.ONE
-	if _visual != null:
-		_visual.rotation = Vector3.ZERO
-
-
-func home_position() -> Vector3:
-	return _home
-
-
-func settle(at: Vector3) -> void:
-	global_position = Vector3(at.x, RADIUS + 0.02, at.z)
-	velocity = Vector3.ZERO
-	if mode != "scored":
-		mode = "free"
+	_time = 0.0
 
 
 func _physics_process(delta: float) -> void:
-	_bounce_cooldown = maxf(0.0, _bounce_cooldown - delta)
-	if mode == "scored":
-		return
-
-	var before := global_position
-	if velocity.length() > 0.001:
-		velocity *= exp(-FRICTION * delta)
-		if velocity.length() <= STOP_SPEED:
-			velocity = Vector3.ZERO
-	velocity.y = 0.0
-
-	move_and_slide()
-	_resolve_collisions()
-	global_position.y = RADIUS + 0.02
-	_roll(before)
-	_check_goal()
-	_check_still(delta)
-
-
-func _resolve_collisions() -> void:
-	for index in range(get_slide_collision_count()):
-		var hit := get_slide_collision(index)
-		var normal := hit.get_normal()
-		if normal.y > 0.7:
-			continue
-		# 撞墙 / 门框 / 奶龙：按法线反射，速度打折（不无限加速、不抖动）。
-		if velocity.length() > 0.2:
-			velocity = velocity.bounce(normal).normalized() * velocity.length() * WALL_RESTITUTION
-			if _bounce_cooldown <= 0.0:
-				_bounce_cooldown = 0.12
-				bounced.emit(global_position, velocity.length())
-		else:
-			velocity = velocity.slide(normal)
-
-
-func _roll(before: Vector3) -> void:
-	if _visual == null:
-		return
-	var moved := global_position - before
-	moved.y = 0.0
-	var distance := moved.length()
-	if distance < 0.0005:
-		return
-	var axis := Vector3.UP.cross(moved.normalized())
-	if axis.length_squared() < 0.0001:
-		return
-	# 滚动而不是贴地滑行：转过的角度 = 位移 / 半径。
-	_visual.rotate(axis.normalized(), distance / RADIUS)
-
-
-func _check_goal() -> void:
-	if _goal == null or _goal_reported:
-		return
-	if bool(_goal.call("contains_point", global_position)):
-		_goal_reported = true
-		mode = "scored"
-		velocity = Vector3.ZERO
-		reached_goal.emit()
-
-
-## 由装货口调用（collector.consume）：真正记入仓。
-func collect() -> void:
-	if collected:
-		return
-	collected = true
-	mode = "scored"
-	velocity = Vector3.ZERO
-
-
-func _check_still(delta: float) -> void:
-	if velocity.length() > 0.05:
-		_still_time = 0.0
-		return
-	_still_time += delta
-	if _still_time < STILL_RESCUE_TIME:
-		return
-	# 只救“真的拿不回来”的位置：角落、门框外侧、装货口侧袋。
-	var near_edge := absf(global_position.x) > 18.0 or absf(global_position.z) > 13.0
-	var in_bay_pocket := global_position.x > 11.4 and absf(global_position.z) > 2.5
-	if near_edge or in_bay_pocket:
-		_still_time = 0.0
-		stuck.emit(global_position)
+	_time += delta
+	if _pending_impulse != Vector3.ZERO:
+		apply_central_impulse(_pending_impulse)
+		_pending_impulse = Vector3.ZERO
+	# 只有“真的掉出世界”才算需要救援；正常停球/门边停球一律不动它。
+	var p := global_position
+	if p.y < -8.0 or absf(p.x) > 28.0 or absf(p.z) > 22.0:
+		out_of_bounds.emit(p)
 
 
 # ------------------------------------------------------------------ 外观
@@ -229,7 +147,7 @@ func _build_visual() -> void:
 	shell_node.material_override = shell_material
 	_visual.add_child(shell_node)
 
-	# 能量核心：半透明外壳里的一颗发光球
+	# 能量核心：半透明外壳里的发光球
 	var core_material := StandardMaterial3D.new()
 	core_material.albedo_color = Color("#ffb347")
 	core_material.emission_enabled = true
@@ -245,7 +163,7 @@ func _build_visual() -> void:
 	core_node.material_override = core_material
 	_visual.add_child(core_node)
 
-	# 外壳上的三条经线框：滚动时能明显看出自转，不是贴地滑
+	# 外壳经线框：物理自转时能明显看出球在滚，而不是贴地滑
 	var rib_material := StandardMaterial3D.new()
 	rib_material.albedo_color = Color("#375967")
 	rib_material.roughness = 0.5
@@ -262,7 +180,7 @@ func _build_visual() -> void:
 		rib_node.rotation.y = float(index) * PI / 3.0
 		_visual.add_child(rib_node)
 
-	# 赤道一圈琥珀灯带，远景也能读出球在哪
+	# 赤道灯带：远景也读得出球的位置与转动
 	var band := TorusMesh.new()
 	band.inner_radius = RADIUS * 1.01
 	band.outer_radius = RADIUS * 1.09
@@ -279,7 +197,6 @@ func _build_visual() -> void:
 	_visual.add_child(band_node)
 
 	var glow := OmniLight3D.new()
-	glow.position = Vector3.ZERO
 	glow.light_color = Color("#ffb347")
 	glow.light_energy = 0.35
 	glow.omni_range = 2.2

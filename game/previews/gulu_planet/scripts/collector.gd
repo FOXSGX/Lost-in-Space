@@ -24,6 +24,13 @@ var loaded_count := 0
 ## 最后一次入仓的搬运者 peer（单人时 1；保留给以后多人算贡献）
 var last_credit_peer := 0
 
+## 进球判定：盯住一颗球，比较前后两帧位置。
+## 规则 = 球心从场内侧越过门口平面（x = CATCH_MIN.x），且高度/横向在门洞内。
+## 这样门框外侧、门顶上方、球门背面都不会误判，高速也不会漏（逐帧比 x 轴）。
+var _watched: Node3D
+var _prev_pos := Vector3.ZERO
+var _has_prev := false
+
 var _pips: Array[MeshInstance3D] = []
 var _pulse := 0.0
 var _intake_material: StandardMaterial3D
@@ -47,9 +54,35 @@ func contains_point(point: Vector3) -> bool:
 	)
 
 
+## 让装货口盯住一颗球（本轮只有一颗）。
+func watch_ball(node: Node3D) -> void:
+	_watched = node
+	_has_prev = false
+
+
+func _physics_process(_delta: float) -> void:
+	if _watched == null or not is_instance_valid(_watched):
+		return
+	var point: Vector3 = _watched.global_position
+	if not _has_prev:
+		_prev_pos = point
+		_has_prev = true
+		return
+	var crossed := _prev_pos.x < CATCH_MIN.x and point.x >= CATCH_MIN.x
+	var inside_mouth := point.y > 0.0 and point.y < CATCH_MAX.y and absf(point.z) <= CATCH_MAX.z
+	if crossed and inside_mouth and not bool(_watched.get("collected")):
+		consume(_watched)
+	_prev_pos = point
+
+
 ## 吸入点：翻空后奶龙的“发懵视线”对着这里，玩家的镜头也能对得上。
 func intake_point() -> Vector3:
 	return INTAKE_POINT
+
+
+## 门口平面（球心越过这条线才算进门）。
+func goal_plane_x() -> float:
+	return CATCH_MIN.x
 
 
 func consume(fuel: Node3D) -> void:

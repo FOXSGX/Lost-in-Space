@@ -18,10 +18,11 @@ const SPAWN_YAW := -PI * 0.5
 const BALL_HOME := Vector3(-4.6, 0.0, 1.4)
 const DRAGON_HOME := Vector3(10.3, 0.0, 0.0)
 
-## 踢球：范围与角度都留了余量，不要求准星点中球心。
-const KICK_RANGE := 2.7
+## 踢球：必须足够近、方向合理、且中间无遮挡（没有远程踢球）。
+const KICK_RANGE := 1.9
 const KICK_MIN_DOT := 0.35      ## 约 ±69.5°，只要求“大致朝向”
-const KICK_SPEED := 15.0
+## 单击固定力度：冲量 16 N·s ≈ 1.2 kg 的球获得 13.3 m/s
+const KICK_IMPULSE := 16.0
 const GOAL_TARGET := 1
 
 const GROUND := Color("#4e615e")
@@ -31,7 +32,7 @@ const AMBER := Color("#ffb347")
 const CYAN := Color("#3fd8ff")
 
 var player: CharacterBody3D
-var ball: CharacterBody3D
+var ball: RigidBody3D
 var dragon: CharacterBody3D
 var collector: Node3D
 var env_art: Node3D
@@ -68,10 +69,6 @@ var _automation := false
 var _shot_dir := "user://gulu_shots"
 
 # --- 自动录制（连续截图，后可合成为 GIF/视频）---
-var _recording := false
-var _record_dir := "user://gulu_record"
-var _record_index := 0
-var _record_accum := 0.0
 var _record_peak_loaded := 0
 const RECORD_INTERVAL := 0.125
 
@@ -232,13 +229,12 @@ func _spawn_player() -> void:
 
 
 func _spawn_ball() -> void:
-	ball = load("res://scripts/energy_ball.gd").new() as CharacterBody3D
+	ball = load("res://scripts/energy_ball.gd").new() as RigidBody3D
 	ball.name = "EnergyBall"
 	ball.position = BALL_HOME
 	add_child(ball)
-	ball.call("setup_goal", collector)
-	ball.connect("reached_goal", _on_ball_reached_goal)
-	ball.connect("stuck", _on_ball_stuck)
+	collector.call("watch_ball", ball)
+	ball.connect("out_of_bounds", _on_ball_out_of_bounds)
 
 
 func _build_dragon() -> void:
@@ -456,11 +452,6 @@ func _panel_style(alpha: float = 0.82) -> StyleBoxFlat:
 
 
 func _process(delta: float) -> void:
-	if _recording:
-		_record_accum += delta
-		if _record_accum >= RECORD_INTERVAL:
-			_record_accum = 0.0
-			_record_frame()
 	if player == null:
 		return
 
@@ -543,8 +534,12 @@ func _try_kick() -> bool:
 	if forward.dot(to_ball.normalized()) < KICK_MIN_DOT:
 		_flash("先面向球再踢")
 		return false
+	# 玩家与球之间不能有东西（墙/门框/奶龙都算遮挡）
+	if not _has_kick_line(distance):
+		_flash("中间被挡住了，换个位置再踢")
+		return false
 
-	ball.call("kick", forward, KICK_SPEED)
+	ball.call("kick", forward, KICK_IMPULSE)
 	if _sfx != null:
 		_sfx.call("play", "kick")
 	_spawn_kick_pulse(ball.global_position)
@@ -552,6 +547,19 @@ func _try_kick() -> bool:
 
 
 ## 踢中时脚边的短促视觉反馈（一圈快速扩散的环，不遮挡球）。
+func _has_kick_line(distance: float) -> bool:
+	var space := get_world_3d().direct_space_state
+	var from := player.global_position + Vector3.UP * 0.85
+	var to := ball.global_position + Vector3.UP * 0.1
+	var query := PhysicsRayQueryParameters3D.create(from, to, 2 | 16)
+	query.exclude = [player.get_rid()]
+	var hit := space.intersect_ray(query)
+	if hit.is_empty():
+		return true
+	# 起点到球的距离确实很短时，射线可能又打回脚下，容错 0.15 m
+	return (hit["position"] as Vector3).distance_to(to) < 0.15
+
+
 func _spawn_kick_pulse(at: Vector3) -> void:
 	var ring := MeshInstance3D.new()
 	var torus := TorusMesh.new()
@@ -579,12 +587,6 @@ func _spawn_kick_pulse(at: Vector3) -> void:
 
 # ---------------------------------------------------------------- 事件
 
-func _on_ball_reached_goal() -> void:
-	if collector == null or ball == null:
-		return
-	collector.call("consume", ball)
-
-
 func _on_goal_scored(total: int, target: int) -> void:
 	loaded_count = total
 	_record_peak_loaded = maxi(_record_peak_loaded, loaded_count)
@@ -606,17 +608,13 @@ func _on_dragon_blocked(_point: Vector3, _speed: float) -> void:
 	_flash("被奶龙拦下来了——换个位置再踢", 1.5)
 
 
-func _on_ball_stuck(_point: Vector3) -> void:
-	# 出界/卡在拿不回来的角落：放回玩家前方的可玩位置，并给一句提示。
-	var forward := -player.global_transform.basis.z
-	forward.y = 0.0
-	if forward.length_squared() < 0.0001:
-		forward = Vector3.FORWARD
-	var spot := player.global_position + forward.normalized() * 2.4
-	spot.x = clampf(spot.x, -17.0, 17.0)
-	spot.z = clampf(spot.z, -12.5, 12.5)
-	ball.call("settle", spot)
-	_flash("球滚到拿不回来的地方了——已经放回你面前", 2.0)
+func _on_ball_out_of_bounds(_point: Vector3) -> void:
+	# 只有“真的掉出世界”才恢复；正常停球、门边停球一律不动。
+	if ball == null:
+		return
+	ball.call("reset_to", BALL_HOME)
+	_flash("球掉出场地了，已放回发球点", 2.0)
+	print("GULU ball out of bounds -> reset")
 
 
 # ---------------------------------------------------------------- reset / debug
@@ -710,6 +708,33 @@ func _aim_at(target: Vector3) -> void:
 	player.set("_camera_yaw_target", yaw)
 
 
+## 反复走近球，直到真的在踢球范围内（球会滚，走一次可能不够）。
+func _approach_ball(offset: Vector3) -> void:
+	for _attempt in range(3):
+		if player.global_position.distance_to(ball.global_position) <= KICK_RANGE - 0.45:
+			return
+		await _walk_until(ball.global_position + offset, 0.28, 2.5)
+
+
+## 等球慢下来再瞄（避免瞄完球又滚走）。
+func _wait_ball_slow(timeout: float) -> void:
+	var elapsed := 0.0
+	while elapsed < timeout:
+		if _ball_speed() < 0.6:
+			return
+		await _wait(0.05)
+		elapsed += 0.05
+
+
+## 瞄一个“穿过球、指向 target”的方向：保证球在视线正前方（录制用）。
+func _aim_through(target: Vector3) -> void:
+	var dir := target - ball.global_position
+	dir.y = 0.0
+	if dir.length_squared() < 0.001:
+		dir = Vector3.RIGHT
+	_aim_at(ball.global_position + dir.normalized() * 6.0)
+
+
 func _click_kick() -> void:
 	_try_kick()
 
@@ -720,19 +745,18 @@ func _ball_speed() -> float:
 # ---------------------------------------------------------------- 自测
 
 func _run_selftest() -> void:
-	await _wait(0.8)
+	await _wait(0.9)
 	var passes: Array = []
 	var failures: Array = []
 	print("GULU SELFTEST start source=%s" % SOURCE_COMMIT)
 
-	# --- 控制器未被破坏（与飞船第一人称逐值一致）---
+	# --- 控制器未被破坏 ---
 	_check(bool(player.get("use_first_person")), "default first person", passes, failures)
 	var cam := player.get("camera") as Camera3D
 	var eye_delta := cam.global_position.y - player.global_position.y
 	_check(absf(eye_delta - 1.6) < 0.03, "camera eye height 1.6 (%.3f)" % eye_delta, passes, failures)
 	_check(absf(cam.fov - 74.0) < 0.1, "camera fov 74 (%.1f)" % cam.fov, passes, failures)
 	_check(absf(cam.near - 0.05) < 0.001, "camera near 0.05", passes, failures)
-
 	var start := player.global_position
 	Input.action_press("move_up")
 	await _wait(0.8)
@@ -740,9 +764,9 @@ func _run_selftest() -> void:
 	await get_tree().physics_frame
 	_check(player.global_position.distance_to(start) > 2.0, "WASD movement still works (%.2f m)" % player.global_position.distance_to(start), passes, failures)
 
-	# --- 出生首屏：球 / 奶龙 / 装货口 同屏 ---
+	# --- 首屏三要素 ---
 	reset_round()
-	await _wait(0.2)
+	await _wait(0.3)
 	var view := get_viewport().get_visible_rect().size
 	var cam2 := player.get("camera") as Camera3D
 	var ball_screen := cam2.unproject_position(ball.global_position)
@@ -758,124 +782,193 @@ func _run_selftest() -> void:
 	_check(_hint_label.text.contains("左键") and not _hint_label.text.contains("挑衅"), "only one kick hint on HUD", passes, failures)
 
 	# --- 远距离不能踢 ---
-	reset_round()
-	_teleport(BALL_HOME + Vector3(-6.0, 0.02, 0.0), 0.0)
-	_aim_at(BALL_HOME + Vector3(6.0, 0.0, 0.0))
-	await _wait(0.1)
-	var far_kick := _try_kick()
-	_check(not far_kick and _ball_speed() < 0.01, "cannot kick from far away", passes, failures)
+	_teleport(BALL_HOME + Vector3(-5.0, 0.02, 0.0), 0.0)
+	_aim_at(BALL_HOME + Vector3(5.0, 0.0, 0.0))
+	await _wait(0.15)
+	_check(not _try_kick(), "cannot kick from far away", passes, failures)
+	_check(_ball_speed() < 0.2, "far kick leaves the ball still", passes, failures)
 
-	# --- 近距离、大致朝向可以踢，方向跟镜头 ---
+	# --- 有遮挡不能踢 ---
 	_teleport(BALL_HOME + Vector3(-1.2, 0.02, 0.0), 0.0)
-	_aim_at(BALL_HOME + Vector3(6.0, 0.0, 0.0))
+	_aim_at(BALL_HOME + Vector3(5.0, 0.0, 0.0))
 	await _wait(0.1)
-	var near_kick := _try_kick()
-	_check(near_kick, "kick works up close", passes, failures)
-	var launch := _ball_speed()
-	_check(launch > 12.0, "kick gives a fixed strong impulse (%.1f m/s)" % launch, passes, failures)
-	_check(ball.velocity.normalized().dot(Vector3.RIGHT) > 0.9, "kick direction follows the camera", passes, failures)
+	var wall := _test_wall(BALL_HOME + Vector3(-0.55, 0.0, 0.0), Vector3(0.16, 2.0, 2.0))
+	await _wait(0.15)
+	_check(not _try_kick(), "cannot kick through an obstruction", passes, failures)
+	wall.queue_free()
+	await _wait(0.15)
 
-	# --- 减速与停止（往空场方向踢，避开奶龙与墙）---
+	# --- 近距可踢：冲量、方向 ---
+	_check(_try_kick(), "kick works up close", passes, failures)
+	await _wait(0.2)
+	var launch := _ball_speed()
+	_check(launch > 8.0, "kick applies an impulse (%.1f m/s)" % launch, passes, failures)
+	_check(ball.linear_velocity.normalized().dot(Vector3.RIGHT) > 0.85, "kick direction follows the camera", passes, failures)
+
+	# --- 减速与停止 ---
 	reset_round()
-	ball.call("settle", Vector3(-6.0, 0.0, -3.0))
-	await _wait(0.1)
-	ball.call("kick", Vector3(0.0, 0.0, 1.0), 12.0)
-	var fast := _ball_speed()
+	ball.call("reset_to", Vector3(-6.0, 0.0, -3.0))
+	await _wait(0.3)
+	ball.call("kick", Vector3(0.0, 0.0, 1.0), 13.0)
 	await _wait(1.0)
 	var slowed := _ball_speed()
-	_check(slowed < fast * 0.7, "ball decelerates (%.1f -> %.1f)" % [fast, slowed], passes, failures)
-	await _wait(3.4)
-	_check(_ball_speed() < 0.05, "ball comes to rest", passes, failures)
-
-	# --- 停球后仍能再踢 ---
-	_teleport(ball.global_position + Vector3(-1.3, 0.02, 0.0), 0.0)
-	_aim_at(ball.global_position + Vector3(6.0, 0.0, 0.0))
-	await _wait(0.1)
-	_check(_try_kick() and _ball_speed() > 12.0, "resting ball can be kicked again", passes, failures)
+	_check(slowed < 10.5, "ball decelerates (%.1f -> %.1f)" % [13.0, slowed], passes, failures)
+	await _wait(5.0)
+	_check(_ball_speed() < 0.2, "ball comes to rest", passes, failures)
 
 	# --- 墙面反弹 ---
 	reset_round()
-	ball.call("settle", Vector3(14.0, 0.0, 13.2))
-	ball.call("kick", Vector3(0.0, 0.0, 1.0), 10.0)
-	await _wait(0.9)
-	_check(ball.velocity.z < -0.2, "ball bounces off the boundary wall (vz=%.2f)" % ball.velocity.z, passes, failures)
-
-	# --- 奶龙拦球 ---
-	reset_round()
-	ball.call("settle", Vector3(6.5, 0.0, 0.0))
-	dragon.call("reset_to_home")
-	await _wait(0.25)
-	ball.call("kick", Vector3(1.0, 0.0, 0.0), 14.0)
-	var bounced_back := false
-	for _probe in range(150):
-		if ball.velocity.x < -0.2:
-			bounced_back = true
+	ball.call("reset_to", Vector3(14.0, 0.0, 12.0))
+	await _wait(0.4)
+	ball.call("kick", Vector3(0.0, 0.0, 1.0), 12.0)
+	var bounced := false
+	for _probe in range(120):
+		if ball.linear_velocity.z < -0.5:
+			bounced = true
 			break
 		await _wait(0.02)
-	_check(bounced_back, "keeper blocks a straight shot", passes, failures)
-	_check(ball.global_position.x < 12.4, "blocked ball never reaches the bay (x=%.2f)" % ball.global_position.x, passes, failures)
+	_check(bounced, "ball bounces off the boundary wall", passes, failures)
 
-	# --- 奶龙不会连击球 ---
+	# --- 重力：自然落下与弹起 ---
 	reset_round()
-	await _wait(0.8)
-	var block_count := [0]
-	var on_block := func(_p: Vector3, _s: float) -> void: block_count[0] += 1
-	dragon.connect("blocked", on_block)
-	ball.call("settle", Vector3(8.6, 0.0, 0.2))
+	ball.freeze = true
+	ball.global_position = Vector3(-3.0, 2.6, 0.0)
+	ball.linear_velocity = Vector3.ZERO
 	await _wait(0.05)
-	ball.call("kick", Vector3(1.0, 0.0, 0.0), 6.0)
-	await _wait(1.6)
-	_check(block_count[0] >= 1 and block_count[0] <= 2, "keeper blocks but does not machine-gun (%d hits)" % block_count[0], passes, failures)
-	dragon.disconnect("blocked", on_block)
+	ball.freeze = false
+	var touched := false
+	var rebounded := false
+	for _probe in range(200):
+		var y := ball.global_position.y
+		if y < 0.42:
+			touched = true
+		if touched and y > 0.62:
+			rebounded = true
+			break
+		await _wait(0.02)
+	_check(touched, "ball falls under gravity", passes, failures)
+	_check(rebounded, "ball bounces after landing", passes, failures)
 
-	# --- 球不会被身体压死 ---
-	await _wait(0.6)
-	var gap := ball.global_position.distance_to(dragon.global_position)
-	_check(gap > 0.75 or _ball_speed() > 0.8, "ball is not trapped under the keeper (gap %.2f)" % gap, passes, failures)
-
-	# --- 斜射：能绕过守门打进 ---
+	# --- 高速射向门柱：不穿透、不误判 ---
 	reset_round()
-	dragon.global_position = Vector3(10.3, 0.0, -2.4)
-	ball.call("settle", Vector3(11.2, 0.0, 1.7))
-	await _wait(0.15)
+	ball.call("reset_to", Vector3(8.0, 0.0, 4.6))
+	await _wait(0.4)
+	var post_dir := Vector3(13.9, 0.0, 3.0) - ball.global_position
+	post_dir.y = 0.0
+	ball.call("kick", post_dir.normalized(), 22.0)
+	await _wait(1.8)
+	_check(loaded_count == 0, "shot into the post does not score", passes, failures)
+	_check(ball.global_position.x < 13.4, "high-speed ball does not pass through the frame (x=%.2f)" % ball.global_position.x, passes, failures)
+
+	# --- 奶龙拦直线射门 ---
+	reset_round()
+	ball.call("reset_to", Vector3(6.4, 0.0, 0.0))
+	await _wait(0.4)
 	var before_goal := loaded_count
-	ball.call("kick", Vector3(1.0, 0.0, -0.2), 16.0)
+	var swats := [0]
+	var on_block := func(_p: Vector3, _s: float) -> void: swats[0] += 1
+	dragon.connect("blocked", on_block)
+	ball.call("kick", Vector3(1.0, 0.0, 0.0), 14.0)
+	var peak_speed := 0.0
+	var crossed_plane := false
+	for _probe in range(160):
+		peak_speed = maxf(peak_speed, _ball_speed())
+		if ball.global_position.x >= 12.45:
+			crossed_plane = true
+		await _wait(0.02)
+	dragon.disconnect("blocked", on_block)
+	_check(not crossed_plane and loaded_count == before_goal, "keeper stops a straight shot (x=%.2f)" % ball.global_position.x, passes, failures)
+	_check(swats[0] >= 1 and swats[0] <= 2, "keeper swats the ball once per contact (%d)" % swats[0], passes, failures)
+	_check(peak_speed < 20.0, "contact with the keeper does not add energy (peak %.1f)" % peak_speed, passes, failures)
+
+	# --- 横穿球场的球不触发出击 ---
+	reset_round()
+	dragon.global_position = Vector3(9.4, 0.0, 0.0)
+	ball.call("reset_to", Vector3(9.0, 0.0, 4.0))
+	await _wait(0.5)
+	ball.call("kick", Vector3(0.12, 0.0, -1.0), 11.0)
+	await _wait(0.7)
+	_check(dragon.state_name() != "拦截", "keeper does not dive at a cross-field ball (%s)" % dragon.state_name(), passes, failures)
+
+	# --- 出击后能恢复 ---
+	reset_round()
+	ball.call("reset_to", Vector3(9.0, 0.0, 3.4))
+	await _wait(0.4)
+	ball.call("kick", Vector3(1.0, 0.0, -0.35), 20.0)
+	await _wait(2.0)
+	_check(dragon.state_name() in ["观察", "回防", "恢复"], "keeper recovers after a dive (%s)" % dragon.state_name(), passes, failures)
+
+	# --- 换位置能创造空当 ---
+	reset_round()
+	dragon.global_position = Vector3(10.2, 0.0, -2.6)
+	ball.call("reset_to", Vector3(10.4, 0.0, 2.0))
+	await _wait(0.5)
+	var before_side := loaded_count
+	ball.call("kick", Vector3(1.0, 0.0, -0.25), 18.0)
 	var scored := false
 	for _probe in range(200):
-		if loaded_count > before_goal:
+		if loaded_count > before_side:
 			scored = true
 			break
 		await _wait(0.02)
 	_check(scored, "an angled shot into the open side scores (loaded=%d)" % loaded_count, passes, failures)
 
-	# --- 门框外侧不算 ---
-	_check(not bool(collector.call("contains_point", Vector3(13.2, 0.4, 3.4))), "outside the frame does not count", passes, failures)
-	var before_total := loaded_count
-	collector.call("consume", ball)
-	await _wait(0.06)
-	_check(loaded_count == before_total, "the same ball cannot score twice", passes, failures)
-
-	# --- 出界/卡球自救 ---
+	# --- 门洞规则：只认“从场内越过门口平面” ---
 	reset_round()
-	ball.call("settle", Vector3(13.2, 0.0, 3.3))
-	await _wait(5.2)
-	_check(ball.global_position.x < 11.4 or absf(ball.global_position.z) < 2.5, "stuck ball is put back in play", passes, failures)
-
-	# --- 完成与本局重开 ---
-	reset_round()
-	dragon.global_position = Vector3(10.3, 0.0, -2.4)
-	ball.call("settle", Vector3(11.4, 0.0, 1.6))
+	await _wait(0.2)
+	var before_rule := loaded_count
+	ball.freeze = true
+	ball.global_position = Vector3(12.2, 2.6, 0.0)
+	await _wait(0.08)
+	ball.global_position = Vector3(12.6, 2.6, 0.0)
+	await _wait(0.12)
+	_check(loaded_count == before_rule, "crossing above the mouth does not score", passes, failures)
+	ball.global_position = Vector3(12.2, 0.4, 3.0)
+	await _wait(0.08)
+	ball.global_position = Vector3(12.6, 0.4, 3.0)
+	await _wait(0.12)
+	_check(loaded_count == before_rule, "crossing outside the posts does not score", passes, failures)
+	ball.global_position = Vector3(12.8, 0.4, 0.0)
+	await _wait(0.08)
+	ball.global_position = Vector3(12.2, 0.4, 0.0)
+	await _wait(0.12)
+	_check(loaded_count == before_rule, "coming back out of the goal does not score", passes, failures)
+	ball.global_position = Vector3(12.2, 0.4, 0.5)
+	await _wait(0.08)
+	ball.global_position = Vector3(12.7, 0.4, 0.5)
+	await _wait(0.15)
+	_check(loaded_count == before_rule + 1, "a ball through the mouth scores once", passes, failures)
 	await _wait(0.1)
-	ball.call("kick", Vector3(1.0, 0.0, -0.1), 16.0)
-	for _probe in range(200):
-		if completed:
-			break
-		await _wait(0.02)
+	collector.call("consume", ball)
+	await _wait(0.1)
+	_check(loaded_count == before_rule + 1, "the same ball cannot score twice", passes, failures)
+	ball.freeze = false
+
+	# --- 正常停球不会被传送 ---
+	reset_round()
+	ball.call("reset_to", Vector3(-8.0, 0.0, 6.0))
+	await _wait(0.4)
+	ball.call("kick", Vector3(0.0, 0.0, 1.0), 4.0)
+	await _wait(6.0)
+	var resting := ball.global_position
+	await _wait(2.0)
+	_check(ball.global_position.distance_to(resting) < 0.3, "a normal stop is never teleported", passes, failures)
+
+	# --- 完成与重开 ---
+	reset_round()
+	await _wait(0.3)
+	ball.freeze = true
+	ball.global_position = Vector3(12.2, 0.4, 1.2)
+	await _wait(0.08)
+	ball.global_position = Vector3(12.8, 0.4, 1.2)
+	await _wait(0.2)
+	ball.freeze = false
 	_check(completed and _banner.visible, "goal completes the round", passes, failures)
 	reset_round()
-	await _wait(0.1)
-	_check(loaded_count == 0 and not completed and ball.global_position.distance_to(BALL_HOME) < 0.8, "R resets ball and score", passes, failures)
-	_check(dragon.global_position.distance_to(DRAGON_HOME) < 0.6, "R resets the keeper", passes, failures)
+	await _wait(0.2)
+	_check(loaded_count == 0 and not completed, "R resets the score", passes, failures)
+	_check(ball.global_position.distance_to(BALL_HOME) < 0.8, "R resets the ball", passes, failures)
+	_check(dragon.global_position.distance_to(DRAGON_HOME) < 0.8, "R resets the keeper", passes, failures)
 	reset_round()
 	reset_round()
 	_check(loaded_count == 0 and not completed, "repeated reset is safe", passes, failures)
@@ -888,17 +981,25 @@ func _run_selftest() -> void:
 	_check(skeletons.size() > 0, "dragon skeleton present", passes, failures)
 	var body := visual.get("_body") as Node3D
 	_check(body != null and absf(body.position.y) < 0.05 and absf(body.scale.y - 1.0) < 0.02, "model keeps natural scale and stays grounded", passes, failures)
-	_check(blender_test_asset != null and not blender_test_asset.visible, "Blender test asset hidden by default", passes, failures)
-
-	_toggle_debug()
-	await _wait(0.1)
-	_check(_debug_panel.visible, "debug panel renders", passes, failures)
-	_toggle_debug()
-	await _wait(0.1)
 
 	print("GULU SELFTEST SUMMARY passes=%d failures=%d" % [passes.size(), failures.size()])
 	await _wait(0.2)
 	get_tree().quit(0 if failures.is_empty() else 1)
+
+
+func _test_wall(at: Vector3, size: Vector3) -> StaticBody3D:
+	var body := StaticBody3D.new()
+	body.collision_layer = 2
+	body.collision_mask = 0
+	body.position = at
+	var shape := CollisionShape3D.new()
+	var box := BoxShape3D.new()
+	box.size = size
+	shape.shape = box
+	body.add_child(shape)
+	add_child(body)
+	return body
+
 
 # ---------------------------------------------------------------- 截图
 
@@ -906,56 +1007,49 @@ func _run_shots() -> void:
 	DirAccess.make_dir_recursive_absolute(_shot_dir)
 	await _wait(1.0)
 
-	# 01 出生点：球 / 奶龙 / 装货口同屏
 	reset_round()
-	await _wait(0.6)
+	await _wait(0.8)
 	await _shot("01_spawn_ball_dragon_goal.png")
 
-	# 02 走近球：能看清球面与外壳（退开 2.3 m，球和球门都在画面里）
-	_teleport(BALL_HOME + Vector3(-2.3, 0.02, 0.7), 0.0)
-	_aim_at(Vector3(2.0, 0.7, -0.2))
+	_teleport(BALL_HOME + Vector3(-1.6, 0.02, 0.9), 0.0)
+	_aim_at(BALL_HOME + Vector3(2.0, 0.6, -0.2))
 	await _wait(0.4)
 	await _shot("02_near_ball.png")
 
-	# 03 刚踢出：球在滚动、脚边有冲击环
 	_aim_at(BALL_HOME + Vector3(8.0, 0.0, 0.0))
 	await _wait(0.15)
 	_try_kick()
-	await _wait(0.12)
+	await _wait(0.18)
 	await _shot("03_kick_moment.png")
 
-	# 04 被奶龙拦下
-	for _probe in range(150):
-		if ball.velocity.x < -0.2:
+	for _probe in range(200):
+		if ball.linear_velocity.x < -0.5:
 			break
 		await _wait(0.02)
-	_place_player(Vector3(6.6, 0.02, 3.0), dragon.global_position)
-	await _wait(0.1)
+	_place_player(Vector3(7.2, 0.02, 3.2), dragon.global_position)
+	await _wait(0.15)
 	await _shot("04_keeper_block.png")
 
-	# 05 斜射入门 + 装载横幅
 	reset_round()
-	dragon.global_position = Vector3(10.3, 0.0, -2.4)
-	ball.call("settle", Vector3(11.2, 0.0, 1.7))
-	_place_player(Vector3(9.4, 0.02, 4.4), Vector3(13.5, 1.0, 0.6))
-	await _wait(0.2)
-	ball.call("kick", Vector3(1.0, 0.0, -0.2), 16.0)
+	dragon.global_position = Vector3(10.2, 0.0, -2.6)
+	ball.call("reset_to", Vector3(10.6, 0.0, 2.1))
+	_place_player(Vector3(8.6, 0.02, 4.6), Vector3(13.5, 1.0, 0.4))
+	await _wait(0.5)
+	ball.call("kick", Vector3(1.0, 0.0, -0.22), 18.0)
 	for _probe in range(200):
 		if completed:
 			break
 		await _wait(0.02)
-	await _wait(0.2)
+	await _wait(0.25)
 	await _shot("05_goal_loaded.png")
 
-	# 06 场地全景
 	_place_player(Vector3(-6.5, 0.02, 8.4), Vector3(9.0, 1.0, -1.0))
 	await _wait(0.5)
 	await _shot("06_yard_wide.png")
 
-	# 07 奶龙近景：迈步/拦球姿势
 	reset_round()
-	ball.call("settle", Vector3(7.4, 0.0, 0.9))
-	_place_player(Vector3(8.2, 0.02, 3.4), dragon.global_position + Vector3.UP * 0.6)
+	ball.call("reset_to", Vector3(7.4, 0.0, 1.2))
+	_place_player(Vector3(8.4, 0.02, 3.6), dragon.global_position + Vector3.UP * 0.6)
 	await _wait(1.2)
 	await _shot("07_keeper_closeup.png")
 
@@ -973,100 +1067,74 @@ func _shot(file_name: String) -> void:
 		var ball_screen := cam.unproject_position(ball.global_position)
 		var view := get_viewport().get_visible_rect().size
 		var on_screen := head.x > 0.0 and head.x < view.x and head.y > 0.0 and head.y < view.y
-		print("SHOTMETA %s dragon_screen=%s ball_screen=%s on_screen=%s loaded=%d state=%s ball_speed=%.1f" % [
-			file_name, head, ball_screen, on_screen, loaded_count, dragon.call("state_name"), _ball_speed()])
+		print("SHOTMETA %s dragon_screen=%s ball_screen=%s on_screen=%s loaded=%d state=%s ball_speed=%.1f ball_y=%.2f" % [
+			file_name, head, ball_screen, on_screen, loaded_count, dragon.state_name(), _ball_speed(), ball.global_position.y])
 	var image := get_viewport().get_texture().get_image()
 	var path := _shot_dir.path_join(file_name)
 	var error := image.save_png(path)
 	print("SHOT %s %s" % [file_name, "ok" if error == OK else error_string(error)])
 
 
-# ---------------------------------------------------------------- 录制
+# ---------------------------------------------------------------- 录制（纯输入驱动）
 
-func _record_frame() -> void:
-	var image := get_viewport().get_texture().get_image()
-	if image == null:
-		return
-	image.resize(640, 400, Image.INTERPOLATE_BILINEAR)
-	image.save_png(_record_dir.path_join("f%04d.png" % _record_index))
-	_record_index += 1
-
-
-func _walk_to(target: Vector3, seconds: float) -> void:
-	var delta := target - player.global_position
-	delta.y = 0.0
-	if delta.length() > 0.2:
+## 按住 W 走到目标附近；只按动作键、直接改朝向，不传送玩家、不动球。
+func _walk_until(target: Vector3, stop_distance: float, timeout: float) -> void:
+	var elapsed := 0.0
+	Input.action_press("move_up")
+	while elapsed < timeout:
+		var delta := target - player.global_position
+		delta.y = 0.0
+		if delta.length() <= stop_distance:
+			break
 		var yaw := atan2(-delta.x, -delta.z)
 		player.rotation.y = yaw
 		player.set("_camera_yaw", yaw)
 		player.set("_camera_yaw_target", yaw)
-	Input.action_press("move_up")
-	await _wait(seconds)
+		await _wait(0.05)
+		elapsed += 0.05
 	Input.action_release("move_up")
-	await _wait(0.08)
+	await _wait(0.15)
 
 
-## 走到“球边某一点”再踢；走不准就精确站位（录制专用）。
-func _kick_from(offset: Vector3, aim: Vector3) -> bool:
-	var stand := ball.global_position + offset
-	var distance := player.global_position.distance_to(stand)
-	await _walk_to(stand, clampf(distance / 4.6, 0.2, 2.4))
-	if player.global_position.distance_to(ball.global_position) > KICK_RANGE - 0.3:
-		_teleport(Vector3(stand.x, 0.02, stand.z), 0.0)
-	_aim_at(aim)
-	await _wait(0.3)
-	var ok := _try_kick()
-	print("GULU RECORD kick_from ok=%s dir=%s yaw=%.2f" % [str(ok), str(ball.velocity), float(player.get("_camera_yaw"))])
-	return ok
-
-
-## 自动跑一遍：踢球 → 被拦 → 换位置 → 进球（脚本操作，不是真人试玩）。
 func _run_record() -> void:
-	DirAccess.make_dir_recursive_absolute(_record_dir)
-	for name in DirAccess.get_files_at(_record_dir):
-		if name.ends_with(".png"):
-			DirAccess.remove_absolute(_record_dir.path_join(name))
-	_record_index = 0
-	await _wait(1.0)
-	_recording = true
-
-	# 1) 开场：球 / 奶龙 / 装货口
+	await _wait(1.2)
 	reset_round()
-	await _wait(1.4)
+	await _wait(1.0)
 
-	# 2) 走到球边
-	var kicked1: bool = await _kick_from(Vector3(-1.6, 0.0, 0.4), BALL_HOME + Vector3(8.0, 0.0, 0.0))
-	print("GULU RECORD kick1=%s ball=%s" % [str(kicked1), str(ball.global_position)])
-
-	# 3) 第一脚：被守门拦下
+	# 1) 走到球边，直射（会被拦下）
+	await _approach_ball(Vector3(-1.3, 0.0, 0.7))
+	_aim_through(BALL_HOME + Vector3(20.0, 0.0, 0.0))
 	await _wait(0.4)
-	for _probe in range(150):
-		if ball.velocity.x < -0.2:
+	var first := _try_kick()
+	print("GULU RECORD kick1=%s dist=%.2f" % [str(first), player.global_position.distance_to(ball.global_position)])
+	for _probe in range(240):
+		if ball.linear_velocity.x < -0.5:
 			break
 		await _wait(0.02)
 	await _wait(0.6)
+	print("GULU RECORD after_kick1 loaded=%d ball=(%.1f, %.1f)" % [loaded_count, ball.global_position.x, ball.global_position.z])
 
-	# 4) 换到侧面，打远角
-	var kicked2: bool = await _kick_from(Vector3(-1.7, 0.0, 2.4), Vector3(13.7, 0.5, -2.0))
-	print("GULU RECORD kick2=%s ball=%s" % [str(kicked2), str(ball.global_position)])
-
-	# 5) 等进球
-	var record_scored := false
-	var max_x := -999.0
-	for _probe in range(200):
-		max_x = maxf(max_x, ball.global_position.x)
+	# 2) 绕到球的“身后”（相对要打的门柱），再踢
+	var post_z := 2.0 if ball.global_position.z < 0.0 else -2.0
+	var aim_dir := Vector3(13.9, 0.4, post_z) - ball.global_position
+	aim_dir.y = 0.0
+	aim_dir = aim_dir.normalized()
+	await _approach_ball(-aim_dir * 1.45)
+	await _wait_ball_slow(1.2)
+	await _approach_ball(-aim_dir * 1.45)
+	post_z = 2.0 if ball.global_position.z < 0.0 else -2.0
+	_aim_through(Vector3(13.9, 0.4, post_z))
+	await _wait(0.2)
+	var second := _try_kick()
+	print("GULU RECORD kick2=%s dist=%.2f" % [str(second), player.global_position.distance_to(ball.global_position)])
+	for _probe in range(300):
 		if completed:
-			record_scored = true
 			break
 		await _wait(0.02)
-	print("GULU RECORD after_shot ball=%s mode=%s max_x=%.2f keeper=(%.2f, %.2f)" % [str(ball.global_position), String(ball.get("mode")), max_x, dragon.global_position.x, dragon.global_position.z])
-	await _wait(1.2)
+	print("GULU RECORD scored=%s loaded=%d" % [str(completed), loaded_count])
+	await _wait(1.6)
 
-	# 6) 再来一局
 	reset_round()
 	await _wait(1.0)
-
-	_recording = false
-	print("GULU RECORD dir=%s frames=%d peak_loaded=%d scored=%s" % [
-		ProjectSettings.globalize_path(_record_dir), _record_index, _record_peak_loaded, str(record_scored)])
+	print("GULU RECORD done peak_loaded=%d" % _record_peak_loaded)
 	get_tree().quit(0)

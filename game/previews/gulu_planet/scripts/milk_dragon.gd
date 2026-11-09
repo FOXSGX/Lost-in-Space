@@ -1,60 +1,63 @@
 extends CharacterBody3D
 class_name MilkDragonKeeper
 
-## 奶龙的唯一职责：守在装货口前拦球。
+## 奶龙的唯一职责：拦球。
 ##
-## 不做的事（本轮明确移除）：不抢玩家手上的东西、不追玩家、不挑衅/怒气/扑击、
-## 不叼球回窝、不伤害玩家。旧实现留在 git 历史里，不与新规则混用。
+## 四个状态（就这四个）：
+##   观察与站位 → 接近/拦截 → 扑空恢复 → 回防
 ##
-## 设计要点：
-##   - 只在球门前的一块矩形区域里活动（guard_min_x..guard_max_x，|z| ≤ guard_half_z）；
-##   - 反应有延迟、加速度与最高速度有限，不能瞬移、也不会预知每一脚；
-##   - 拦到球就把它小幅弹回场内（球永远可以继续争抢）；
-##   - 球贴身且很慢时会被轻轻推离，避免身体把球永久压住。
+## 能力是有限的：
+##   - 只根据“延迟采样的球位置 + 球速”估计拦截点，不读取玩家输入、不预知、不瞬移；
+##   - 有反应延迟、加速度上限、最高速度、转向角速度上限；
+##   - 只有「球朝球门来 + 预计到达时间够短 + 落点在门洞附近」才出击，
+##     朝远处滚的高球不会触发无意义扑救；
+##   - 出击后目标锁定一小段时间（不能立刻改向），所以玩家打反方向能过；
+##   - 同一次出击只拨球一次（独立冷却），不会贴着球连击。
+##
+## 碰撞：球是 RigidBody3D，身体接触由物理引擎统一处理；本文件只额外施加
+## 「一次受限冲量」的主动拨球，绝不重复反射速度。
 
 signal blocked(point: Vector3, speed: float)
 signal state_changed(current: String)
 
-const STATE_IDLE := "待机"
-const STATE_TRACK := "跟球"
-const STATE_BLOCK := "拦球"
+const STATE_OBSERVE := "观察"
+const STATE_INTERCEPT := "拦截"
+const STATE_RECOVER := "恢复"
+const STATE_RETURN := "回防"
 
-const STATE_NAMES := {
-	STATE_IDLE: "待机",
-	STATE_TRACK: "跟球",
-	STATE_BLOCK: "拦球",
-}
-
-@export var home := Vector3(10.3, 0.0, 0.0)
-## 守门区域：比球门口（z ±2.4）略宽一点，但仍然到不了门框外侧。
-@export var guard_min_x := 8.5
-@export var guard_max_x := 11.6
-@export var guard_half_z := 2.7
-@export var max_speed := 2.9
-@export var max_accel := 14.0
-## 反应延迟：每隔这么久才更新一次“球在哪”，制造可被假动作骗到的空当。
+@export var home := Vector3(10.2, 0.0, 0.0)
+## 站位区：门前一块矩形，不是一条线
+@export var zone_min_x := 8.4
+@export var zone_max_x := 11.4
+@export var zone_half_z := 3.2
+@export var walk_speed := 1.6
+@export var charge_speed := 2.4
+@export var max_accel := 16.0
+## 真正的角速度上限（rad/s），按 delta 积分，不是“每秒 lerp 系数”
+@export var max_turn_rate := 5.0
 @export var react_delay := 0.24
-@export var block_radius := 0.95
-@export var block_cooldown := 0.55
-## 看到射门后“扑向当前方向”的时间：这段时间内不再修正目标，所以打反方向能过
-@export var commit_time := 0.32
-@export var shot_speed := 9.0
-@export var turn_speed := 6.0
+@export var intercept_time := 0.50
+@export var recover_time := 0.7
+@export var intercept_cooldown := 2.2
+@export var swat_range := 0.95
+@export var swat_cooldown := 0.8
+@export var swat_impulse := 5.4
 @export var gravity := 18.0
 
-var ball: Node3D
+var ball: RigidBody3D
 var goal: Node3D
-var state := STATE_IDLE
+var state := STATE_OBSERVE
 var visual: Node3D
 
-var _target := Vector3.ZERO
+var _goal_x := 12.45
+var _sample := Vector3.ZERO
+var _sample_vel := Vector3.ZERO
 var _think := 0.0
-var _block_timer := 0.0
-var _block_ready := 0.0
-var _commit_timer := 0.0
-var _last_ball_speed := 0.0
+var _state_timer := 0.0
+var _cooldown := 0.0
+var _swat_ready := 0.0
+var _target := Vector3.ZERO
 var _time := 0.0
-var _last_position := Vector3.ZERO
 
 
 func _ready() -> void:
@@ -70,190 +73,208 @@ func _ready() -> void:
 	add_child(shape)
 	visual = get_node_or_null("Visual") as Node3D
 	_target = home
-	_last_position = global_position
-	_set_state(STATE_IDLE)
+	_set_state(STATE_OBSERVE)
 
 
-func setup_ball(next_ball: Node3D) -> void:
+func setup_ball(next_ball: RigidBody3D) -> void:
 	ball = next_ball
 
 
 func setup_goal(next_goal: Node3D) -> void:
 	goal = next_goal
+	if goal != null and goal.has_method("goal_plane_x"):
+		_goal_x = float(goal.call("goal_plane_x"))
 
 
 func state_name() -> String:
-	return STATE_NAMES.get(state, state)
-
-
-func guard_center() -> Vector3:
-	return home
+	return state
 
 
 func reset_to_home() -> void:
 	global_position = home
 	velocity = Vector3.ZERO
 	rotation.y = PI * 0.5
-	_target = home
-	_block_timer = 0.0
-	_block_ready = 0.0
+	_state_timer = 0.0
+	_cooldown = 0.0
+	_swat_ready = 0.0
 	_think = 0.0
-	_last_position = global_position
+	_target = home
 	if visual != null:
 		visual.call("set_locomotion", 0.0, 0.0)
 		visual.call("set_block", 0.0)
-	_set_state(STATE_IDLE)
+	_set_state(STATE_OBSERVE)
 
 
 func _physics_process(delta: float) -> void:
 	_time += delta
-	_block_timer = maxf(0.0, _block_timer - delta)
-	_block_ready = maxf(0.0, _block_ready - delta)
+	_cooldown = maxf(0.0, _cooldown - delta)
+	_swat_ready = maxf(0.0, _swat_ready - delta)
 
 	if ball == null or not is_instance_valid(ball):
-		_stand(delta)
+		_brake(delta)
+		_apply_to_body(delta)
 		return
 
+	# 延迟采样：每隔 react_delay 才“看一眼”球在哪，模拟反应时间
 	_think += delta
-	if _commit_timer > 0.0:
-		_commit_timer = maxf(0.0, _commit_timer - delta)
-	elif _think >= react_delay:
+	if _think >= react_delay:
 		_think = 0.0
-		_update_target()
-	_apply_block()
+		_sample = ball.global_position
+		_sample_vel = ball.linear_velocity
 
-	_move_towards_target(delta)
-	_face_target(delta)
-	_anti_crush(delta)
+	match state:
+		STATE_OBSERVE:
+			_state_timer += delta
+			_target = _stand_point()
+			_face_point(_sample, delta)
+			if _should_intercept() and _state_timer > 0.15:
+				_begin_intercept()
+		STATE_INTERCEPT:
+			_state_timer += delta
+			# 目标在出击瞬间就锁死；这段时间只朝那个点冲，不修正
+			if _state_timer >= intercept_time:
+				_set_state(STATE_RECOVER)
+		STATE_RECOVER:
+			_state_timer += delta
+			velocity.x = move_toward(velocity.x, 0.0, max_accel * delta)
+			velocity.z = move_toward(velocity.z, 0.0, max_accel * delta)
+			_face_point(_sample, delta)
+			if _state_timer >= recover_time:
+				_set_state(STATE_RETURN)
+		STATE_RETURN:
+			_state_timer += delta
+			_target = home
+			_face_point(home, delta)
+			if global_position.distance_to(home) < 0.4:
+				_set_state(STATE_OBSERVE)
 
-	velocity.y = 0.0 if is_on_floor() else velocity.y - gravity * delta
-	move_and_slide()
-	global_position.y = maxf(global_position.y, 0.0)
-	_update_visual(delta)
-
-
-## 目标点：站在球与球门中心之间，且不离开守门区；带一点判断误差与滞后。
-func _update_target() -> void:
-	var ball_pos := ball.global_position
-	var ball_vel := Vector3.ZERO
-	if ball is CharacterBody3D:
-		ball_vel = (ball as CharacterBody3D).velocity
-	# 刚被射门：扑向当前方向，短时间内不再修正（所以打反方向有效）
-	var speed_now := ball_vel.length()
-	if speed_now > shot_speed and _last_ball_speed <= shot_speed:
-		_commit_timer = commit_time
-	_last_ball_speed = speed_now
-	var threat := ball_pos.x > 2.0 and absf(ball_pos.z) < 9.0
-	if not threat:
-		_target = home
-		return
-	var lead := clampf(ball_vel.z * 0.12, -1.0, 1.0)
-	var wobble := sin(_time * 1.7) * 0.22
-	var target_x := clampf(ball_pos.x + 0.9, guard_min_x, guard_max_x)
-	var target_z := clampf(ball_pos.z + lead + wobble, -guard_half_z + 0.35, guard_half_z - 0.35)
-	_target = Vector3(target_x, 0.0, target_z)
+	_apply_to_body(delta)
+	_try_swat()
 
 
-func _move_towards_target(delta: float) -> void:
+## 站位：球远时守中路，球近了才向近角偏移；始终在门线前一点（x≈11.1）。
+## 这样远射的远角是真空当，近射才会被它封住。
+func _stand_point() -> Vector3:
+	var closeness := clampf((_sample.x - 9.0) / 3.0, 0.0, 1.0)
+	var near_side := clampf(_sample.z * 0.9, -2.6, 2.6) * closeness
+	return Vector3(11.1, 0.0, near_side)
+
+
+## 只有“球朝球门来 + 预计到达够快 + 落点在门洞附近”才出击。
+func _should_intercept() -> bool:
+	if _cooldown > 0.0:
+		return false
+	if _sample.x < 2.0:
+		return false
+	var vx := _sample_vel.x
+	if vx <= 2.0:
+		return false
+	var distance := maxf(_goal_x - _sample.x, 0.2)
+	var eta := distance / vx
+	if eta > 1.5:
+		return false
+	var predicted_z := _sample.z + _sample_vel.z * eta
+	if absf(predicted_z) > 3.4:
+		return false
+	# 还要判断它是不是真的朝门里来（而不是从门前横穿出去）
+	var dir := _sample_vel.normalized()
+	var to_goal := Vector3(_goal_x - _sample.x, 0.0, -_sample.z).normalized()
+	if dir.dot(to_goal) < 0.35:
+		return false
+	return true
+
+
+func _begin_intercept() -> void:
+	var vx := maxf(_sample_vel.x, 0.5)
+	var eta := clampf((_goal_x - _sample.x) / vx, 0.0, 0.45)
+	_target = Vector3(
+		clampf(_sample.x + _sample_vel.x * eta, zone_min_x - 0.4, zone_max_x),
+		0.0,
+		clampf(_sample.z + _sample_vel.z * eta, -zone_half_z - 0.3, zone_half_z + 0.3)
+	)
+	_state_timer = 0.0
+	_cooldown = intercept_cooldown
+	_set_state(STATE_INTERCEPT)
+
+
+func _apply_to_body(delta: float) -> void:
+	var speed_cap := charge_speed if state == STATE_INTERCEPT else walk_speed
 	var to_target := _target - global_position
 	to_target.y = 0.0
 	var desired := Vector3.ZERO
-	if to_target.length() > 0.18:
-		desired = to_target.normalized() * minf(max_speed, to_target.length() * 4.0)
+	if to_target.length() > 0.12 and state != STATE_RECOVER:
+		desired = to_target.normalized() * minf(speed_cap, to_target.length() * 5.0)
 	velocity.x = move_toward(velocity.x, desired.x, max_accel * delta)
 	velocity.z = move_toward(velocity.z, desired.z, max_accel * delta)
-	global_position.x = clampf(global_position.x, guard_min_x - 0.6, guard_max_x)
-	global_position.z = clampf(global_position.z, -guard_half_z - 0.4, guard_half_z + 0.4)
+	# 站位区约束（只是在门口一带活动，不会跑到场地另一头）
+	global_position.x = clampf(global_position.x, zone_min_x - 0.8, zone_max_x)
+	global_position.z = clampf(global_position.z, -zone_half_z - 0.6, zone_half_z + 0.6)
 
-
-func _face_target(delta: float) -> void:
-	var focus: Vector3 = ball.global_position if ball != null else (_target + Vector3.UP)
-	var to_focus := focus - global_position
-	to_focus.y = 0.0
-	if to_focus.length_squared() < 0.0004:
-		return
-	var want := atan2(-to_focus.x, -to_focus.z)
-	rotation.y = lerp_angle(rotation.y, want, 1.0 - exp(-turn_speed * delta))
-
-
-## 拦球：球以一定速度朝球门来、进入拦截面时，往场内弹回去。
-func _apply_block() -> void:
-	if ball == null:
-		return
-	if _block_ready > 0.0:
-		return
-	var to_ball := ball.global_position - global_position
-	to_ball.y = 0.0
-	var distance := to_ball.length()
-	if distance > block_radius:
-		return
-	var incoming := Vector3.ZERO
-	if ball is CharacterBody3D:
-		incoming = (ball as CharacterBody3D).velocity
-	if incoming.x <= 1.2:
-		return
-	var side := 1.0 if to_ball.z >= 0.0 else -1.0
-	var away := Vector3(-1.0, 0.0, side * 0.55 + incoming.z * 0.04)
-	var speed := maxf(4.2, incoming.length() * 0.55)
-	ball.call("rebound", away, speed)
-	_block_ready = block_cooldown
-	_block_timer = 0.42
-	_set_state(STATE_BLOCK)
-	blocked.emit(ball.global_position, speed)
-
-
-## 球被身体贴住且几乎不动时，轻轻把它推离，避免“堵死在脚下”。
-func _anti_crush(delta: float) -> void:
-	if ball == null:
-		return
-	var to_ball := ball.global_position - global_position
-	to_ball.y = 0.0
-	if to_ball.length() > 0.86:
-		return
-	if float(ball.call("speed")) > 0.8:
-		return
-	var push := to_ball.normalized() if to_ball.length() > 0.01 else Vector3.FORWARD
-	ball.global_position += push * 1.1 * delta
-	# 只轻轻推，不给速度，避免变成“自动送球”
-	if ball is CharacterBody3D:
-		(ball as CharacterBody3D).velocity = push * 0.35
-
-
-func _stand(delta: float) -> void:
-	velocity.x = move_toward(velocity.x, 0.0, max_accel * delta)
-	velocity.z = move_toward(velocity.z, 0.0, max_accel * delta)
 	velocity.y = 0.0 if is_on_floor() else velocity.y - gravity * delta
 	move_and_slide()
+
 	_update_visual(delta)
 
 
-func _update_visual(delta: float) -> void:
+func _brake(delta: float) -> void:
+	velocity.x = move_toward(velocity.x, 0.0, max_accel * delta)
+	velocity.z = move_toward(velocity.z, 0.0, max_accel * delta)
+	velocity.y = 0.0 if is_on_floor() else velocity.y - gravity * delta
+
+
+## 真正的角速度上限：每帧最多转 max_turn_rate * delta。
+func _face_point(point: Vector3, delta: float) -> void:
+	var to_point := point - global_position
+	to_point.y = 0.0
+	if to_point.length_squared() < 0.0004:
+		return
+	var want := atan2(-to_point.x, -to_point.z)
+	var diff := wrapf(want - rotation.y, -PI, PI)
+	var max_step := max_turn_rate * delta
+	rotation.y += clampf(diff, -max_step, max_step)
+
+
+## 主动拨球：独立触发 + 独立冷却；同一次接触只施加一次冲量。
+func _try_swat() -> void:
+	if state != STATE_INTERCEPT or _swat_ready > 0.0:
+		return
+	var to_ball := ball.global_position - global_position
+	to_ball.y = 0.0
+	if to_ball.length() > swat_range:
+		return
+	if ball.linear_velocity.x <= 1.5:
+		return
+	var side := 1.0 if to_ball.z >= 0.0 else -1.0
+	var away := Vector3(-1.0, 0.0, side * 0.5)
+	ball.call("swat", away, swat_impulse)
+	_swat_ready = swat_cooldown
+	blocked.emit(ball.global_position, ball.linear_velocity.length())
+
+
+func _update_visual(_delta: float) -> void:
 	var planar := Vector2(velocity.x, velocity.z).length()
-	var moving := clampf(planar / maxf(max_speed, 0.01), 0.0, 1.0)
-	var new_state := STATE_IDLE
-	if _block_timer > 0.0:
-		new_state = STATE_BLOCK
-	elif planar > 0.25:
-		new_state = STATE_TRACK
-	_set_state(new_state)
+	var moving := clampf(planar / maxf(charge_speed, 0.01), 0.0, 1.0)
+	# 本地坐标下的前进/横移：侧移时不要播“向前大步走”
+	var forward_amount := velocity.dot(-global_transform.basis.z)
+	var lateral_amount := velocity.dot(global_transform.basis.x)
+	var max_speed := maxf(charge_speed, 0.01)
+	var block := clampf(1.0 - _swat_ready / maxf(swat_cooldown, 0.01), 0.0, 1.0)
 	if visual == null:
 		return
-	var forward := -global_transform.basis.z
-	var lateral := velocity.dot(global_transform.basis.x)
-	visual.call("set_locomotion", moving, lateral / maxf(max_speed, 0.01))
-	visual.call("set_block", clampf(_block_timer / 0.42, 0.0, 1.0))
-	if ball != null and is_instance_valid(ball):
-		visual.call("set_look_point", ball.global_position, true)
-	_last_position = global_position
+	visual.call("set_locomotion", moving, clampf(lateral_amount / max_speed, -1.0, 1.0))
+	visual.call("set_stride", clampf(forward_amount / max_speed, -1.0, 1.0), planar)
+	visual.call("set_block", block if _swat_ready > 0.0 else 0.0)
+	visual.call("set_look_point", ball.global_position, true)
 
 
 func _set_state(next: String) -> void:
 	if next == state:
 		return
 	state = next
+	_state_timer = 0.0
 	state_changed.emit(state)
 
 
 func debug_text() -> String:
 	var planar := Vector2(velocity.x, velocity.z).length()
-	return "%s · 速度 %.1f · 目标 (%.1f, %.1f)" % [state_name(), planar, _target.x, _target.z]
+	return "%s · %.1f m/s · 目标 (%.1f, %.1f)" % [state, planar, _target.x, _target.z]

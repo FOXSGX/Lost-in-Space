@@ -6,26 +6,30 @@ class_name MilkDragonModelVisual
 ## 来源：Sketchfab "nailong" by RED ANGRY BIRDS，CC-BY-4.0
 ## （见 assets/characters/nailong_dl_LICENSE.txt）。
 ##
-## 本文件只负责“看起来对”：接地、迈步、转身、拦球动作。
-## 行为（守门/拦球）全在 milk_dragon.gd，两边通过
-## set_look_point / set_locomotion / set_block 三个接口沟通。
+## 本文件只负责“看起来对”：接地、按速度迈步、平滑转身、拦球姿势。
+## 行为（站位/拦截/恢复/回防）在 milk_dragon.gd，通过
+## set_look_point / set_locomotion / set_stride / set_block 沟通。
 ##
-## 模型自身：高 1.83 m、脚底 y=-0.072、脸朝 +Z。所以：
-##   - 底下垫 0.072 让它踩地；
-##   - 外面套一层绕 Y 转 180° 的节点，让脸朝 -Z（与游戏朝向一致）。
+## 模型自身：高 1.83 m、脚底 y=-0.072、脸朝 +Z。所以底下垫 0.072，外层绕 Y 转 180°。
+##
+## 说明：本环境看不到画面，“脚步是否自然”只能靠代码规则保证（步频由实际速度驱动、
+## 停止时步态归零、支撑脚回正），最终观感需要用户看录像确认。
 
 const MODEL_PATH := "res://assets/characters/nailong_dl.glb"
 const GROUND_OFFSET := 0.072
-
-const WARM := Color("#ff9a54")
+## 每走 1 米播放多少弧度步态（约 2.4 m 一个完整步幅）
+const GAIT_PER_METER := 2.6
 
 var _look_point := Vector3.ZERO
 var _has_look_point := false
 var _speed01 := 0.0
 var _lateral01 := 0.0
+var _forward01 := 0.0
+var _planar_speed := 0.0
 var _block := 0.0
 var _time := 0.0
 var _gait := 0.0
+var _stride_blend := 0.0
 
 var _body: Node3D
 var _facing: Node3D
@@ -72,13 +76,18 @@ func set_look_target(node: Node3D) -> void:
 		set_look_point(node.global_position + Vector3.UP * 0.35, true)
 
 
-## speed01: 0..1 的移动速度；lateral01: 左右横移比例（-1..1，用来做轻微侧倾）
+## speed01: 0..1；lateral01: 本地横移比例（-1..1）
 func set_locomotion(speed01: float, lateral01: float) -> void:
 	_speed01 = clampf(speed01, 0.0, 1.0)
 	_lateral01 = clampf(lateral01, -1.0, 1.0)
 
 
-## 拦球动作权重 0..1（0 = 不做动作）
+## forward01: 本地前向速度比例（-1..1）；planar: 实际水平速度（m/s），用来推进步态
+func set_stride(forward01: float, planar: float) -> void:
+	_forward01 = clampf(forward01, -1.0, 1.0)
+	_planar_speed = maxf(planar, 0.0)
+
+
 func set_block(weight: float) -> void:
 	_block = clampf(weight, 0.0, 1.0)
 
@@ -145,7 +154,6 @@ func _build() -> void:
 	add_child(_ring)
 
 
-## 模型缺失时的最小占位：还是保持“站得住、看得出朝向”。
 func _build_fallback() -> Node3D:
 	var root := Node3D.new()
 	var cream := StandardMaterial3D.new()
@@ -196,7 +204,6 @@ func _process(delta: float) -> void:
 
 
 func _animate(delta: float) -> void:
-	# 头：盯着球（拦球时也看得见它在看哪儿）
 	if _has_look_point:
 		var local := to_local(_look_point) - _facing.position
 		var yaw := clampf(atan2(-local.x, -local.z), -0.9, 0.9)
@@ -207,28 +214,27 @@ func _animate(delta: float) -> void:
 		_head_yaw = lerpf(_head_yaw, sin(_time * 0.6) * 0.12, 1.0 - exp(-3.0 * delta))
 		_head_pitch = lerpf(_head_pitch, 0.0, 1.0 - exp(-4.0 * delta))
 
-	# 前倾：移动越快越前倾，拦球时再压一点（不用整体挤压，保留模型轮廓）
 	var target_lean := -0.10 * _speed01 - 0.16 * _block
 	_lean = lerpf(_lean, target_lean, 1.0 - exp(-9.0 * delta))
 
-	# 步频与速度绑定：速度翻倍，步频也差不多翻倍
-	_gait += delta * (3.0 + 5.0 * _speed01)
+	# 步态由“实际走过的距离”推进：速度为零 → 步态完全停住；
+	# 停下来时用 _stride_blend 把腿收回中立位，不会定格在半步。
+	var want_stride := 1.0 if _planar_speed > 0.15 else 0.0
+	_stride_blend = lerpf(_stride_blend, want_stride, 1.0 - exp(-10.0 * delta))
+	_gait += _planar_speed * delta * GAIT_PER_METER
 
 
 func _apply_pose() -> void:
-	# 只做小幅起伏，脚始终踩地（模型已垫 0.072）
 	var bob := absf(sin(_gait)) * 0.010 * _speed01
 	_body.position.y = bob
-	_body.position.x = 0.0
+	_body.position.x = sin(_gait * 0.5) * 0.012 * absf(_lateral01) * _stride_blend
 	_body.rotation.x = _lean
-	# 侧移时轻微侧倾，幅度很小，避免“身体扭成麻花”
-	_body.rotation.z = lerpf(_body.rotation.z, -0.035 * _lateral01 * _speed01, 0.15)
+	_body.rotation.z = lerpf(_body.rotation.z, -0.030 * _lateral01 * _speed01, 0.12)
 	_body.scale = Vector3.ONE
 
 	if _skeleton == null:
 		return
 
-	# 头/脖子
 	if _head_bone >= 0:
 		var yaw := _head_yaw
 		var pitch := _head_pitch - 0.10 * _block
@@ -238,23 +244,27 @@ func _apply_pose() -> void:
 			_skeleton.set_bone_pose_rotation(_neck_bone,
 				_rest[_neck_bone] * Quaternion(Vector3.UP, yaw * 0.35))
 
-	# 迈步：大腿前后摆 + 膝盖弯曲 + 脚掌回正
-	var swing := sin(_gait) * (0.34 * _speed01)
+	# 迈步幅度：前进速度与“确实在走”两个因子
+	var amplitude := 0.34 * absf(_forward01) * _stride_blend
+	var swing := sin(_gait) * amplitude
 	for index in range(_thigh_bones.size()):
 		var phase := 1.0 if index == 0 else -1.0
 		var thigh := swing * phase
 		_skeleton.set_bone_pose_rotation(_thigh_bones[index],
 			_rest[_thigh_bones[index]] * Quaternion(Vector3.RIGHT, thigh))
+		var knee := 0.0
 		if index < _shin_bones.size():
-			var knee := maxf(0.0, -sin(_gait) * phase) * 0.45 * _speed01
+			# 只有向前摆的那条腿屈膝，后摆腿伸直（支撑相）
+			knee = maxf(0.0, sin(_gait) * phase) * 0.50 * absf(_forward01) * _stride_blend
 			_skeleton.set_bone_pose_rotation(_shin_bones[index],
 				_rest[_shin_bones[index]] * Quaternion(Vector3.RIGHT, knee))
 		if index < _foot_bones.size():
+			# 脚掌回正：支撑相尽量贴地，而不是跟着腿一起翻
+			var foot := -(thigh * 0.85) - knee * 0.45
 			_skeleton.set_bone_pose_rotation(_foot_bones[index],
-				_rest[_foot_bones[index]] * Quaternion(Vector3.RIGHT, -thigh * 0.55))
+				_rest[_foot_bones[index]] * Quaternion(Vector3.RIGHT, foot))
 
-	# 手臂：走路时反向摆；拦球时张开一点
-	var arm_swing := -swing * 0.5
+	var arm_swing := -swing * 0.45
 	for index in range(_arm_bones.size()):
 		var side := 1.0 if index == 0 else -1.0
 		var spread := 0.10 + 0.45 * _block
@@ -265,5 +275,3 @@ func _apply_pose() -> void:
 
 	if _ring != null:
 		_ring.visible = ring_enabled
-		if ring_enabled:
-			_ring_material.albedo_color = Color(0.5, 1.0, 0.85, 0.18)
