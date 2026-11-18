@@ -15,8 +15,8 @@ class_name MilkDragonModelVisual
 ## 说明：本环境看不到画面，“脚步是否自然”只能靠代码规则保证（步频由实际速度驱动、
 ## 停止时步态归零、支撑脚回正），最终观感需要用户看录像确认。
 
-const MODEL_PATH := "res://assets/characters/nailong.glb"
-const GROUND_OFFSET := 0.0
+const MODEL_PATH := "res://assets/characters/nailong_dl.glb"
+const GROUND_OFFSET := 0.072
 ## 每走 1 米播放多少弧度步态（约 2.4 m 一个完整步幅）
 const GAIT_PER_METER := 2.6
 
@@ -46,6 +46,10 @@ var _rest := {}
 var _head_yaw := 0.0
 var _head_pitch := 0.0
 var _lean := 0.0
+var _ready_weight := 0.0
+var _reaction := ""
+var _reaction_t := 0.0
+var _reaction_duration := 0.8
 
 var _mouth_anchor: Node3D
 var _ring: MeshInstance3D
@@ -92,6 +96,38 @@ func set_block(weight: float) -> void:
 	_block = clampf(weight, 0.0, 1.0)
 
 
+## 只影响表现：拦截前的压低/前倾，不改速度或碰撞。
+func set_ready(weight: float) -> void:
+	_ready_weight = clampf(weight, 0.0, 1.0)
+	if _ready_weight > 0.6 and _reaction != "":
+		_reaction = ""
+
+
+func play_save() -> void:
+	_start_reaction("save", 0.75)
+
+
+func play_whiff() -> void:
+	_start_reaction("whiff", 0.85)
+
+
+func play_goal() -> void:
+	_start_reaction("goal", 0.95)
+
+
+func cancel_reaction() -> void:
+	_reaction = ""
+	_reaction_t = 0.0
+
+
+func _start_reaction(kind: String, duration: float) -> void:
+	if _reaction == kind:
+		return
+	_reaction = kind
+	_reaction_duration = duration
+	_reaction_t = 0.0
+
+
 # ------------------------------------------------------------------ 组装
 
 func _build() -> void:
@@ -119,7 +155,7 @@ func _build() -> void:
 
 	_facing = Node3D.new()
 	_facing.name = "Facing"
-	_facing.rotation.y = 0.0
+	_facing.rotation.y = PI
 	_body.add_child(_facing)
 
 	var packed := load(MODEL_PATH) as PackedScene
@@ -160,7 +196,7 @@ func _build() -> void:
 
 	_mouth_anchor = Node3D.new()
 	_mouth_anchor.name = "MouthAnchor"
-	_mouth_anchor.position = Vector3(0.0, 1.20, -0.42)
+	_mouth_anchor.position = Vector3(0.0, 1.31, 0.60)
 	_model.add_child(_mouth_anchor)
 
 	_ring_material = StandardMaterial3D.new()
@@ -226,6 +262,10 @@ func _cache_bones() -> void:
 
 func _process(delta: float) -> void:
 	_time += delta
+	if _reaction != "":
+		_reaction_t += delta
+		if _reaction_t >= _reaction_duration:
+			_reaction = ""
 	_animate(delta)
 	_apply_pose()
 
@@ -255,9 +295,30 @@ func _apply_pose() -> void:
 	var bob := 0.0
 	_body.position.y = bob
 	_body.position.x = sin(_gait * 0.5) * 0.012 * absf(_lateral01) * _stride_blend
-	# 静态模型的步态只走整体节点：轻微上下、前后俯仰、左右摆，不改骨骼/网格。
-	_body.rotation.x = _lean + sin(_gait) * 0.022 * _speed01
-	_body.rotation.z = lerpf(_body.rotation.z, -0.030 * _lateral01 * _speed01 + sin(_gait * 0.5) * 0.018 * _speed01, 0.12)
+	# 静态模型的步态只走整体节点：不上下抬脚，靠俯仰/横摆表达重心。
+	var ready_pitch := 0.08 * _ready_weight
+	var react_pitch := 0.0
+	var react_roll := 0.0
+	var react_yaw := 0.0
+	if _reaction != "":
+		var p := clampf(_reaction_t / maxf(_reaction_duration, 0.01), 0.0, 1.0)
+		var env := minf(minf(p / 0.15, (1.0 - p) / 0.25), 1.0)
+		env = clampf(env, 0.0, 1.0)
+		match _reaction:
+			"save":
+				# 得意：短暫直起上身，不跳、不挤压。
+				react_pitch = -0.09 * env
+				react_roll = 0.012 * env
+			"whiff":
+				# 扑空：前倾并回头找球。
+				react_pitch = 0.10 * env
+				react_yaw = 0.12 * env
+			"goal":
+				# 失球：短暂低头，不阻塞回防。
+				react_pitch = 0.15 * env
+	_body.rotation.x = _lean + ready_pitch + sin(_gait) * 0.022 * _speed01 + react_pitch
+	_body.rotation.y = react_yaw
+	_body.rotation.z = lerpf(_body.rotation.z, -0.030 * _lateral01 * _speed01 + sin(_gait * 0.5) * 0.018 * _speed01 + react_roll, 0.12)
 	_body.scale = Vector3.ONE
 
 	if _skeleton == null:
@@ -317,6 +378,8 @@ func _apply_pose() -> void:
 
 	if _ring != null:
 		_ring.visible = ring_enabled
+
+
 
 
 

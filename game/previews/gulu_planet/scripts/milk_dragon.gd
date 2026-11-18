@@ -19,6 +19,10 @@ class_name MilkDragonKeeper
 
 signal blocked(point: Vector3, speed: float)
 signal state_changed(current: String)
+## 真实事件：只在实际拦下/未命中/进球时发，不由距离或动画自行推断。
+signal save_made
+signal intercept_missed
+signal goal_conceded
 
 const STATE_OBSERVE := "观察"
 const STATE_INTERCEPT := "拦截"
@@ -58,6 +62,9 @@ var _think := 0.0
 var _state_timer := 0.0
 var _cooldown := 0.0
 var _swat_ready := 0.0
+var _intercept_hit := false
+var _save_pending := false
+var _save_timer := 0.0
 var _target := Vector3.ZERO
 var _time := 0.0
 
@@ -86,6 +93,16 @@ func setup_goal(next_goal: Node3D) -> void:
 	goal = next_goal
 	if goal != null and goal.has_method("goal_plane_x"):
 		_goal_x = float(goal.call("goal_plane_x"))
+	if goal != null and goal.has_signal("fuel_collected"):
+		goal.connect("fuel_collected", _on_goal_conceded)
+
+
+func _on_goal_conceded(_total: int, _target: int) -> void:
+	_save_pending = false
+	_intercept_hit = true
+	goal_conceded.emit()
+	if visual != null:
+		visual.call("play_goal")
 
 
 func state_name() -> String:
@@ -100,6 +117,7 @@ func reset_to_home() -> void:
 	_cooldown = 0.0
 	_swat_ready = 0.0
 	_think = 0.0
+	_intercept_hit = false
 	_target = home
 	if visual != null:
 		visual.call("set_locomotion", 0.0, 0.0)
@@ -111,6 +129,19 @@ func _physics_process(delta: float) -> void:
 	_time += delta
 	_cooldown = maxf(0.0, _cooldown - delta)
 	_swat_ready = maxf(0.0, _swat_ready - delta)
+	if _save_pending:
+		_save_timer -= delta
+		if _save_timer <= 0.0:
+			_save_pending = false
+			var conceded := false
+			if goal != null and goal.has_method("loaded_count"):
+				conceded = int(goal.get("loaded_count")) > 0
+			if not conceded and ball != null and ball.global_position.x < _goal_x - 0.05:
+				_intercept_hit = true
+				save_made.emit()
+				blocked.emit(ball.global_position, ball.linear_velocity.length())
+				if visual != null:
+					visual.call("play_save")
 
 	if ball == null or not is_instance_valid(ball):
 		_brake(delta)
@@ -135,6 +166,10 @@ func _physics_process(delta: float) -> void:
 			_state_timer += delta
 			# 目标在出击瞬间就锁死；这段时间只朝那个点冲，不修正
 			if _state_timer >= intercept_time:
+				if not _intercept_hit and not _save_pending:
+					intercept_missed.emit()
+					if visual != null:
+						visual.call("play_whiff")
 				_set_state(STATE_RECOVER)
 		STATE_RECOVER:
 			_state_timer += delta
@@ -196,6 +231,7 @@ func _begin_intercept() -> void:
 	)
 	_state_timer = 0.0
 	_cooldown = intercept_cooldown
+	_intercept_hit = false
 	_set_state(STATE_INTERCEPT)
 
 
@@ -246,9 +282,9 @@ func _try_swat() -> void:
 	to_ball.y = 0.0
 	# 身体接触已经由物理引擎反弹；这里只负责“拦下”的反馈，不再加冲量。
 	if to_ball.length() <= 1.05:
-		if _swat_ready <= 0.0:
-			_swat_ready = swat_cooldown
-			blocked.emit(ball.global_position, ball.linear_velocity.length())
+		if not _intercept_hit and not _save_pending:
+			_save_pending = true
+			_save_timer = 0.22
 		return
 	# 不再额外施加拨球冲量：直接碰撞由物理引擎负责反弹，
 	# 近距离只发“拦下”反馈，避免同一次接触被推两次。
@@ -268,6 +304,7 @@ func _update_visual(_delta: float) -> void:
 	visual.call("set_locomotion", moving, clampf(lateral_amount / max_speed, -1.0, 1.0))
 	visual.call("set_stride", clampf(forward_amount / max_speed, -1.0, 1.0), planar)
 	visual.call("set_block", block if _swat_ready > 0.0 else 0.0)
+	visual.call("set_ready", 1.0 if state == STATE_INTERCEPT else 0.0)
 	visual.call("set_look_point", ball.global_position, true)
 
 
@@ -282,6 +319,9 @@ func _set_state(next: String) -> void:
 func debug_text() -> String:
 	var planar := Vector2(velocity.x, velocity.z).length()
 	return "%s · %.1f m/s · 目标 (%.1f, %.1f)" % [state, planar, _target.x, _target.z]
+
+
+
 
 
 

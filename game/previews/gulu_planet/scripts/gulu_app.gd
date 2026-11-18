@@ -101,6 +101,21 @@ func _ready() -> void:
 	elif args.has("--motion"):
 		_automation = true
 		call_deferred("_run_motion")
+	elif args.has("--motion-track"):
+		_automation = true
+		call_deferred("_run_motion_track")
+	elif args.has("--motion-save"):
+		_automation = true
+		call_deferred("_run_motion_save")
+	elif args.has("--motion-miss"):
+		_automation = true
+		call_deferred("_run_motion_miss")
+	elif args.has("--motion-goal"):
+		_automation = true
+		call_deferred("_run_motion_goal")
+	elif args.has("--motion-combo"):
+		_automation = true
+		call_deferred("_run_motion_combo")
 	elif args.has("--physics"):
 		_automation = true
 		call_deferred("_run_physics")
@@ -282,6 +297,9 @@ func _build_dragon() -> void:
 	dragon.call("setup_goal", collector)
 	dragon.connect("blocked", _on_dragon_blocked)
 	dragon.connect("state_changed", _on_dragon_state_changed)
+	dragon.connect("save_made", func() -> void: print("DRAGON EVENT save_made"))
+	dragon.connect("intercept_missed", func() -> void: print("DRAGON EVENT intercept_missed"))
+	dragon.connect("goal_conceded", func() -> void: print("DRAGON EVENT goal_conceded"))
 
 
 func _make_dragon_visual() -> Node3D:
@@ -1122,6 +1140,82 @@ func _run_shots() -> void:
 	get_tree().quit(0)
 
 
+func _side_camera() -> void:
+	_place_player(Vector3(6.0, 0.02, 9.0), Vector3(10.3, 1.05, 0.0))
+
+
+func _run_motion_track() -> void:
+	reset_round()
+	_side_camera()
+	await _wait(1.0)
+	ball.call("reset_to", Vector3(10.0, 0.0, 3.0))
+	print("MOTION track ball=+z state=%s" % dragon.state_name())
+	await _wait(2.0)
+	ball.call("reset_to", Vector3(10.0, 0.0, -3.0))
+	print("MOTION track ball=-z state=%s" % dragon.state_name())
+	await _wait(2.0)
+	print("MOTION track stop state=%s pos=%s" % [dragon.state_name(), dragon.global_position])
+	await _wait(1.0)
+	get_tree().quit(0)
+
+
+func _run_motion_save() -> void:
+	reset_round()
+	_side_camera()
+	await _wait(0.6)
+	ball.call("reset_to", Vector3(4.0, 0.0, 0.0))
+	ball.call("kick", Vector3.RIGHT, 14.0)
+	print("MOTION save kicked")
+	await _wait(2.4)
+	print("MOTION save state=%s loaded=%d" % [dragon.state_name(), loaded_count])
+	await _wait(0.6)
+	get_tree().quit(0)
+
+
+func _run_motion_combo() -> void:
+	reset_round()
+	_side_camera()
+	await _wait(0.6)
+	# 第一拍：踢向门洞外侧，奶龙出击但扑空。
+	ball.call("reset_to", Vector3(8.0, 0.0, 2.8))
+	ball.call("kick", Vector3.RIGHT, 20.0)
+	await _wait(1.8)
+	print("MOTION combo whiff state=%s" % dragon.state_name())
+	# 第二拍：真实进球，触发失球反应。
+	ball.call("reset_to", Vector3(12.2, 0.0, 0.0))
+	ball.call("kick", Vector3.RIGHT, 5.0)
+	await _wait(2.2)
+	print("MOTION combo goal state=%s loaded=%d completed=%s" % [dragon.state_name(), loaded_count, str(completed)])
+	await _wait(0.6)
+	get_tree().quit(0)
+
+
+func _run_motion_goal() -> void:
+	reset_round()
+	_side_camera()
+	await _wait(0.6)
+	ball.call("reset_to", Vector3(12.2, 0.0, 0.0))
+	ball.call("kick", Vector3.RIGHT, 5.0)
+	print("MOTION goal kicked")
+	await _wait(2.2)
+	print("MOTION goal state=%s loaded=%d completed=%s" % [dragon.state_name(), loaded_count, str(completed)])
+	await _wait(0.8)
+	get_tree().quit(0)
+
+
+func _run_motion_miss() -> void:
+	reset_round()
+	_side_camera()
+	await _wait(0.6)
+	ball.call("reset_to", Vector3(8.0, 0.0, 2.8))
+	ball.call("kick", Vector3.RIGHT, 20.0)
+	print("MOTION miss kicked")
+	await _wait(2.8)
+	print("MOTION miss state=%s loaded=%d completed=%s" % [dragon.state_name(), loaded_count, str(completed)])
+	await _wait(0.8)
+	get_tree().quit(0)
+
+
 # ---------------------------------------------------------------- 动作审阅（待机/横移/拦截/停下）
 
 func _run_motion() -> void:
@@ -1357,6 +1451,8 @@ func _run_record() -> void:
 	await _wait(1.0)
 	print("GULU RECORD done peak_loaded=%d" % _record_peak_loaded)
 	get_tree().quit(0)
+
+
 
 
 
