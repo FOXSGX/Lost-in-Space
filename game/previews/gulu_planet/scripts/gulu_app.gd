@@ -98,6 +98,12 @@ func _ready() -> void:
 	elif args.has("--perf"):
 		_automation = true
 		call_deferred("_run_perf")
+	elif args.has("--motion"):
+		_automation = true
+		call_deferred("_run_motion")
+	elif args.has("--physics"):
+		_automation = true
+		call_deferred("_run_physics")
 
 	set_process(true)
 
@@ -1012,6 +1018,14 @@ func _run_selftest() -> void:
 		if mesh_instance.visible and mesh_instance.name.to_lower().begins_with("icosphere"):
 			placeholder_left = true
 	_check(not placeholder_left, "dragon placeholder sphere removed", passes, failures)
+	var feet_y := 1.0e9
+	for mesh_node in model_meshes:
+		var mesh_instance := mesh_node as MeshInstance3D
+		var aabb := mesh_instance.global_transform * mesh_instance.get_aabb()
+		feet_y = minf(feet_y, aabb.position.y)
+	var feet_gap := feet_y - dragon.global_position.y
+	print("DRAGON_FEET gap=%.3f feet=%.3f root=%.3f" % [feet_gap, feet_y, dragon.global_position.y])
+	_check(absf(feet_gap) < 0.10, "dragon feet grounded (%.3f)" % feet_gap, passes, failures)
 
 	print("GULU SELFTEST SUMMARY passes=%d failures=%d" % [passes.size(), failures.size()])
 	await _wait(0.2)
@@ -1105,6 +1119,119 @@ func _run_shots() -> void:
 	await _shot("11_dragon_neck_closeup.png")
 
 	print("GULU SHOTS dir=%s" % ProjectSettings.globalize_path(_shot_dir))
+	get_tree().quit(0)
+
+
+# ---------------------------------------------------------------- 动作审阅（待机/横移/拦截/停下）
+
+func _run_motion() -> void:
+	_place_player(Vector3(6.0, 0.02, 9.0), Vector3(10.3, 1.05, 0.0))
+	reset_round()
+	await _wait(1.0)
+	print("MOTION idle state=%s pos=%s" % [dragon.state_name(), dragon.global_position])
+	await _wait(1.0)
+
+	# 横移：球放到奶龙侧后方，让它侧向移动而不是直线冲。
+	ball.call("reset_to", Vector3(10.3, 0.0, 3.8))
+	await _wait(1.2)
+	print("MOTION strafe state=%s pos=%s" % [dragon.state_name(), dragon.global_position])
+
+	# 拦截：球从奶龙前方朝门口踢。
+	ball.call("reset_to", Vector3(8.0, 0.0, 1.4))
+	ball.call("kick", Vector3(1.0, 0.0, 0.0), 18.0)
+	await _wait(0.35)
+	print("MOTION intercept state=%s pos=%s" % [dragon.state_name(), dragon.global_position])
+	await _wait(0.8)
+	print("MOTION after_intercept state=%s pos=%s" % [dragon.state_name(), dragon.global_position])
+	await _wait(1.5)
+	print("MOTION stop state=%s pos=%s" % [dragon.state_name(), dragon.global_position])
+	get_tree().quit(0)
+
+
+# ---------------------------------------------------------------- 球物理复现（固定条件）
+
+func _run_dragon_case(swat_impulse: float, guard: bool = true) -> Array:
+	reset_round()
+	dragon.set("swat_impulse", swat_impulse)
+	dragon.set("swat_guard", guard)
+	ball.call("reset_to", Vector3(2.0, 0.0, 0.0))
+	ball.call("kick", Vector3.RIGHT, 13.0)
+	var contact_pre := 0.0
+	var contact_post := 0.0
+	var contact_seen := false
+	var contact_peak := 0.0
+	for _i in range(160):
+		await _wait(0.02)
+		var d: float = ball.global_position.distance_to(dragon.global_position)
+		var s: float = ball.linear_velocity.length()
+		if d < 1.50:
+			if not contact_seen:
+				contact_pre = s
+				contact_seen = true
+			contact_peak = maxf(contact_peak, s)
+			contact_post = s
+	return [contact_pre, contact_post, contact_peak, str(contact_seen), loaded_count, int(ball.get("swat_count"))]
+
+
+func _run_physics() -> void:
+	# A. 落地
+	reset_round()
+	ball.call("reset_to", Vector3(0.0, 0.0, 1.4))
+	ball.global_position = Vector3(0.0, 3.0, 1.4)
+	ball.linear_velocity = Vector3.ZERO
+	var max_y := 0.0
+	var min_y := 99.0
+	var landed := false
+	var bounce_peak := 0.0
+	for _i in range(90):
+		await _wait(0.02)
+		max_y = maxf(max_y, ball.global_position.y)
+		min_y = minf(min_y, ball.global_position.y)
+		if ball.global_position.y < 0.40:
+			landed = true
+		if landed:
+			bounce_peak = maxf(bounce_peak, ball.global_position.y)
+	print("PHYS drop max_y=%.3f min_y=%.3f bounce_peak=%.3f bounce_speed=%.2f" % [max_y, min_y, bounce_peak, ball.linear_velocity.y])
+
+	# B. 直线滚停：记录距离与累计转角，检查是否与位移匹配
+	reset_round()
+	ball.call("reset_to", Vector3(-15.0, 0.0, -8.0))
+	var start_x: float = ball.global_position.x
+	var angle := 0.0
+	ball.call("kick", Vector3.RIGHT, 6.0)
+	await _wait(0.12)
+	print("PHYS roll0 pos=%s vel=%.2f sleep=%s freeze=%s collected=%s pending=%s" % [
+		ball.global_position, ball.linear_velocity.length(), str(ball.sleeping), str(ball.freeze),
+		str(ball.get("collected")), str(ball.get("_pending_impulse"))])
+	for _i in range(400):
+		await _wait(0.02)
+		angle += absf(ball.angular_velocity.z) * 0.02
+		if ball.linear_velocity.length() < 0.08 or ball.global_position.x > 9.0:
+			break
+	var travel: float = ball.global_position.x - start_x
+	var expected := travel / 0.34
+	var instant := absf(ball.linear_velocity.length() - absf(ball.angular_velocity.z) * 0.34)
+	print("PHYS roll travel=%.3f angle=%.3f expected=%.3f slip=%.3f inst_slip=%.3f speed=%.3f wz=%.3f" % [
+		travel, angle, expected, angle - expected, instant, ball.linear_velocity.length(), ball.angular_velocity.z])
+
+	# C. 撞门柱：不应进球，且应反弹回场内
+	reset_round()
+	ball.call("reset_to", Vector3(9.0, 0.0, 3.5))
+	var loaded_before := loaded_count
+	ball.call("kick", Vector3(1.0, 0.0, 0.16), 18.0)
+	await _wait(1.2)
+	print("PHYS post before=%d after=%d pos=(%.2f,%.2f) vx=%.2f vz=%.2f" % [
+		loaded_before, loaded_count, ball.global_position.x, ball.global_position.z,
+		ball.linear_velocity.x, ball.linear_velocity.z])
+
+	# D. 撞奶龙：分别关闭/开启拨球，比较接触前后速度
+	var guard_off: Array = await _run_dragon_case(5.4, false)
+	print("PHYS dragon guard=off pre=%.2f post=%.2f peak=%.2f contact=%s loaded=%d swats=%d" % guard_off)
+	var guard_on: Array = await _run_dragon_case(5.4, true)
+	print("PHYS dragon guard=on pre=%.2f post=%.2f peak=%.2f contact=%s loaded=%d swats=%d" % guard_on)
+	var no_swat: Array = await _run_dragon_case(0.0)
+	print("PHYS dragon swat=0.0 pre=%.2f post=%.2f peak=%.2f contact=%s loaded=%d swats=%d" % no_swat)
+
 	get_tree().quit(0)
 
 
@@ -1230,6 +1357,9 @@ func _run_record() -> void:
 	await _wait(1.0)
 	print("GULU RECORD done peak_loaded=%d" % _record_peak_loaded)
 	get_tree().quit(0)
+
+
+
 
 
 

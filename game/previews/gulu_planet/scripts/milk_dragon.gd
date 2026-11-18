@@ -1,4 +1,4 @@
-extends CharacterBody3D
+﻿extends CharacterBody3D
 class_name MilkDragonKeeper
 
 ## 奶龙的唯一职责：拦球。
@@ -39,9 +39,11 @@ const STATE_RETURN := "回防"
 @export var intercept_time := 0.50
 @export var recover_time := 0.7
 @export var intercept_cooldown := 2.2
-@export var swat_range := 0.95
+@export var swat_range := 1.20
 @export var swat_cooldown := 0.8
 @export var swat_impulse := 5.4
+## 碰撞帧不再额外拨球，避免双重冲量
+@export var swat_guard := true
 @export var gravity := 18.0
 
 var ball: RigidBody3D
@@ -238,17 +240,19 @@ func _face_point(point: Vector3, delta: float) -> void:
 func _try_swat() -> void:
 	if state != STATE_INTERCEPT or _swat_ready > 0.0:
 		return
+	# 如果这一帧身体已经和球发生物理碰撞，就交给物理反弹；
+	# 不再额外加拨球冲量，避免“先弹一次、再被推一次”。
 	var to_ball := ball.global_position - global_position
 	to_ball.y = 0.0
-	if to_ball.length() > swat_range:
+	# 身体接触已经由物理引擎反弹；这里只负责“拦下”的反馈，不再加冲量。
+	if to_ball.length() <= 1.05:
+		if _swat_ready <= 0.0:
+			_swat_ready = swat_cooldown
+			blocked.emit(ball.global_position, ball.linear_velocity.length())
 		return
-	if ball.linear_velocity.x <= 1.5:
-		return
-	var side := 1.0 if to_ball.z >= 0.0 else -1.0
-	var away := Vector3(-1.0, 0.0, side * 0.5)
-	ball.call("swat", away, swat_impulse)
-	_swat_ready = swat_cooldown
-	blocked.emit(ball.global_position, ball.linear_velocity.length())
+	# 不再额外施加拨球冲量：直接碰撞由物理引擎负责反弹，
+	# 近距离只发“拦下”反馈，避免同一次接触被推两次。
+	return
 
 
 func _update_visual(_delta: float) -> void:
@@ -278,3 +282,7 @@ func _set_state(next: String) -> void:
 func debug_text() -> String:
 	var planar := Vector2(velocity.x, velocity.z).length()
 	return "%s · %.1f m/s · 目标 (%.1f, %.1f)" % [state, planar, _target.x, _target.z]
+
+
+
+

@@ -1,4 +1,4 @@
-extends RigidBody3D
+﻿extends RigidBody3D
 class_name EnergyBall
 
 ## 能源球：真正的刚体（RigidBody3D + 球形碰撞体）。
@@ -20,6 +20,7 @@ const RADIUS := 0.34
 const KICK_IMPULSE := 19.0
 
 var collected := false
+var swat_count := 0
 var credit_peer := 0
 
 var _visual: Node3D
@@ -80,6 +81,8 @@ func swat(direction: Vector3, impulse: float) -> void:
 		flat = Vector3.LEFT
 	flat = flat.normalized()
 	sleeping = false
+	if impulse > 0.0:
+		swat_count += 1
 	_pending_impulse += flat * impulse
 
 
@@ -111,6 +114,7 @@ func reset_to(at: Vector3) -> void:
 	visible = true
 	scale = Vector3.ONE
 	_time = 0.0
+	swat_count = 0
 
 
 func _physics_process(delta: float) -> void:
@@ -202,3 +206,13 @@ func _build_visual() -> void:
 	glow.light_energy = 0.22
 	glow.omni_range = 2.0
 	add_child(glow)
+
+
+
+
+
+
+
+
+
+
