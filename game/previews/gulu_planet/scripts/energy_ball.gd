@@ -132,10 +132,10 @@ func _build_visual() -> void:
 	add_child(_visual)
 
 	var shell_material := StandardMaterial3D.new()
-	shell_material.albedo_color = Color("#d8e3e6")
-	shell_material.roughness = 0.38
-	shell_material.metallic = 0.35
-	shell_material.metallic_specular = 0.65
+	shell_material.albedo_color = Color("#e2e8e8")
+	shell_material.roughness = 0.30
+	shell_material.metallic = 0.22
+	shell_material.metallic_specular = 0.55
 
 	var shell := SphereMesh.new()
 	shell.radius = RADIUS
@@ -152,7 +152,7 @@ func _build_visual() -> void:
 	core_material.albedo_color = Color("#ffb347")
 	core_material.emission_enabled = true
 	core_material.emission = Color("#ffb347")
-	core_material.emission_energy_multiplier = 2.2
+	core_material.emission_energy_multiplier = 1.15
 	var core := SphereMesh.new()
 	core.radius = RADIUS * 0.62
 	core.height = RADIUS * 1.24
@@ -163,21 +163,22 @@ func _build_visual() -> void:
 	core_node.material_override = core_material
 	_visual.add_child(core_node)
 
-	# 外壳经线框：物理自转时能明显看出球在滚，而不是贴地滑
+	# 外壳经线框：物理自转时能明显看出球在滚，而不是贴地滑。
+	# 只留两条，宽度收窄；球面已经够亮，不靠更多灯带抢注意力。
 	var rib_material := StandardMaterial3D.new()
-	rib_material.albedo_color = Color("#375967")
-	rib_material.roughness = 0.5
-	rib_material.metallic = 0.4
-	for index in range(3):
+	rib_material.albedo_color = Color("#2e4a52")
+	rib_material.roughness = 0.55
+	rib_material.metallic = 0.30
+	for index in range(2):
 		var rib := TorusMesh.new()
-		rib.inner_radius = RADIUS * 0.97
-		rib.outer_radius = RADIUS * 1.02
-		rib.rings = 24
+		rib.inner_radius = RADIUS * 0.992
+		rib.outer_radius = RADIUS * 1.006
+		rib.rings = 28
 		rib.ring_segments = 6
 		var rib_node := MeshInstance3D.new()
 		rib_node.mesh = rib
 		rib_node.material_override = rib_material
-		rib_node.rotation.y = float(index) * PI / 3.0
+		rib_node.rotation.y = float(index) * PI * 0.5
 		_visual.add_child(rib_node)
 
 	# 赤道灯带：远景也读得出球的位置与转动
@@ -190,7 +191,7 @@ func _build_visual() -> void:
 	band_material.albedo_color = Color("#ffb347")
 	band_material.emission_enabled = true
 	band_material.emission = Color("#ffb347")
-	band_material.emission_energy_multiplier = 1.6
+	band_material.emission_energy_multiplier = 0.95
 	var band_node := MeshInstance3D.new()
 	band_node.mesh = band
 	band_node.material_override = band_material
@@ -198,6 +199,6 @@ func _build_visual() -> void:
 
 	var glow := OmniLight3D.new()
 	glow.light_color = Color("#ffb347")
-	glow.light_energy = 0.35
-	glow.omni_range = 2.2
+	glow.light_energy = 0.22
+	glow.omni_range = 2.0
 	add_child(glow)

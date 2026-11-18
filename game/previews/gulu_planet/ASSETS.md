@@ -104,3 +104,21 @@ python tools\audio\make_sfx.py assets\audio
   2. 使用已确认 IP 与发布授权的模型：下载后在 Blender 检查网格/骨架 →
      重定向动作 → 统一比例 → 先进独立测试场景。
 - 无论哪种，模型与碰撞体必须分离，扑击位移继续由行为控制。
+
+## 9. 环境美术升级素材（2026-11-18）
+
+| 资产 | 路径 | 来源 | 许可/状态 |
+| --- | --- | --- | --- |
+| 分层金属/涂装/混凝土 shader | `shaders/aqs2_metal.gdshader` | `ART-SAMPLE-002_TEAM_KIT/04_MATERIAL_LIBRARY/shaders/`，团队素材包 | 随本仓库/团队包；**未复制任何贴图、GLB、场景或工程配置** |
+| 层理岩石 shader | `shaders/aqs2_rock.gdshader` | 同上 | 同上 |
+| 倒角盒/门拱/低多边形岩体 | `scripts/gulu_art_kit.gd` | 本仓库运行时程序化生成 | 随项目 |
+| 地面/门框/货箱/灯光 | `scripts/nailong_environment.gd`、`collector.gd` | 本仓库程序化几何 + 上述 shader | 随项目 |
+| 球外观 | `scripts/energy_ball.gd` | 本仓库程序化几何（只改材质与发光强度） | 随项目 |
+
+说明：
+
+- 包内 `06_REFERENCE`、`05_ART_STYLE_GUIDE`、`04_MATERIAL_LIBRARY` 只作为**参考方法**阅读，
+  没有把示例工程、机械设备或水晶复制进本游戏。
+- 材质 shader 使用世界坐标噪声，不依赖 2K 贴图；因此仓库体积没有因本轮增加贴图。
+- 视觉验收仍需人工看图：本环境无法查看图片；截图与对照图已放在 `docs/shots/`、
+  `docs/art_baseline/`、`docs/art_compare/`。

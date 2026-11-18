@@ -52,7 +52,7 @@ GULU SELFTEST SUMMARY passes=43 failures=0      ← 2026-11-10，退出码 0
 ## 2. 窗口验证（真实渲染）
 
 `--shots` 会打印 `SHOTMETA`（奶龙/球的屏幕坐标、状态、球速、球高），截图在
-`user://gulu_shots`，本次复制到 `docs/shots/`（7 张，1280×800）。
+`user://gulu_shots`，本次复制到 `docs/shots/`（10 张，1280×800）。
 
 ```
 01_spawn_ball_dragon_goal   出生点：球 / 奶龙 / 装货口同屏
@@ -62,9 +62,33 @@ GULU SELFTEST SUMMARY passes=43 failures=0      ← 2026-11-10，退出码 0
 05_goal_loaded              进球后：已装载 1/1 + 横幅
 06_yard_wide                场地全景（中央是空的，道具在边线）
 07_keeper_closeup           奶龙近景（迈步/看球的姿势）
+08_bay_closeup              装货口近景（门拱/厚度/材质/状态灯）
+09_yard_side                场地侧面（环境与可玩区关系）
+10_shot_lane                正常射门线（球路与门口）
 ```
 
-亮度仍用 `tools/inspect_shot.py` 抽查；本轮的几何/材质没有大改。
+美术升级基线：`docs/art_baseline/`（同机位，改造前）；
+同机位对照：`docs/art_compare/`（01/04/08/10 + 总览；09 号机位在基线后调整过，不参与对照）。
+
+亮度/过曝抽查仍用 `tools/inspect_shot.py`，本轮额外记录：
+最终 10 张 mean 0.32–0.43，p95 0.62–0.94，clipped 0.1–2.3%（1280×800）。
+
+## 2b. 性能采样（同一命令前后对比）
+
+```powershell
+& $godot --path $preview -- --perf
+```
+
+固定机位、关垂直同步、采 6 秒，输出：
+`GULU PERF samples=12 fps_avg=... fps_min=... draw_calls_avg=... primitives_avg=...`
+
+本轮（RTX 5060 Laptop / 1280×800 / GL Compatibility）：
+
+- 修改前：793.2 FPS / 550 draw calls / 53,398 primitives
+- 修改后：622.3 FPS / 868 / 108,426
+
+仍 >600 FPS，无玩法风险；draw call 增加来自门拱细节、岩体与货箱分层。
+**这不是目标最低配置的验收，也不是手感验收。**
 
 ## 3. 未验证
 

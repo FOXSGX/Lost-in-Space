@@ -402,3 +402,30 @@ otation.y += clamp(diff, -max_turn_rate*delta, +max_turn_rate*delta)，
 - --write-movie <dir>/k.png --fixed-fps 30 -- --record 输出 PNG 序列（1280×800），
   再用 	ools/record_video.py 转 H.264 MP4。
 - 录制期间以约 30% 实时速度跑；--record 本身仍是纯输入驱动，不传送球、不改 AI。
+
+# 第八轮：环境美术升级（2026-11-18）
+
+## D-56 只做“看得见的东西”，玩法/碰撞/物理逐值保留
+- 装货口新增圆角门拱、防雨檐、工作灯、状态灯槽、检修面板、缓冲条与线缆；
+  门拱内沿严格 5.34×3.37 m，与旧门口一致，只向门外/上方生长。
+- `collector.gd` 的 CATCH_MIN/MAX、进球平面、球半径/质量/阻尼/摩擦/反弹、
+  踢球冲量、奶龙模型与行为均未改。
+- 四面边界墙、立柱/横梁、岩石/货箱/平台的碰撞位置与尺寸逐值保留。
+- 地面装饰全部无碰撞、厚度 ≤2 cm；新增的金属停机坪厚度 3.5 cm 且无碰撞。
+
+## D-57 复用范例的“方法”，不复制范例的资产
+- 从 `ART-SAMPLE-002_TEAM_KIT/04_MATERIAL_LIBRARY/shaders/` 只复制
+  `aqs2_metal.gdshader` 与 `aqs2_rock.gdshader`；没有复制 2K 贴图、GLB、
+  示例场景、输入映射或工程配置。
+- 运行时几何没有 UV/顶点色：金属材质 `vertex_mask_valid=false`，磨损/积垢/流痕
+  由世界坐标噪声计算；岩体由 `GuluArtKit.rock_mesh()` 写入 COLOR 后交给岩石 shader。
+- 门拱/倒角盒/岩体均为运行时程序化网格，可编辑源就是 `scripts/gulu_art_kit.gd`。
+
+## D-58 灯光以“看清游戏”为准，性能退化可接受但不掩盖
+- 太阳 0.55、环境光 0.24、冷补光 0.18、场地顶光 1.2；装货口两盏有灯体的
+  SpotLight 各 1.0；舱口 Omni 0.30。
+- 为压住船体大面积过曝，船体基色从 #9aa9a6 压到 #5f6f6a，并降低 shader
+  高光/边缘反射；门拱仍用奶油白。
+- 性能对照：793→622 FPS、550→868 draw calls、53k→108k primitives。
+  仍 >600 FPS，不构成玩法风险；若低端机吃紧，先合并静态门拱/货箱网格。
+- **视觉验收未完成**：本环境无法查看图片；截图、基线、对照图与录像已交付人工确认。

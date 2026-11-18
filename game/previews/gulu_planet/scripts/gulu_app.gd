@@ -1,4 +1,4 @@
-extends Node3D
+﻿extends Node3D
 
 ## 奶龙星 · 射门试玩（本轮核心玩法）
 ##
@@ -95,6 +95,9 @@ func _ready() -> void:
 	elif args.has("--record"):
 		_automation = true
 		call_deferred("_run_record")
+	elif args.has("--perf"):
+		_automation = true
+		call_deferred("_run_perf")
 
 	set_process(true)
 
@@ -161,35 +164,36 @@ func _build_environment() -> void:
 	var env := Environment.new()
 	env.background_mode = Environment.BG_SKY
 	var sky_material := ProceduralSkyMaterial.new()
-	sky_material.sky_top_color = Color("#1b3141")
-	sky_material.sky_horizon_color = Color("#9db6b8")
+	sky_material.sky_top_color = Color("#24404f")
+	sky_material.sky_horizon_color = Color("#a9c0c0")
 	sky_material.sky_curve = 0.22
-	sky_material.ground_bottom_color = Color("#2a3a3a")
-	sky_material.ground_horizon_color = Color("#7d9490")
-	sky_material.sun_angle_max = 18.0
-	sky_material.sun_curve = 0.12
+	sky_material.ground_bottom_color = Color("#354a48")
+	sky_material.ground_horizon_color = Color("#8ba19c")
+	sky_material.sun_angle_max = 2.5
+	sky_material.sun_curve = 0.06
 	var sky := Sky.new()
 	sky.sky_material = sky_material
 	env.sky = sky
 	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-	env.ambient_light_color = Color("#dbeaf1")
-	env.ambient_light_energy = 0.26
+	env.ambient_light_color = Color("#e3eef2")
+	env.ambient_light_energy = 0.24
 	env.fog_enabled = true
 	env.fog_mode = Environment.FOG_MODE_EXPONENTIAL
-	env.fog_light_color = Color("#8fa6aa")
-	env.fog_density = 0.006
-	env.fog_sky_affect = 0.15
+	env.fog_light_color = Color("#9fb4b6")
+	env.fog_density = 0.0045
+	env.fog_sky_affect = 0.12
 	env.tonemap_mode = Environment.TONE_MAPPER_ACES
-	env.tonemap_exposure = 0.9
+	env.tonemap_exposure = 1.0
 	var world_env := WorldEnvironment.new()
 	world_env.environment = env
 	add_child(world_env)
 
 	var sun := DirectionalLight3D.new()
 	sun.rotation_degrees = Vector3(-52.0, -34.0, 0.0)
-	sun.light_color = Color("#ffe9cf")
+	sun.light_color = Color("#fff0d8")
 	sun.light_energy = 0.55
 	sun.light_specular = 0.15
+	sun.sky_mode = DirectionalLight3D.SKY_MODE_LIGHT_ONLY
 	sun.shadow_enabled = true
 	add_child(sun)
 
@@ -199,6 +203,18 @@ func _build_environment() -> void:
 	fill.light_color = Color("#cfe9e4")
 	fill.light_energy = 0.18
 	add_child(fill)
+
+	# 场地顶光：只把地面/球/奶龙提亮，不打船体正立面（避免大面积过曝）。
+	var yard_fill := SpotLight3D.new()
+	yard_fill.position = Vector3(0.0, 12.0, 0.0)
+	yard_fill.rotation_degrees = Vector3(-90.0, 0.0, 0.0)
+	yard_fill.light_color = Color("#dfeef0")
+	yard_fill.light_energy = 0.18
+	yard_fill.spot_range = 45.0
+	yard_fill.spot_angle = 80.0
+	yard_fill.spot_attenuation = 1.2
+	yard_fill.shadow_enabled = false
+	add_child(yard_fill)
 
 
 func _build_field() -> void:
@@ -1053,7 +1069,57 @@ func _run_shots() -> void:
 	await _wait(1.2)
 	await _shot("07_keeper_closeup.png")
 
+	# 本轮美术验收补充机位：门口近景 / 场地侧面 / 正常射门线
+	_place_player(Vector3(10.4, 0.02, 3.8), Vector3(13.8, 1.5, 0.0))
+	await _wait(0.6)
+	await _shot("08_bay_closeup.png")
+
+	_place_player(Vector3(-11.5, 0.02, 8.0), Vector3(10.0, 1.0, -0.5))
+	await _wait(0.6)
+	await _shot("09_yard_side.png")
+
+	reset_round()
+	ball.call("reset_to", Vector3(7.0, 0.0, 1.2))
+	_place_player(Vector3(4.2, 0.02, 2.8), Vector3(13.5, 1.1, 0.0))
+	await _wait(0.6)
+	await _shot("10_shot_lane.png")
+
 	print("GULU SHOTS dir=%s" % ProjectSettings.globalize_path(_shot_dir))
+	get_tree().quit(0)
+
+
+# ---------------------------------------------------------------- 性能采样（美术回归用）
+
+## 固定机位 + 关闭垂直同步，采 6 秒 FPS / Draw Call / 图元，前后版本用同样命令比较。
+func _run_perf() -> void:
+	DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_DISABLED)
+	Engine.max_fps = 0
+	_place_player(Vector3(6.0, 0.02, 6.0), Vector3(13.0, 1.2, 0.0))
+	await _wait(1.2)
+	reset_round()
+	await _wait(0.8)
+	var fps_samples: Array[float] = []
+	var draw_samples: Array[float] = []
+	var primitive_samples: Array[float] = []
+	for _index in range(12):
+		await _wait(0.5)
+		fps_samples.append(Performance.get_monitor(Performance.TIME_FPS))
+		draw_samples.append(Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME))
+		primitive_samples.append(Performance.get_monitor(Performance.RENDER_TOTAL_PRIMITIVES_IN_FRAME))
+	var fps_avg := 0.0
+	var fps_min := 9999.0
+	var draw_avg := 0.0
+	var prim_avg := 0.0
+	for value: float in fps_samples:
+		fps_avg += value
+		fps_min = minf(fps_min, value)
+	for value: float in draw_samples:
+		draw_avg += value
+	for value: float in primitive_samples:
+		prim_avg += value
+	var count := float(fps_samples.size())
+	print("GULU PERF samples=%d fps_avg=%.1f fps_min=%.1f draw_calls_avg=%.0f primitives_avg=%.0f" % [
+		fps_samples.size(), fps_avg / count, fps_min, draw_avg / count, prim_avg / count])
 	get_tree().quit(0)
 
 
@@ -1138,3 +1204,13 @@ func _run_record() -> void:
 	await _wait(1.0)
 	print("GULU RECORD done peak_loaded=%d" % _record_peak_loaded)
 	get_tree().quit(0)
+
+
+
+
+
+
+
+
+
+

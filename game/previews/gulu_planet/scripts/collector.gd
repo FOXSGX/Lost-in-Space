@@ -1,4 +1,4 @@
-extends Node3D
+﻿extends Node3D
 class_name FuelCollector
 
 ## 飞船装货口：喇叭形接货斜面 + 吸入式收集仓。
@@ -7,8 +7,10 @@ class_name FuelCollector
 signal fuel_collected(total: int, target: int)
 
 const HULL := Color("#9aa9a6")
+const HULL_LIGHT := Color("#dde4dd")
 const HULL_DARK := Color("#7f8f8c")
 const TRIM := Color("#375967")
+const TRIM_DARK := Color("#263c46")
 const GLASS := Color("#8fe3ff")
 const AMBER := Color("#ffb347")
 const CYAN := Color("#3fd8ff")
@@ -36,8 +38,27 @@ var _pulse := 0.0
 var _intake_material: StandardMaterial3D
 var _flash := 0.0
 
+var kit: GuluArtKit
+var mat_hull: ShaderMaterial
+var mat_hull_dark: ShaderMaterial
+var mat_trim: ShaderMaterial
+var mat_glass: StandardMaterial3D
+var mat_intake: ShaderMaterial
+var mat_bare: ShaderMaterial
+var mat_amber: StandardMaterial3D
+
 
 func _ready() -> void:
+	kit = GuluArtKit.new()
+	mat_hull = kit.paint(HULL, 0.72, 0.0, 0.75, 41.0)
+	mat_hull.set_shader_parameter("specular_level", 0.08)
+	mat_hull.set_shader_parameter("edge_rim", 0.05)
+	mat_hull_dark = kit.paint(HULL_DARK, 0.52, 0.16, 0.9, 42.0)
+	mat_trim = kit.paint(TRIM, 0.40, 0.22, 0.75, 43.0)
+	mat_glass = kit.emissive(GLASS, 0.42, 0.25, 0.1)
+	mat_intake = kit.dark_metal(INTAKE, 0.62, 44.0)
+	mat_bare = kit.bare_metal(Color("#8b979b"), 0.32, 45.0)
+	mat_amber = kit.emissive(AMBER, 0.55, 0.45)
 	_build_hull()
 	_build_scoop()
 	_build_intake()
@@ -121,20 +142,33 @@ func _animate_intake(fuel: Node3D) -> void:
 func _build_hull() -> void:
 	# 船体：左右两侧船身夹出中间的装货口，口朝 -X。
 	for side in [-1.0, 1.0]:
-		_box(Vector3(6.0, 5.0, 3.6), Vector3(16.9, 2.5, side * 4.7), HULL, true)
-		_box(Vector3(0.9, 0.5, 3.7), Vector3(13.55, 4.55, side * 4.7), TRIM, false)
-		_box(Vector3(3.2, 0.22, 3.4), Vector3(16.4, 5.05, side * 4.7), HULL_DARK, false)
+		_box(Vector3(6.0, 5.0, 3.6), Vector3(16.9, 2.5, side * 4.7), HULL, true, 0.0, Vector3.ZERO, mat_hull)
+		_box(Vector3(0.9, 0.5, 3.7), Vector3(13.55, 4.55, side * 4.7), TRIM, false, 0.0, Vector3.ZERO, mat_trim)
+		_box(Vector3(3.2, 0.22, 3.4), Vector3(16.4, 5.05, side * 4.7), HULL_DARK, false, 0.0, Vector3.ZERO, mat_hull_dark)
+		# 前脸分层：大面板 + 深色凹槽 + 铭牌，交代“外壳是装上去的”。
+		_box(Vector3(0.06, 3.1, 2.65), Vector3(13.86, 2.35, side * 4.7), HULL, false, 0.0, Vector3.ZERO, mat_hull)
+		_box(Vector3(0.035, 0.07, 2.35), Vector3(13.825, 3.52, side * 4.7), TRIM, false, 0.0, Vector3.ZERO, mat_trim)
+		_box(Vector3(0.035, 0.07, 2.35), Vector3(13.825, 1.18, side * 4.7), TRIM, false, 0.0, Vector3.ZERO, mat_trim)
+		_box(Vector3(0.025, 0.55, 0.72), Vector3(13.815, 2.55, side * 4.70), TRIM, false, 0.0, Vector3.ZERO, mat_trim)
+		# 通风百叶：三条水平窄口，位置在舷侧，不进入门洞。
 		for index in range(3):
-			_box(Vector3(0.16, 1.0, 1.3), Vector3(13.88, 3.15, side * 4.7 - 1.15 + float(index) * 1.15), GLASS, false, 1.0)
+			_box(Vector3(0.02, 0.045, 0.95), Vector3(13.80, 2.02 + float(index) * 0.13, side * 4.20), INTAKE, false, 0.0, Vector3.ZERO, mat_intake)
+		for index in range(3):
+			_box(Vector3(0.16, 1.0, 1.3), Vector3(13.88, 3.15, side * 4.7 - 1.15 + float(index) * 1.15), GLASS, false, 1.0, Vector3.ZERO, mat_glass)
 		# 侧鳍：让船在远景里有方向感
-		_box(Vector3(2.4, 0.9, 0.18), Vector3(17.9, 3.0, side * 6.55), TRIM, false, 0.0, Vector3(side * 0.3, 0.0, 0.0))
+		_box(Vector3(2.4, 0.9, 0.18), Vector3(17.9, 3.0, side * 6.55), TRIM, false, 0.0, Vector3(side * 0.3, 0.0, 0.0), mat_trim)
 	# 背板与顶部
-	_box(Vector3(3.2, 5.0, 13.0), Vector3(18.4, 2.5, 0.0), HULL, true)
-	_box(Vector3(6.0, 1.4, 13.0), Vector3(16.9, 4.7, 0.0), HULL, true)
-	_box(Vector3(0.24, 0.16, 12.6), Vector3(13.9, 4.02, 0.0), CYAN, false, 1.0)
-	_box(Vector3(0.6, 0.7, 13.4), Vector3(17.0, 5.6, 0.0), TRIM, false)
+	_box(Vector3(3.2, 5.0, 13.0), Vector3(18.4, 2.5, 0.0), HULL, true, 0.0, Vector3.ZERO, mat_hull)
+	_box(Vector3(6.0, 1.4, 13.0), Vector3(16.9, 4.7, 0.0), HULL, true, 0.0, Vector3.ZERO, mat_hull)
+	_box(Vector3(0.24, 0.16, 12.6), Vector3(13.9, 4.02, 0.0), CYAN, false, 1.0, Vector3.ZERO, mat_glass)
+	_box(Vector3(0.6, 0.7, 13.4), Vector3(17.0, 5.6, 0.0), TRIM, false, 0.0, Vector3.ZERO, mat_trim)
+	# 顶部面板缝与检修盖
+	for z in [-5.2, -2.6, 0.0, 2.6, 5.2]:
+		_box(Vector3(4.2, 0.02, 0.05), Vector3(16.9, 5.405, z), TRIM, false, 0.0, Vector3.ZERO, mat_trim)
+	for z in [-3.9, 3.9]:
+		_box(Vector3(1.6, 0.03, 1.2), Vector3(16.3, 5.415, z), HULL_LIGHT, false, 0.0, Vector3.ZERO, mat_hull)
 	# 尾部引擎
-	_box(Vector3(0.3, 2.6, 9.0), Vector3(19.9, 2.4, 0.0), HULL_DARK, false)
+	_box(Vector3(0.3, 2.6, 9.0), Vector3(19.9, 2.4, 0.0), HULL_DARK, false, 0.0, Vector3.ZERO, mat_hull_dark)
 	for side in [-1.0, 1.0]:
 		var nozzle := CylinderMesh.new()
 		nozzle.top_radius = 0.85
@@ -144,9 +178,9 @@ func _build_hull() -> void:
 		nozzle_node.mesh = nozzle
 		nozzle_node.position = Vector3(20.1, 2.2, side * 3.4)
 		nozzle_node.rotation.z = PI * 0.5
-		nozzle_node.material_override = _material(TRIM, 0.0)
+		nozzle_node.material_override = mat_trim
 		add_child(nozzle_node)
-		_box(Vector3(0.10, 1.5, 1.5), Vector3(20.78, 2.2, side * 3.4), CYAN, false, 1.4)
+		_box(Vector3(0.10, 1.5, 1.5), Vector3(20.78, 2.2, side * 3.4), CYAN, false, 0.55, Vector3.ZERO, mat_glass)
 	# 起落架
 	for side in [-1.0, 1.0]:
 		for x in [15.4, 18.8]:
@@ -155,47 +189,73 @@ func _build_hull() -> void:
 
 func _build_scoop() -> void:
 	# 接货平台（与地面齐平，可走进去）
-	_box(Vector3(4.6, 0.3, 5.8), Vector3(13.55, -0.15, 0.0), HULL_DARK, true)
-	# 入口标线：贴地、无碰撞，球可以直接滚进装货口（旧玩法的 0.22 m 门槛会挡球）
-	_box(Vector3(0.42, 0.02, 5.8), Vector3(11.5, 0.014, 0.0), AMBER, false, 0.55)
+	_box(Vector3(4.6, 0.3, 5.8), Vector3(13.55, -0.15, 0.0), HULL_DARK, true, 0.0, Vector3.ZERO, mat_hull_dark)
+	# 平台面：金属底板 + 两条压条，读得出“这里是落货面”。
+	_box(Vector3(4.05, 0.02, 5.15), Vector3(13.55, 0.012, 0.0), TRIM, false, 0.0, Vector3.ZERO, mat_bare)
+	for z in [-2.2, 2.2]:
+		_box(Vector3(3.7, 0.025, 0.08), Vector3(13.55, 0.026, z), TRIM_DARK, false, 0.0, Vector3.ZERO, mat_trim)
+	# 入口标线：贴地、无碰撞，球可以直接滚进装货口。
+	_box(Vector3(0.42, 0.02, 5.8), Vector3(11.5, 0.014, 0.0), AMBER, false, 0.55, Vector3.ZERO, mat_amber)
 	# 地面导引条
 	for side in [-1.0, 1.0]:
-		_box(Vector3(4.2, 0.02, 0.20), Vector3(13.6, 0.015, side * 1.45), AMBER, false, 0.5, Vector3(0, side * 0.10, 0))
+		_box(Vector3(4.2, 0.02, 0.20), Vector3(13.6, 0.015, side * 1.45), AMBER, false, 0.5, Vector3(0, side * 0.10, 0), mat_amber)
 	# 两侧接货斜面（漏斗），碰撞跟着一起旋转
 	for side in [-1.0, 1.0]:
-		_box(Vector3(3.9, 1.10, 0.34), Vector3(13.5, 0.55, side * 2.95), HULL, true, 0.0, Vector3(0, side * 0.42, 0))
-		_box(Vector3(3.9, 0.14, 0.44), Vector3(13.5, 1.16, side * 2.95), AMBER, false, 0.7, Vector3(0, side * 0.42, 0))
+		_box(Vector3(3.9, 1.10, 0.34), Vector3(13.5, 0.55, side * 2.95), HULL, true, 0.0, Vector3(0, side * 0.42, 0), mat_hull)
+		_box(Vector3(3.9, 0.14, 0.44), Vector3(13.5, 1.16, side * 2.95), AMBER, false, 0.7, Vector3(0, side * 0.42, 0), mat_amber)
+		# 斜面上的橡胶防撞唇
+		_box(Vector3(3.55, 0.05, 0.10), Vector3(13.5, 1.09, side * 2.95), INTAKE, false, 0.0, Vector3(0, side * 0.42, 0), mat_intake)
 	# 平台边缘灯
-	_box(Vector3(0.12, 0.10, 5.6), Vector3(11.36, 0.03, 0.0), AMBER, false, 1.0)
+	_box(Vector3(0.12, 0.10, 5.6), Vector3(11.36, 0.03, 0.0), AMBER, false, 1.0, Vector3.ZERO, mat_amber)
 
 
 func _build_intake() -> void:
-	_box(Vector3(1.2, 2.2, 3.2), Vector3(15.5, 1.1, 0.0), INTAKE, false)
-	_intake_material = _material(CYAN, 1.6)
+	_box(Vector3(1.2, 2.2, 3.2), Vector3(15.5, 1.1, 0.0), INTAKE, false, 0.0, Vector3.ZERO, mat_intake)
+	# 内壁竖向加强筋：让“深”有结构依据，不只是黑盒子。
+	for z in [-1.52, 1.52]:
+		for x in [15.15, 15.55, 15.92]:
+			_box(Vector3(0.08, 2.0, 0.10), Vector3(x, 1.10, z), TRIM, false, 0.0, Vector3.ZERO, mat_trim)
+	# 底部导流坡：视觉上把球“接住”，不参与物理。
+	_box(Vector3(1.05, 0.08, 1.45), Vector3(15.42, 0.05, 0.0), TRIM_DARK, false,
+		0.0, Vector3(0.0, 0.0, -0.08), mat_bare)
+	for z in [-0.48, 0.48]:
+		_box(Vector3(1.0, 0.012, 0.06), Vector3(15.42, 0.096, z), AMBER, false, 0.0, Vector3.ZERO, mat_amber)
+	# 接收线圈：同心圆环 + 中心灯，说明这是“能源接收设备”。
+	_mesh_node(_torus(0.78, 0.82), Vector3(16.01, 1.10, 0.0), Vector3(0.0, 0.0, PI * 0.5), mat_trim)
+	_mesh_node(_torus(0.50, 0.535), Vector3(16.01, 1.10, 0.0), Vector3(0.0, 0.0, PI * 0.5), mat_glass)
+	_mesh_node(_torus(0.24, 0.275), Vector3(16.01, 1.10, 0.0), Vector3(0.0, 0.0, PI * 0.5), mat_amber)
+	var core := CylinderMesh.new()
+	core.top_radius = 0.14
+	core.bottom_radius = 0.14
+	core.height = 0.05
+	core.radial_segments = 20
+	_mesh_node(core, Vector3(16.02, 1.10, 0.0), Vector3(0.0, 0.0, PI * 0.5), mat_glass)
+	# 上下灯槽：只保留一条，避免“发光条堆满”。
+	_intake_material = kit.emissive(CYAN, 0.90, 0.42)
+	_box(Vector3(0.10, 0.08, 2.95), Vector3(15.04, 2.25, 0.0), CYAN, false, 0.0, Vector3.ZERO, _intake_material)
+	_box(Vector3(0.10, 0.08, 2.95), Vector3(15.04, 0.10, 0.0), CYAN, false, 0.0, Vector3.ZERO, _intake_material)
 	for side in [-1.0, 1.0]:
-		_box(Vector3(0.16, 2.3, 0.16), Vector3(15.05, 1.15, side * 1.65), CYAN, false, 1.6, Vector3.ZERO, _intake_material)
-	_box(Vector3(0.16, 0.16, 3.5), Vector3(15.05, 2.28, 0.0), CYAN, false, 1.6, Vector3.ZERO, _intake_material)
-	_box(Vector3(0.16, 0.16, 3.5), Vector3(15.05, 0.08, 0.0), CYAN, false, 1.6, Vector3.ZERO, _intake_material)
+		_box(Vector3(0.10, 2.2, 0.08), Vector3(15.04, 1.12, side * 1.58), CYAN, false, 0.0, Vector3.ZERO, _intake_material)
 	var glow := OmniLight3D.new()
-	glow.position = Vector3(14.6, 1.2, 0.0)
+	glow.position = Vector3(15.15, 1.2, 0.0)
 	glow.light_color = CYAN
-	glow.light_energy = 1.5
-	glow.omni_range = 5.5
+	glow.light_energy = 0.60
+	glow.omni_range = 4.5
 	add_child(glow)
 	var amber := OmniLight3D.new()
-	amber.position = Vector3(12.6, 0.9, 0.0)
+	amber.position = Vector3(12.4, 0.9, 0.0)
 	amber.light_color = AMBER
-	amber.light_energy = 0.9
-	amber.omni_range = 5.0
+	amber.light_energy = 0.35
+	amber.omni_range = 4.5
 	add_child(amber)
 
 
 func _build_pips() -> void:
-	# 三格装货指示灯：装在舱门上沿的厚框上，远处靠"亮了几格"读数，不靠文字。
+	# 三格装货指示灯：装在横梁正面的凹槽里，远处靠“亮了几格”读数。
 	for index in range(3):
-		var z := -1.5 + float(index) * 1.5
-		_box(Vector3(0.08, 0.54, 0.54), Vector3(13.62, 3.62, z), INTAKE, false)
-		var lens := _box(Vector3(0.10, 0.34, 0.34), Vector3(13.54, 3.62, z), TRIM, false)
+		var z := -0.9 + float(index) * 0.9
+		_box(Vector3(0.035, 0.36, 0.36), Vector3(13.005, 3.66, z), INTAKE, false, 0.0, Vector3.ZERO, mat_intake)
+		var lens := _box(Vector3(0.025, 0.28, 0.28), Vector3(12.982, 3.66, z), TRIM, false, 0.0, Vector3.ZERO, mat_trim)
 		_pips.append(lens)
 
 
@@ -208,7 +268,7 @@ func _update_pips() -> void:
 		if lit:
 			mat.emission_enabled = true
 			mat.emission = AMBER
-			mat.emission_energy_multiplier = 1.8
+			mat.emission_energy_multiplier = 1.0
 		_pips[index].material_override = mat
 
 
@@ -244,9 +304,8 @@ func _leg(at: Vector3) -> void:
 	add_child(instance)
 
 
-func _box(size: Vector3, at: Vector3, color: Color, solid: bool, emission: float = 0.0, rotation: Vector3 = Vector3.ZERO, material: StandardMaterial3D = null) -> MeshInstance3D:
-	var mesh := BoxMesh.new()
-	mesh.size = size
+func _box(size: Vector3, at: Vector3, color: Color, solid: bool, emission: float = 0.0, rotation: Vector3 = Vector3.ZERO, material: Material = null) -> MeshInstance3D:
+	var mesh: Mesh = kit.beveled_box(size, minf(0.04, minf(size.x, minf(size.y, size.z)) * 0.18))
 	var instance := MeshInstance3D.new()
 	instance.mesh = mesh
 	instance.position = at
@@ -266,3 +325,27 @@ func _box(size: Vector3, at: Vector3, color: Color, solid: bool, emission: float
 		body.add_child(shape)
 		add_child(body)
 	return instance
+
+
+func _mesh_node(mesh: Mesh, at: Vector3, rotation: Vector3, material: Material) -> MeshInstance3D:
+	var instance := MeshInstance3D.new()
+	instance.mesh = mesh
+	instance.position = at
+	instance.rotation = rotation
+	instance.material_override = material
+	add_child(instance)
+	return instance
+
+
+func _torus(inner: float, outer: float) -> TorusMesh:
+	var mesh := TorusMesh.new()
+	mesh.inner_radius = inner
+	mesh.outer_radius = outer
+	mesh.rings = 32
+	mesh.ring_segments = 8
+	return mesh
+
+
+
+
+

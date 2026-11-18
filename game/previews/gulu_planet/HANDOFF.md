@@ -3,9 +3,23 @@
 > 多日任务续点。新会话先读本文件，再读 `STATUS.md` / `TESTING.md` / `BRIEF.md`。
 > 每次推进后更新「当前状态 / 下一步 / 恢复命令」，不要只依赖聊天记录。
 
-最后更新：2026-11-10
+最后更新：2026-11-18（环境美术升级）
 
-## 快照
+## 2026-11-18 · 环境美术升级（本轮）
+
+- 分支 `feature/lis-physics-rc1`（包含上一轮 LIS addon 提交，本轮只本地提交，不 push）。
+- 重点：装货口 + 门前地面；其次能源球外观、场边岩体/货箱/灯光。
+- 新增 `scripts/gulu_art_kit.gd`（材质工厂 + 倒角盒 + 门拱 + 低多边形岩体）、
+  `shaders/aqs2_metal.gdshader`、`shaders/aqs2_rock.gdshader`（来自 ART-SAMPLE-002，只复制 shader）。
+- 改动 `nailong_environment.gd` / `collector.gd` / `energy_ball.gd` / `gulu_app.gd`。
+- **未改**：门口尺寸、CATCH AABB、碰撞边界、球物理、踢球规则、奶龙行为/模型、控制器。
+- 自测 `passes=43 failures=0`；截图 10 张、基线 10 张、对照 4 组 + 总览、
+  录像 444 帧（scored=true）。
+- 性能：793→622 FPS，550→868 draw calls，53k→108k primitives（仍 >600 FPS）。
+- **视觉待人工确认**：本环境无法查看图片；请先看 `docs/art_compare/` 与 `docs/shots/`。
+- 详见 `docs/ART_PASS_2026-11-18.md`。
+
+## 快照（2026-11-10 玩法）
 
 - 仓库：`C:\Users\31798\Documents\GitHub\Lost-in-Space-gulu`
 - 分支：`main`（本轮**本地提交，不推送**）
