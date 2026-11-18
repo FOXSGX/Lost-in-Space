@@ -5,7 +5,17 @@
 
 最后更新：2026-11-18（环境美术升级，二次修正）
 
-## 2026-11-18 · 第三轮：奶龙定住 + 地面减法 + 球物理（当前）
+## 2026-11-18 · 奶龙回退与表现层（当前）
+
+- 按用户要求恢复经典模型 `assets/characters/nailong_dl.glb`；保留 Icosphere 运行时清理；
+  **不做任何骨骼旋转**，只用整体节点 bob/前倾/横摆 + 接地阴影。
+- 事件驱动反应：`save_made`（实际拦下）、`intercept_missed`（实际扑空）、
+  `goal_conceded`（实际进球）；动作不阻塞行为状态机，新拦截会打断旧反应。
+- 三段调试录像：`dragon_01_track_slow.mp4` / `dragon_02_save_proud.mp4` /
+  `dragon_03_miss_goal.mp4`；实际游玩 `gulu_kick_loop.mp4`（scored=false，未伪造）。
+- 自测 45/0；物理回归 inst_slip=0.000、撞奶龙无额外冲量。
+- 自审 Qwen2-VL：经典黄色奶龙、脖子无变形；save 挺胸、whiff 前倾回头、goal 低头。
+## 2026-11-18 · 第三轮：奶龙定住 + 地面减法 + 球物理
 
 - 奶龙：静态模型去掉上下 bob，加接地阴影；`--motion` 确认观察→拦截→恢复→观察，
   无骨骼变形；不改碰撞/守门逻辑。
@@ -143,4 +153,5 @@ $preview = "C:\Users\31798\Documents\GitHub\Lost-in-Space-gulu\game\previews\gul
 
 每次会话结束前至少写清：完成（文件/提交/测试结果）、下一步（一个具体动作）、
 阻塞（需要用户决定的事项）、恢复（准确路径与命令）。
+
 

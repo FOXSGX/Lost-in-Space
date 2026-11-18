@@ -475,3 +475,16 @@ otation.y += clamp(diff, -max_turn_rate*delta, +max_turn_rate*delta)，
   再推一次（`swats=1`，post 2.2 m/s vs 无拨球 0.03 m/s）。
 - 修正：接触距离 ≤1.05 m 时只发 `blocked` 反馈，不再加冲量；侧向擦过保留轻拨。
 - 未改质量/半径/摩擦/反弹/踢球冲量；自测 `passes=45 failures=0`。
+
+## D-65 奶龙模型回退经典形象 + 事件驱动表现
+- 用户明确：之前自建的 `nailong.glb` 不是他原来给的形象；恢复 `nailong_dl.glb`。
+- 仍保留运行时移除 Icosphere；**不做任何骨骼姿态旋转**，头/颈/四肢保持静置。
+- 表现只改整体节点：横摆/前倾/抬头/低头/接地阴影，不改碰撞、速度、决策。
+- 新增真实事件信号：`save_made`（接触后 0.22 s 内未失球才确认）、
+  `intercept_missed`（拦截计时结束未命中）、`goal_conceded`（接收仓真实进球）。
+- 得意只在 `save_made` 后播放；扑空只在 `intercept_missed` 后；失球只在 `goal_conceded` 后。
+  每段反应 0.75–0.95 s，新拦截 `set_ready` 会打断旧反应，不阻塞回防。
+- 录像：`dragon_01_track_slow.mp4`（追踪/侧移）、
+  `dragon_02_save_proud.mp4`（成功拦截+得意）、
+  `dragon_03_miss_goal.mp4`（扑空+失球）；实际游玩 `gulu_kick_loop.mp4` 未强制计分。
+- 自审 Qwen2-VL：经典黄奶龙、脖子无变形；save 挺胸、whiff 前倾回头、goal 低头。

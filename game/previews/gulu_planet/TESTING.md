@@ -162,3 +162,21 @@ dragon guard=off post=0.22 / guard=on post=1.74, swats=0
 截图/对照：`docs/shots/` 11 张；`docs/round3_before/`（改造前 01/10）；
 `docs/round3_compare/`（同机位对照）。录像 `docs/record/gulu_kick_loop.mp4`
 （758 帧、25.2 s、scored=true）。性能 481 FPS / 934 draw calls / 93,061 primitives。
+
+## 4. 奶龙表现录像（2026-11-18 晚）
+
+```powershell
+& $godot --path $preview --write-movie "$preview\docs\record\raw_track\k.png" --fixed-fps 30 -- --motion-track
+& $godot --path $preview --write-movie "$preview\docs\record\raw_save\k.png" --fixed-fps 30 -- --motion-save
+& $godot --path $preview --write-movie "$preview\docs\record\raw_combo\k.png" --fixed-fps 30 -- --motion-combo
+```
+
+已转成：
+- `dragon_01_track_slow.mp4`：球缓慢换位，奶龙看球/侧移/停下。
+- `dragon_02_save_proud.mp4`：一次成功拦截及短暂挺胸得意。
+- `dragon_03_miss_goal.mp4`：先扑空（intercept_missed），再真实进球（goal_conceded）。
+- `gulu_kick_loop.mp4`：实际第一人称游玩，未强制计分/拦截。
+
+事件日志：`DRAGON EVENT save_made` / `intercept_missed` / `goal_conceded`。
+每个反应 0.75–0.95 s；新拦截会打断旧反应，不阻塞回防。
+自审 Qwen2-VL：经典奶龙、脖子无变形；track 脚不明显浮空；save/whiff/goal 姿势可读。

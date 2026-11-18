@@ -133,3 +133,12 @@ python tools\audio\make_sfx.py assets\audio
 - `nailong.glb` 只做整体节点动画（bob/前倾/横摆），不做骨骼旋转；不会出现脖子/四肢被拧长。
 - 本地视觉审阅模型 Qwen2-VL-2B 在仓库外 `C:\Users\31798\Models\`，
   审阅脚本在 `workspace/tools/`，**不随游戏提交**。
+
+## 11. 奶龙模型回退（2026-11-18 晚）
+
+- 用户指出：当前自建 `nailong.glb` 不是他原来给的形象；要求恢复经典奶龙。
+- **当前使用恢复为 `assets/characters/nailong_dl.glb`**（Sketchfab "nailong" by RED ANGRY BIRDS，CC-BY-4.0）。
+- 保留运行时清理：移除 GLB 内残留的 `Icosphere` 占位球；**不做任何骨骼姿态旋转**
+  （头/颈/四肢全部保持 glTF 静置姿态），只做整体节点 bob/前倾/横摆。
+- `nailong.glb`（本仓库自建）保留为可编辑源文件，但不再被游戏引用。
+- 自审：Qwen2-VL 近景确认“像经典黄色奶龙，头身比例/四肢/脸正常，脖子无拉长/压扁/扭曲/穿模”。
