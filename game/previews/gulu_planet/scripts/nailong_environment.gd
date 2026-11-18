@@ -15,26 +15,26 @@ class_name NailongEnvironment
 ## - 装货口立柱/横梁碰撞位置与旧版完全一致；新增装饰只向门口外侧长，不进入球路。
 ## - 地面装饰全部无碰撞、厚度 ≤ 2 cm，不改变球滚动。
 
-const HULL_LIGHT := Color("#93a39f")
-const HULL := Color("#5f6f6a")
-const HULL_DARK := Color("#52625e")
-const TRIM := Color("#375967")
-const TRIM_DARK := Color("#263c46")
+const HULL_LIGHT := Color("#b4c1b7")
+const HULL := Color("#7f8e86")
+const HULL_DARK := Color("#6d7c74")
+const TRIM := Color("#2f5c68")
+const TRIM_DARK := Color("#1f3f49")
 const GLASS := Color("#8fe3ff")
 const AMBER := Color("#ffb347")
 const CYAN := Color("#3fd8ff")
 const INTAKE := Color("#0d1a20")
 
-const GROUND := Color("#7f928b")
-const GROUND_WARM := Color("#8b9c91")
-const GROUND_COOL := Color("#869991")
-const SCUFF := Color("#66766f")
-const STONE := Color("#b0beb8")
-const STONE_LIGHT := Color("#c2cec8")
-const STONE_DARK := Color("#97a8a2")
-const CRATE := Color("#c09468")
+const GROUND := Color("#a89e89")
+const GROUND_WARM := Color("#b4aa93")
+const GROUND_COOL := Color("#9d9584")
+const SCUFF := Color("#837b6c")
+const STONE := Color("#a9a091")
+const STONE_LIGHT := Color("#bdb4a4")
+const STONE_DARK := Color("#8b8274")
+const CRATE := Color("#b98a5a")
 const CRATE_DARK := Color("#8f6640")
-const PACK := Color("#c9bda6")
+const PACK := Color("#d8cbb3")
 
 const NEST_CENTER := Vector3(1.0, 0.0, -2.5)
 
@@ -43,10 +43,11 @@ var mat_ground: ShaderMaterial
 var mat_ground_warm: ShaderMaterial
 var mat_ground_cool: ShaderMaterial
 var mat_concrete: ShaderMaterial
-var mat_hull: ShaderMaterial
-var mat_hull_light: ShaderMaterial
-var mat_hull_dark: ShaderMaterial
-var mat_trim: ShaderMaterial
+var mat_hull: StandardMaterial3D
+var mat_hull_light: StandardMaterial3D
+var mat_bay_cream: StandardMaterial3D
+var mat_hull_dark: StandardMaterial3D
+var mat_trim: StandardMaterial3D
 var mat_trim_dark: ShaderMaterial
 var mat_bare: ShaderMaterial
 var mat_dark_steel: ShaderMaterial
@@ -86,15 +87,12 @@ func _build_materials() -> void:
 	mat_ground = kit.concrete(GROUND, 0.90, 11.0)
 	mat_ground_warm = kit.concrete(GROUND_WARM, 0.90, 12.0)
 	mat_ground_cool = kit.concrete(GROUND_COOL, 0.90, 13.0)
-	mat_concrete = kit.concrete(Color("#6f7f78"), 0.92, 14.0)
-	mat_hull = kit.paint(HULL, 0.72, 0.0, 0.9, 21.0)
-	mat_hull.set_shader_parameter("specular_level", 0.08)
-	mat_hull.set_shader_parameter("edge_rim", 0.05)
-	mat_hull_light = kit.paint(HULL_LIGHT, 0.68, 0.0, 0.75, 22.0)
-	mat_hull_light.set_shader_parameter("specular_level", 0.08)
-	mat_hull_light.set_shader_parameter("edge_rim", 0.05)
-	mat_hull_dark = kit.paint(HULL_DARK, 0.54, 0.16, 1.0, 23.0)
-	mat_trim = kit.paint(TRIM, 0.40, 0.22, 0.8, 24.0)
+	mat_concrete = kit.concrete(Color("#9b9384"), 0.92, 14.0)
+	mat_hull = kit.clean_paint(HULL, 0.62)
+	mat_hull_light = kit.clean_paint(HULL_LIGHT, 0.58)
+	mat_bay_cream = kit.clean_paint(Color("#d2c6ae"), 0.56)
+	mat_hull_dark = kit.clean_paint(HULL_DARK, 0.68)
+	mat_trim = kit.clean_paint(TRIM, 0.52, 0.08)
 	mat_trim_dark = kit.dark_metal(TRIM_DARK, 0.50, 25.0)
 	mat_bare = kit.bare_metal(Color("#8b979b"), 0.32, 26.0)
 	mat_dark_steel = kit.dark_metal(Color("#2f3d3a"), 0.56, 27.0)
@@ -149,17 +147,19 @@ func _build_ground() -> void:
 	# 40×30 的场地底板；碰撞与旧版完全一致。
 	_box(Vector3(40.0, 0.5, 30.0), Vector3(0.0, -0.25, 0.0), GROUND, true, 0.0, Vector3.ZERO, mat_ground)
 
-	# 大块混凝土板：只分 4 块，接缝少而长；不铺小砖。
-	_box(Vector3(16.0, 0.012, 10.0), Vector3(-3.0, 0.008, 4.2), GROUND_WARM, false, 0.0, Vector3.ZERO, mat_ground_warm)
-	_box(Vector3(9.0, 0.012, 11.0), Vector3(5.0, 0.009, -1.0), GROUND_COOL, false, 0.0, Vector3.ZERO, mat_ground_cool)
-	_box(Vector3(8.0, 0.012, 9.0), Vector3(-13.0, 0.010, 4.0), Color("#53655f"), false, 0.0, Vector3.ZERO, mat_ground)
-	_box(Vector3(10.0, 0.012, 7.0), Vector3(-4.0, 0.011, -7.4), Color("#4a5c58"), false, 0.0, Vector3.ZERO, mat_ground_cool)
+	# 大色块分区：中央踢球/搬运通道（暖色）、门前深色工作区、外围冷色地面。
+	_box(Vector3(22.0, 0.012, 13.0), Vector3(-1.0, 0.008, 0.0), Color("#b8ab92"), false, 0.0, Vector3.ZERO, mat_ground_warm)
+	_box(Vector3(5.4, 0.014, 7.2), Vector3(13.4, 0.010, 0.0), Color("#5f6f68"), false, 0.0, Vector3.ZERO, mat_ground_cool)
+	_box(Vector3(6.4, 0.010, 6.6), Vector3(-11.0, 0.009, 5.0), Color("#a99c84"), false, 0.0, Vector3.ZERO, mat_ground_warm)
+	# 从出生点指向装货口的暖色通道：宽 4.2 m，两侧细边线。
+	_box(Vector3(20.0, 0.014, 4.2), Vector3(1.6, 0.011, 1.4), Color("#c3b49a"), false, 0.0, Vector3.ZERO, kit.concrete(Color("#c3b49a"), 0.92, 15.0))
+	for side in [-1.0, 1.0]:
+		_box(Vector3(19.0, 0.006, 0.07), Vector3(1.6, 0.020, 1.4 + side * 2.15), AMBER, false, 0.0, Vector3.ZERO, mat_amber)
 
-	# 板缝：宽 3.5 cm、厚 8 mm，无碰撞；只出现在大块分界，不切碎踢球区。
-	for x in [-16.0, -8.0, 0.0, 8.0]:
-		_box(Vector3(0.035, 0.008, 29.2), Vector3(x, 0.014, 0.0), SCUFF, false)
-	for z in [-7.5, 7.5]:
-		_box(Vector3(39.2, 0.008, 0.035), Vector3(0.0, 0.014, z), SCUFF, false)
+	# 板缝：宽 3.5 cm、厚 8 mm，无碰撞；只切大区，不切碎踢球区。
+	for z in [-6.6, 6.6]:
+		_box(Vector3(22.0, 0.008, 0.04), Vector3(-1.0, 0.014, z), SCUFF, false)
+	_box(Vector3(0.04, 0.008, 13.2), Vector3(10.6, 0.014, 0.0), SCUFF, false)
 
 	# 常走路线磨痕：宽而低对比，不做密集条纹。
 	for index in range(5):
@@ -195,6 +195,15 @@ func _build_ground() -> void:
 			var x := 8.8 + float(index) * 0.85
 			_box(Vector3(0.46, 0.006, 0.08), Vector3(x, 0.022, side * 1.90), AMBER,
 				false, 0.0, Vector3(0.0, side * 0.55, 0.0), mat_amber)
+	# 中央大箭头：从球场指向装货口。
+	for side in [-1.0, 1.0]:
+		_box(Vector3(1.05, 0.006, 0.11), Vector3(10.15, 0.022, side * 0.22), AMBER,
+			false, 0.0, Vector3(0.0, side * 0.48, 0.0), mat_amber)
+	# 场地边界漆线：只画轮廓，不铺满，给空地一个可读的“工作区”。
+	for side in [-1.0, 1.0]:
+		_box(Vector3(19.0, 0.005, 0.10), Vector3(0.0, 0.021, side * 5.20), Color("#8f7f5f"), false)
+		for x in [-9.0, 9.0]:
+			_box(Vector3(0.10, 0.005, 1.20), Vector3(x, 0.021, side * 4.65), AMBER, false, 0.0, Vector3.ZERO, mat_amber)
 
 	# 门前磨损：两片被踩暗的区域，形状不规整但边缘柔和。
 	_box(Vector3(3.6, 0.004, 1.7), Vector3(10.2, 0.017, 1.4), SCUFF, false, 0.0, Vector3(0.0, 0.12, 0.0))
@@ -241,6 +250,8 @@ func _build_perimeter() -> void:
 		add_child(node)
 
 
+
+
 ## 中景岩石：主块 + 肩石 + 亮顶；碰撞尺寸/位置与旧版一致。
 func _rock(at: Vector3, size: Vector3, spin: float) -> void:
 	_rock_mesh(at, size * Vector3(1.0, 1.15, 1.0), spin, mat_rock_a)
@@ -269,6 +280,40 @@ func _rock_mesh(at: Vector3, size: Vector3, spin: float, material: Material) -> 
 	return node
 
 
+## 远景气态行星：只做剪影与色块，不参与玩法。
+func _sky_planet() -> void:
+	var planet_material := StandardMaterial3D.new()
+	planet_material.albedo_color = Color("#cfd9d4")
+	planet_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	planet_material.disable_fog = true
+	var planet := MeshInstance3D.new()
+	var sphere := SphereMesh.new()
+	sphere.radius = 9.0
+	sphere.height = 18.0
+	sphere.radial_segments = 48
+	sphere.rings = 24
+	planet.mesh = sphere
+	planet.position = Vector3(58.0, 27.0, 4.0)
+	planet.material_override = planet_material
+	add_child(planet)
+
+	var ring_material := StandardMaterial3D.new()
+	ring_material.albedo_color = Color("#b6c8c2")
+	ring_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	ring_material.disable_fog = true
+	var ring := MeshInstance3D.new()
+	var torus := TorusMesh.new()
+	torus.inner_radius = 13.0
+	torus.outer_radius = 20.0
+	torus.rings = 64
+	torus.ring_segments = 4
+	ring.mesh = torus
+	ring.position = planet.position
+	ring.rotation = Vector3(deg_to_rad(62.0), deg_to_rad(18.0), deg_to_rad(-12.0))
+	ring.material_override = ring_material
+	add_child(ring)
+
+
 # ---------------------------------------------------------------- 搬运场地
 
 func _build_yard() -> void:
@@ -287,6 +332,9 @@ func _build_yard() -> void:
 
 	# 靠边线的装货门架：只做轮廓与承力，不进入可玩区。
 	_cargo_gantry(Vector3(-9.2, 0.0, 12.1))
+	# 两个大型货柜给远景一个尺度参照；位置在边线外，不挡球路。
+	_container(Vector3(-13.2, 0.0, 11.6), Vector3(6.2, 2.55, 2.5), 0.0, Color("#b98a5a"), Color("#2f5c68"))
+	_container(Vector3(8.4, 0.0, -12.0), Vector3(5.6, 2.5, 2.4), PI, Color("#9aa8a0"), Color("#8f6640"))
 
 	# 两盏工作灯：给场地一个竖向参照，也让夜景有暖色支点。
 	_lamp_post(Vector3(-9.4, 0.0, 8.6))
@@ -327,6 +375,53 @@ func _cargo_gantry(at: Vector3) -> void:
 			false, 0.0, Vector3(side * 0.62, 0.0, 0.0), mat_trim_dark)
 	# 顶部小警示灯，静态，不做闪烁系统。
 	_cyl(0.10, 0.12, 0.16, at + Vector3(0.0, 3.36, 0.0), AMBER, Vector3.ZERO, 0.55, 12, mat_amber)
+
+
+func _container(at: Vector3, size: Vector3, yaw: float, body_color: Color, frame_color: Color) -> void:
+	var body := _box(size, at + Vector3.UP * size.y * 0.5, body_color, true, 0.0, Vector3(0.0, yaw, 0.0), kit.clean_paint(body_color, 0.66))
+	var frame := kit.clean_paint(frame_color, 0.54, 0.08)
+	# 端部框架 + 上下导轨
+	for x in [-0.5, 0.5]:
+		_child(body, _bevel(Vector3(0.10, size.y * 1.02, size.z * 1.02), 0.02), Vector3(x * size.x, 0.0, 0.0), frame_color, frame)
+	for y in [-0.44, 0.44]:
+		_child(body, _bevel(Vector3(size.x * 1.01, 0.10, size.z * 1.01), 0.02), Vector3(0.0, y * size.y, 0.0), frame_color, frame)
+	# 侧面瓦楞：少量竖肋，不铺满高频
+	for index in range(5):
+		var x := (-0.32 + float(index) * 0.16) * size.x
+		_child(body, _bevel(Vector3(size.x * 0.045, size.y * 0.86, 0.035), 0.008), Vector3(x, 0.0, size.z * 0.505), frame_color, frame)
+	# 门端：两条锁杆 + 小铭牌
+	var door_x := size.x * 0.505
+	for z in [-0.16, 0.16]:
+		_child(body, _bevel(Vector3(0.035, size.y * 0.82, 0.06), 0.008), Vector3(door_x, 0.0, z * size.z), AMBER, mat_amber)
+	_child(body, _bevel(Vector3(0.02, 0.26, 0.9), 0.006), Vector3(door_x + 0.01, 0.16 * size.y, 0.0), HULL_LIGHT, kit.clean_paint(HULL_LIGHT, 0.5))
+
+
+func _yard_gantry(at: Vector3) -> void:
+	# 跨场门架：两根立柱在 z±10.8（主球路之外），横梁在 6.6 m 高。
+	var frame := kit.clean_paint(TRIM, 0.50, 0.08)
+	var cream := kit.clean_paint(HULL_LIGHT, 0.58, 0.04)
+	for side in [-1.0, 1.0]:
+		_box(Vector3(0.55, 6.8, 0.55), at + Vector3(0.0, 3.4, side * 10.8), Color.WHITE, true, 0.0, Vector3.ZERO, frame)
+		_box(Vector3(0.95, 0.20, 0.95), at + Vector3(0.0, 0.10, side * 10.8), Color.WHITE, false, 0.0, Vector3.ZERO, cream)
+		for y in [2.2, 4.8]:
+			_box(Vector3(0.12, 0.35, 0.85), at + Vector3(0.0, y, side * 10.8), Color.WHITE, false, 0.0, Vector3.ZERO, mat_amber)
+	_box(Vector3(0.62, 0.70, 21.4), at + Vector3.UP * 6.65, Color.WHITE, false, 0.0, Vector3.ZERO, cream)
+	_box(Vector3(0.50, 0.12, 21.0), at + Vector3(0.0, 6.24, 0.0), Color.WHITE, false, 0.0, Vector3.ZERO, frame)
+	# 从横梁垂到装货口的两根拉索/线缆，交代“吊装设备”的用途。
+	for side in [-1.0, 1.0]:
+		var cable := CylinderMesh.new()
+		cable.top_radius = 0.035
+		cable.bottom_radius = 0.035
+		cable.height = 3.2
+		var node := MeshInstance3D.new()
+		node.mesh = cable
+		node.position = Vector3(11.9, 5.2, side * 1.7)
+		node.rotation = Vector3(0.0, 0.0, -0.42)
+		node.material_override = mat_trim_dark
+		add_child(node)
+	# 顶部两盏小警示灯（静态）。
+	for side in [-1.0, 1.0]:
+		_cyl(0.10, 0.12, 0.16, at + Vector3(0.0, 7.10, side * 10.8), AMBER, Vector3.ZERO, 0.5, 12, mat_amber)
 
 
 func _lamp_post(at: Vector3) -> void:
@@ -441,7 +536,7 @@ func _build_bay_frame() -> void:
 	var arch := MeshInstance3D.new()
 	arch.mesh = kit.arch(7.00, 4.05, 5.34, 3.37, 0.38, 0.42, 0.16)
 	arch.position = Vector3(13.30, 0.0, 0.0)
-	arch.material_override = mat_hull_light
+	arch.material_override = mat_bay_cream
 	add_child(arch)
 	# 拱背与立柱/横梁之间的垫块，避免“悬浮面板”。
 	for z in [-3.24, -2.92, 2.92, 3.24]:
@@ -457,6 +552,17 @@ func _build_bay_frame() -> void:
 	liner.material_override = mat_rubber
 	add_child(liner)
 
+	# 目标识别：门口内沿一圈窄琥珀灯，远看能读出“这里就是入口”。
+	var goal_rim := MeshInstance3D.new()
+	goal_rim.mesh = kit.arch(5.50, 3.50, 5.34, 3.37, 0.055, 0.08, 0.04)
+	goal_rim.position = Vector3(13.095, 0.0, 0.0)
+	goal_rim.material_override = mat_bay_strip
+	add_child(goal_rim)
+
+	# 门楣上的横向状态牌：三格灯之外再给一个远距离可读的暖色标识。
+	_box(Vector3(0.05, 0.34, 4.30), Vector3(13.015, 4.15, 0.0), AMBER, false, 0.0, Vector3.ZERO, mat_bay_strip)
+	_box(Vector3(0.03, 0.46, 4.55), Vector3(13.035, 4.15, 0.0), INTAKE, false, 0.0, Vector3.ZERO, mat_intake_slot)
+
 	# 门拱上的六角螺栓：只在需要装配的节点出现。
 	for y in [0.55, 1.55, 2.55]:
 		for side in [-1.0, 1.0]:
@@ -465,7 +571,7 @@ func _build_bay_frame() -> void:
 		_bolt(Vector3(13.085, 3.965, z), 0.0, 0.042)
 
 	# 顶檐：向玩家方向出挑 0.55 m，底面装两盏工作灯。
-	_box(Vector3(0.62, 0.18, 6.55), Vector3(13.05, 3.50, 0.0), Color.WHITE, false, 0.0, Vector3.ZERO, mat_hull_light)
+	_box(Vector3(0.62, 0.18, 6.55), Vector3(13.05, 3.50, 0.0), Color.WHITE, false, 0.0, Vector3.ZERO, mat_bay_cream)
 	var lip := CylinderMesh.new()
 	lip.top_radius = 0.085
 	lip.bottom_radius = 0.085
@@ -473,7 +579,7 @@ func _build_bay_frame() -> void:
 	lip.radial_segments = 16
 	_add(lip, Vector3(12.75, 3.50, 0.0), Color.WHITE, 0.0, Vector3(PI * 0.5, 0.0, 0.0), Vector3.ONE, mat_bare)
 	for side in [-1.0, 1.0]:
-		_work_lamp(Vector3(13.02, 3.38, side * 1.86))
+		_work_lamp(Vector3(13.02, 3.38, side * 1.86), side < 0.0)
 
 	# 状态灯箱：三格指示灯放在横梁正面，背板做凹槽。
 	_box(Vector3(0.07, 0.56, 2.75), Vector3(13.035, 3.66, 0.0), INTAKE, false, 0.0, Vector3.ZERO, mat_dark_steel)
@@ -486,13 +592,6 @@ func _build_bay_frame() -> void:
 	# 门框内侧警示条：贴在立柱内侧面，宽 7 cm，球门内沿仍为 z=±2.67。
 	for side in [-1.0, 1.0]:
 		_box(Vector3(0.045, 2.95, 0.075), Vector3(13.555, 1.55, side * 2.705), AMBER, false, 0.0, Vector3.ZERO, mat_bay_strip)
-
-	# 侧向导轮/线缆：从门框下角沿地面走向平台，说明供电与检修。
-	for side in [-1.0, 1.0]:
-		_cyl(0.055, 0.055, 2.2, Vector3(13.30, 0.24, side * 3.52), TRIM_DARK,
-			Vector3(0.0, 0.0, PI * 0.5), 0.0, 10, mat_trim_dark)
-		for x in [12.55, 13.15]:
-			_box(Vector3(0.10, 0.22, 0.16), Vector3(x, 0.20, side * 3.52), Color.WHITE, false, 0.0, Vector3.ZERO, mat_bare)
 
 	# 接货平台内的金属底板 + 入口压条（无碰撞，保持球直接滚入）。
 	_box(Vector3(4.10, 0.02, 5.20), Vector3(13.55, 0.020, 0.0), Color.WHITE, false, 0.0, Vector3.ZERO, mat_bare)
@@ -513,6 +612,16 @@ func _build_bay_frame() -> void:
 		_clamp_arms.append(pivot)
 
 
+	# 门口地标：两根高光柱 + 顶部横梁 + 信标，让装货口在出生点就能被认出来。
+	for side in [-1.0, 1.0]:
+		_box(Vector3(0.42, 6.2, 0.42), Vector3(13.55, 3.10, side * 3.86), Color.WHITE, true, 0.0, Vector3.ZERO, mat_bay_cream)
+		_box(Vector3(0.10, 5.2, 0.10), Vector3(13.30, 3.20, side * 3.86), CYAN, false, 0.0, Vector3.ZERO, mat_cyan)
+		_box(Vector3(0.62, 0.22, 0.62), Vector3(13.55, 0.11, side * 3.86), Color.WHITE, false, 0.0, Vector3.ZERO, mat_trim_dark)
+	_box(Vector3(0.50, 0.50, 8.30), Vector3(13.55, 6.20, 0.0), Color.WHITE, false, 0.0, Vector3.ZERO, mat_bay_cream)
+	_box(Vector3(0.16, 0.14, 7.80), Vector3(13.28, 6.42, 0.0), CYAN, false, 0.0, Vector3.ZERO, mat_cyan)
+	_cyl(0.16, 0.22, 0.55, Vector3(13.55, 6.65, 0.0), AMBER, Vector3.ZERO, 0.65, 12, mat_amber)
+
+
 func _panel(size: Vector3, at: Vector3, color: Color, yaw: float) -> void:
 	_box(size, at, color, false, 0.0, Vector3(0.0, yaw, 0.0), mat_trim)
 	# 面板四周的压条
@@ -522,7 +631,7 @@ func _panel(size: Vector3, at: Vector3, color: Color, yaw: float) -> void:
 		0.0, Vector3(0.0, yaw, 0.0), mat_trim_dark)
 
 
-func _work_lamp(at: Vector3) -> void:
+func _work_lamp(at: Vector3, cast_shadow: bool = false) -> void:
 	# 灯具本体 + 透镜 + 聚光：灯有可见来源，不是凭空亮。
 	_cyl(0.16, 0.20, 0.18, at, TRIM_DARK, Vector3.ZERO, 0.0, 14, mat_trim_dark)
 	_cyl(0.14, 0.14, 0.04, at - Vector3.UP * 0.09, Color.WHITE, Vector3.ZERO, 0.0, 14, mat_lens)
@@ -530,11 +639,11 @@ func _work_lamp(at: Vector3) -> void:
 	spot.position = at - Vector3.UP * 0.12
 	spot.rotation_degrees = Vector3(-90.0, 0.0, 0.0)
 	spot.light_color = Color("#ffe3b8")
-	spot.light_energy = 1.0
+	spot.light_energy = 0.9
 	spot.spot_range = 11.0
 	spot.spot_angle = 48.0
 	spot.spot_attenuation = 0.9
-	spot.shadow_enabled = false
+	spot.shadow_enabled = cast_shadow
 	add_child(spot)
 
 
@@ -699,6 +808,17 @@ func _box_collider(size: Vector3, at: Vector3, rot: Vector3 = Vector3.ZERO) -> v
 
 func _solid_only(size: Vector3, at: Vector3) -> void:
 	_box_collider(size, at)
+
+
+
+
+
+
+
+
+
+
+
 
 
 

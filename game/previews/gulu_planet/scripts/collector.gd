@@ -6,11 +6,11 @@ class_name FuelCollector
 
 signal fuel_collected(total: int, target: int)
 
-const HULL := Color("#9aa9a6")
-const HULL_LIGHT := Color("#dde4dd")
-const HULL_DARK := Color("#7f8f8c")
-const TRIM := Color("#375967")
-const TRIM_DARK := Color("#263c46")
+const HULL := Color("#7f8e86")
+const HULL_LIGHT := Color("#b4c1b7")
+const HULL_DARK := Color("#6d7c74")
+const TRIM := Color("#2f5c68")
+const TRIM_DARK := Color("#1f3f49")
 const GLASS := Color("#8fe3ff")
 const AMBER := Color("#ffb347")
 const CYAN := Color("#3fd8ff")
@@ -39,9 +39,9 @@ var _intake_material: StandardMaterial3D
 var _flash := 0.0
 
 var kit: GuluArtKit
-var mat_hull: ShaderMaterial
-var mat_hull_dark: ShaderMaterial
-var mat_trim: ShaderMaterial
+var mat_hull: StandardMaterial3D
+var mat_hull_dark: StandardMaterial3D
+var mat_trim: StandardMaterial3D
 var mat_glass: StandardMaterial3D
 var mat_intake: ShaderMaterial
 var mat_bare: ShaderMaterial
@@ -50,11 +50,9 @@ var mat_amber: StandardMaterial3D
 
 func _ready() -> void:
 	kit = GuluArtKit.new()
-	mat_hull = kit.paint(HULL, 0.72, 0.0, 0.75, 41.0)
-	mat_hull.set_shader_parameter("specular_level", 0.08)
-	mat_hull.set_shader_parameter("edge_rim", 0.05)
-	mat_hull_dark = kit.paint(HULL_DARK, 0.52, 0.16, 0.9, 42.0)
-	mat_trim = kit.paint(TRIM, 0.40, 0.22, 0.75, 43.0)
+	mat_hull = kit.clean_paint(HULL, 0.62)
+	mat_hull_dark = kit.clean_paint(HULL_DARK, 0.68)
+	mat_trim = kit.clean_paint(TRIM, 0.52, 0.08)
 	mat_glass = kit.emissive(GLASS, 0.42, 0.25, 0.1)
 	mat_intake = kit.dark_metal(INTAKE, 0.62, 44.0)
 	mat_bare = kit.bare_metal(Color("#8b979b"), 0.32, 45.0)
@@ -150,9 +148,6 @@ func _build_hull() -> void:
 		_box(Vector3(0.035, 0.07, 2.35), Vector3(13.825, 3.52, side * 4.7), TRIM, false, 0.0, Vector3.ZERO, mat_trim)
 		_box(Vector3(0.035, 0.07, 2.35), Vector3(13.825, 1.18, side * 4.7), TRIM, false, 0.0, Vector3.ZERO, mat_trim)
 		_box(Vector3(0.025, 0.55, 0.72), Vector3(13.815, 2.55, side * 4.70), TRIM, false, 0.0, Vector3.ZERO, mat_trim)
-		# 通风百叶：三条水平窄口，位置在舷侧，不进入门洞。
-		for index in range(3):
-			_box(Vector3(0.02, 0.045, 0.95), Vector3(13.80, 2.02 + float(index) * 0.13, side * 4.20), INTAKE, false, 0.0, Vector3.ZERO, mat_intake)
 		for index in range(3):
 			_box(Vector3(0.16, 1.0, 1.3), Vector3(13.88, 3.15, side * 4.7 - 1.15 + float(index) * 1.15), GLASS, false, 1.0, Vector3.ZERO, mat_glass)
 		# 侧鳍：让船在远景里有方向感
@@ -344,6 +339,10 @@ func _torus(inner: float, outer: float) -> TorusMesh:
 	mesh.rings = 32
 	mesh.ring_segments = 8
 	return mesh
+
+
+
+
 
 
 

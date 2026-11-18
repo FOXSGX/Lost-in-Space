@@ -164,22 +164,22 @@ func _build_environment() -> void:
 	var env := Environment.new()
 	env.background_mode = Environment.BG_SKY
 	var sky_material := ProceduralSkyMaterial.new()
-	sky_material.sky_top_color = Color("#24404f")
-	sky_material.sky_horizon_color = Color("#a9c0c0")
+	sky_material.sky_top_color = Color("#2c5a76")
+	sky_material.sky_horizon_color = Color("#b4d2d6")
 	sky_material.sky_curve = 0.22
-	sky_material.ground_bottom_color = Color("#354a48")
-	sky_material.ground_horizon_color = Color("#8ba19c")
+	sky_material.ground_bottom_color = Color("#6f7f78")
+	sky_material.ground_horizon_color = Color("#9db1aa")
 	sky_material.sun_angle_max = 2.5
 	sky_material.sun_curve = 0.06
 	var sky := Sky.new()
 	sky.sky_material = sky_material
 	env.sky = sky
 	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-	env.ambient_light_color = Color("#e3eef2")
+	env.ambient_light_color = Color("#e6f0f2")
 	env.ambient_light_energy = 0.24
 	env.fog_enabled = true
 	env.fog_mode = Environment.FOG_MODE_EXPONENTIAL
-	env.fog_light_color = Color("#9fb4b6")
+	env.fog_light_color = Color("#c2d2d0")
 	env.fog_density = 0.0045
 	env.fog_sky_affect = 0.12
 	env.tonemap_mode = Environment.TONE_MAPPER_ACES
@@ -190,18 +190,27 @@ func _build_environment() -> void:
 
 	var sun := DirectionalLight3D.new()
 	sun.rotation_degrees = Vector3(-52.0, -34.0, 0.0)
-	sun.light_color = Color("#fff0d8")
-	sun.light_energy = 0.55
+	sun.light_color = Color("#fff0d2")
+	sun.light_energy = 0.42
 	sun.light_specular = 0.15
 	sun.sky_mode = DirectionalLight3D.SKY_MODE_LIGHT_ONLY
 	sun.shadow_enabled = true
 	add_child(sun)
 
+	# 冷色轮廓光：把奶龙/门框从背景里剥出来，不参与主光造型。
+	var rim := DirectionalLight3D.new()
+	rim.rotation_degrees = Vector3(28.0, 148.0, 0.0)
+	rim.light_color = Color("#8fdbe8")
+	rim.light_energy = 0.18
+	rim.light_specular = 0.0
+	rim.shadow_enabled = false
+	add_child(rim)
+
 	var fill := OmniLight3D.new()
 	fill.position = Vector3(4.0, 7.0, 0.0)
 	fill.omni_range = 22.0
 	fill.light_color = Color("#cfe9e4")
-	fill.light_energy = 0.18
+	fill.light_energy = 0.15
 	add_child(fill)
 
 	# 场地顶光：只把地面/球/奶龙提亮，不打船体正立面（避免大面积过曝）。
@@ -209,7 +218,7 @@ func _build_environment() -> void:
 	yard_fill.position = Vector3(0.0, 12.0, 0.0)
 	yard_fill.rotation_degrees = Vector3(-90.0, 0.0, 0.0)
 	yard_fill.light_color = Color("#dfeef0")
-	yard_fill.light_energy = 0.18
+	yard_fill.light_energy = 1.2
 	yard_fill.spot_range = 45.0
 	yard_fill.spot_angle = 80.0
 	yard_fill.spot_attenuation = 1.2
@@ -993,10 +1002,16 @@ func _run_selftest() -> void:
 	var sfx_players := _sfx.get("_players") as Dictionary
 	_check(sfx_players != null and sfx_players.size() == 3, "kick/block/loaded sfx imported (%d/3)" % (sfx_players.size() if sfx_players != null else 0), passes, failures)
 	var visual := dragon.get("visual") as Node3D
-	var skeletons := visual.find_children("*", "Skeleton3D", true, false)
-	_check(skeletons.size() > 0, "dragon skeleton present", passes, failures)
+	var model_meshes := visual.find_children("*", "MeshInstance3D", true, false)
+	_check(model_meshes.size() > 0, "dragon model meshes present (%d)" % model_meshes.size(), passes, failures)
 	var body := visual.get("_body") as Node3D
 	_check(body != null and absf(body.position.y) < 0.05 and absf(body.scale.y - 1.0) < 0.02, "model keeps natural scale and stays grounded", passes, failures)
+	var placeholder_left := false
+	for mesh_node in visual.find_children("*", "MeshInstance3D", true, false):
+		var mesh_instance := mesh_node as MeshInstance3D
+		if mesh_instance.visible and mesh_instance.name.to_lower().begins_with("icosphere"):
+			placeholder_left = true
+	_check(not placeholder_left, "dragon placeholder sphere removed", passes, failures)
 
 	print("GULU SELFTEST SUMMARY passes=%d failures=%d" % [passes.size(), failures.size()])
 	await _wait(0.2)
@@ -1084,6 +1099,11 @@ func _run_shots() -> void:
 	await _wait(0.6)
 	await _shot("10_shot_lane.png")
 
+	reset_round()
+	_place_player(Vector3(9.0, 0.02, 1.6), Vector3(10.3, 1.30, 0.0))
+	await _wait(0.8)
+	await _shot("11_dragon_neck_closeup.png")
+
 	print("GULU SHOTS dir=%s" % ProjectSettings.globalize_path(_shot_dir))
 	get_tree().quit(0)
 
@@ -1133,6 +1153,12 @@ func _shot(file_name: String) -> void:
 		var ball_screen := cam.unproject_position(ball.global_position)
 		var view := get_viewport().get_visible_rect().size
 		var on_screen := head.x > 0.0 and head.x < view.x and head.y > 0.0 and head.y < view.y
+		if file_name.begins_with("04"):
+			for mi_node in find_children("*", "MeshInstance3D", true, false):
+				var mi := mi_node as MeshInstance3D
+				if mi.global_position.distance_to(Vector3(16.9, 4.7, 0.0)) < 0.2:
+					var mm := mi.material_override
+					print("HULLMAT pos=%s mat=%s albedo=%s emission=%s" % [mi.global_position, mm, (mm as StandardMaterial3D).albedo_color if mm is StandardMaterial3D else "-", (mm as StandardMaterial3D).emission_enabled if mm is StandardMaterial3D else "-"])
 		print("SHOTMETA %s dragon_screen=%s ball_screen=%s on_screen=%s loaded=%d state=%s ball_speed=%.1f ball_y=%.2f" % [
 			file_name, head, ball_screen, on_screen, loaded_count, dragon.state_name(), _ball_speed(), ball.global_position.y])
 	var image := get_viewport().get_texture().get_image()
@@ -1204,6 +1230,11 @@ func _run_record() -> void:
 	await _wait(1.0)
 	print("GULU RECORD done peak_loaded=%d" % _record_peak_loaded)
 	get_tree().quit(0)
+
+
+
+
+
 
 
 

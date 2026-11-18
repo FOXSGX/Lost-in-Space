@@ -1,4 +1,4 @@
-extends Node3D
+﻿extends Node3D
 class_name MilkDragonModelVisual
 
 ## 奶龙外观（正式模型版）：assets/characters/nailong_dl.glb。
@@ -15,8 +15,8 @@ class_name MilkDragonModelVisual
 ## 说明：本环境看不到画面，“脚步是否自然”只能靠代码规则保证（步频由实际速度驱动、
 ## 停止时步态归零、支撑脚回正），最终观感需要用户看录像确认。
 
-const MODEL_PATH := "res://assets/characters/nailong_dl.glb"
-const GROUND_OFFSET := 0.072
+const MODEL_PATH := "res://assets/characters/nailong.glb"
+const GROUND_OFFSET := 0.0
 ## 每走 1 米播放多少弧度步态（约 2.4 m 一个完整步幅）
 const GAIT_PER_METER := 2.6
 
@@ -101,7 +101,7 @@ func _build() -> void:
 
 	_facing = Node3D.new()
 	_facing.name = "Facing"
-	_facing.rotation.y = PI
+	_facing.rotation.y = 0.0
 	_body.add_child(_facing)
 
 	var packed := load(MODEL_PATH) as PackedScene
@@ -115,8 +115,14 @@ func _build() -> void:
 		_facing.add_child(_model)
 
 	var meshes := _model.find_children("*", "MeshInstance3D", true, false)
+	var placeholders: Array[Node] = []
 	for node in meshes:
 		var mi := node as MeshInstance3D
+		# Sketchfab 导出里残留了一个 2 m 的 Icosphere 占位球（LICENSE 声称已移除，
+		# 但 GLB 里仍在）。它会把整只奶龙包在一个大球里；必须在运行时剔除。
+		if mi.name.to_lower().begins_with("icosphere"):
+			placeholders.append(mi)
+			continue
 		mi.visible = true
 		for surface in range(mi.mesh.get_surface_count()):
 			var material := mi.get_active_material(surface)
@@ -125,6 +131,9 @@ func _build() -> void:
 				mi.set_surface_override_material(surface, tint)
 				_tint_materials.append(tint)
 				_tint_base.append(tint.albedo_color)
+	for placeholder in placeholders:
+		placeholder.get_parent().remove_child(placeholder)
+		placeholder.queue_free()
 
 	var skeletons := _model.find_children("*", "Skeleton3D", true, false)
 	if skeletons.size() > 0:
@@ -133,7 +142,7 @@ func _build() -> void:
 
 	_mouth_anchor = Node3D.new()
 	_mouth_anchor.name = "MouthAnchor"
-	_mouth_anchor.position = Vector3(0.0, 1.31, 0.60)
+	_mouth_anchor.position = Vector3(0.0, 1.20, -0.42)
 	_model.add_child(_mouth_anchor)
 
 	_ring_material = StandardMaterial3D.new()
@@ -225,53 +234,71 @@ func _animate(delta: float) -> void:
 
 
 func _apply_pose() -> void:
-	var bob := absf(sin(_gait)) * 0.010 * _speed01
+	var bob := absf(sin(_gait)) * 0.032 * _speed01
 	_body.position.y = bob
 	_body.position.x = sin(_gait * 0.5) * 0.012 * absf(_lateral01) * _stride_blend
-	_body.rotation.x = _lean
-	_body.rotation.z = lerpf(_body.rotation.z, -0.030 * _lateral01 * _speed01, 0.12)
+	# 静态模型的步态只走整体节点：轻微上下、前后俯仰、左右摆，不改骨骼/网格。
+	_body.rotation.x = _lean + sin(_gait) * 0.022 * _speed01
+	_body.rotation.z = lerpf(_body.rotation.z, -0.030 * _lateral01 * _speed01 + sin(_gait * 0.5) * 0.018 * _speed01, 0.12)
 	_body.scale = Vector3.ONE
 
 	if _skeleton == null:
 		return
 
-	if _head_bone >= 0:
+	var head_animation := false
+	if head_animation and _head_bone >= 0:
 		var yaw := _head_yaw
 		var pitch := _head_pitch - 0.10 * _block
 		_skeleton.set_bone_pose_rotation(_head_bone,
 			_rest[_head_bone] * Quaternion(Vector3.UP, yaw) * Quaternion(Vector3.RIGHT, pitch))
-		if _neck_bone >= 0:
+		if head_animation and _neck_bone >= 0:
 			_skeleton.set_bone_pose_rotation(_neck_bone,
 				_rest[_neck_bone] * Quaternion(Vector3.UP, yaw * 0.35))
 
-	# 迈步幅度：前进速度与“确实在走”两个因子
-	var amplitude := 0.34 * absf(_forward01) * _stride_blend
-	var swing := sin(_gait) * amplitude
-	for index in range(_thigh_bones.size()):
-		var phase := 1.0 if index == 0 else -1.0
-		var thigh := swing * phase
-		_skeleton.set_bone_pose_rotation(_thigh_bones[index],
-			_rest[_thigh_bones[index]] * Quaternion(Vector3.RIGHT, thigh))
-		var knee := 0.0
-		if index < _shin_bones.size():
-			# 只有向前摆的那条腿屈膝，后摆腿伸直（支撑相）
-			knee = maxf(0.0, sin(_gait) * phase) * 0.50 * absf(_forward01) * _stride_blend
-			_skeleton.set_bone_pose_rotation(_shin_bones[index],
-				_rest[_shin_bones[index]] * Quaternion(Vector3.RIGHT, knee))
-		if index < _foot_bones.size():
-			# 脚掌回正：支撑相尽量贴地，而不是跟着腿一起翻
-			var foot := -(thigh * 0.85) - knee * 0.45
-			_skeleton.set_bone_pose_rotation(_foot_bones[index],
-				_rest[_foot_bones[index]] * Quaternion(Vector3.RIGHT, foot))
+	# 四肢骨骼的局部轴没有在 glTF 里验证过；按世界 X 轴旋转会把腿/手臂拧进身体，
+	# 造成“人物完全变形”。本轮先关闭四肢骨骼动画，只保留整体位移/前倾/转头；
+	# 宁可少一点步态细节，也不能让模型变形。
+	var limb_animation := false
+	if limb_animation:
+		# 迈步幅度：前进速度与“确实在走”两个因子
+		var amplitude := 0.34 * absf(_forward01) * _stride_blend
+		var swing := sin(_gait) * amplitude
+		for index in range(_thigh_bones.size()):
+			var phase := 1.0 if index == 0 else -1.0
+			var thigh := swing * phase
+			_skeleton.set_bone_pose_rotation(_thigh_bones[index],
+				_rest[_thigh_bones[index]] * Quaternion(Vector3.RIGHT, thigh))
+			var knee := 0.0
+			if index < _shin_bones.size():
+				knee = maxf(0.0, sin(_gait) * phase) * 0.50 * absf(_forward01) * _stride_blend
+				_skeleton.set_bone_pose_rotation(_shin_bones[index],
+					_rest[_shin_bones[index]] * Quaternion(Vector3.RIGHT, knee))
+			if index < _foot_bones.size():
+				var foot := -(thigh * 0.85) - knee * 0.45
+				_skeleton.set_bone_pose_rotation(_foot_bones[index],
+					_rest[_foot_bones[index]] * Quaternion(Vector3.RIGHT, foot))
 
-	var arm_swing := -swing * 0.45
-	for index in range(_arm_bones.size()):
-		var side := 1.0 if index == 0 else -1.0
-		var spread := 0.10 + 0.45 * _block
-		_skeleton.set_bone_pose_rotation(_arm_bones[index],
-			_rest[_arm_bones[index]]
-			* Quaternion(Vector3.RIGHT, arm_swing * side)
-			* Quaternion(Vector3.UP, side * spread))
+		var arm_swing := -swing * 0.45
+		for index in range(_arm_bones.size()):
+			var side := 1.0 if index == 0 else -1.0
+			var spread := 0.10 + 0.45 * _block
+			_skeleton.set_bone_pose_rotation(_arm_bones[index],
+				_rest[_arm_bones[index]]
+				* Quaternion(Vector3.RIGHT, arm_swing * side)
+				* Quaternion(Vector3.UP, side * spread))
+	else:
+		# 回到 glTF 的静置姿态；只允许整体节点动。
+		for index in _thigh_bones:
+			_skeleton.set_bone_pose_rotation(index, _rest[index])
+		for index in _shin_bones:
+			_skeleton.set_bone_pose_rotation(index, _rest[index])
+		for index in _foot_bones:
+			_skeleton.set_bone_pose_rotation(index, _rest[index])
+		for index in _arm_bones:
+			_skeleton.set_bone_pose_rotation(index, _rest[index])
 
 	if _ring != null:
 		_ring.visible = ring_enabled
+
+
+

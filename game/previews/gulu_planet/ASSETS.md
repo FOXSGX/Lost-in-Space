@@ -122,3 +122,14 @@ python tools\audio\make_sfx.py assets\audio
 - 材质 shader 使用世界坐标噪声，不依赖 2K 贴图；因此仓库体积没有因本轮增加贴图。
 - 视觉验收仍需人工看图：本环境无法查看图片；截图与对照图已放在 `docs/shots/`、
   `docs/art_baseline/`、`docs/art_compare/`。
+
+## 10. 奶龙模型替换（2026-11-18 二次修正）
+
+- **当前使用**：`assets/characters/nailong.glb`（本仓库 `tools/blender/build_nailong.py`
+  程序化建模，18,880 tris，0.961×1.01×1.728 m，14 个网格，无骨架）。
+- **已弃用**：`assets/characters/nailong_dl.glb`（Sketchfab "nailong" by RED ANGRY BIRDS，
+  CC-BY-4.0）。文件与 LICENSE 保留在仓库中以便追溯，但游戏不再引用。
+  弃用原因：225 根 Rigify 骨的局部轴与代码假设不一致，按世界轴旋转会造成四肢/脖子变形。
+- `nailong.glb` 只做整体节点动画（bob/前倾/横摆），不做骨骼旋转；不会出现脖子/四肢被拧长。
+- 本地视觉审阅模型 Qwen2-VL-2B 在仓库外 `C:\Users\31798\Models\`，
+  审阅脚本在 `workspace/tools/`，**不随游戏提交**。

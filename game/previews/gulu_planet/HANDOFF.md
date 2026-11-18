@@ -3,20 +3,20 @@
 > 多日任务续点。新会话先读本文件，再读 `STATUS.md` / `TESTING.md` / `BRIEF.md`。
 > 每次推进后更新「当前状态 / 下一步 / 恢复命令」，不要只依赖聊天记录。
 
-最后更新：2026-11-18（环境美术升级）
+最后更新：2026-11-18（环境美术升级，二次修正）
 
-## 2026-11-18 · 环境美术升级（本轮）
+## 2026-11-18 · 环境美术升级（本轮，15:xx 二次修正）
 
-- 分支 `feature/lis-physics-rc1`（包含上一轮 LIS addon 提交，本轮只本地提交，不 push）。
-- 重点：装货口 + 门前地面；其次能源球外观、场边岩体/货箱/灯光。
-- 新增 `scripts/gulu_art_kit.gd`（材质工厂 + 倒角盒 + 门拱 + 低多边形岩体）、
-  `shaders/aqs2_metal.gdshader`、`shaders/aqs2_rock.gdshader`（来自 ART-SAMPLE-002，只复制 shader）。
-- 改动 `nailong_environment.gd` / `collector.gd` / `energy_ball.gd` / `gulu_app.gd`。
-- **未改**：门口尺寸、CATCH AABB、碰撞边界、球物理、踢球规则、奶龙行为/模型、控制器。
-- 自测 `passes=43 failures=0`；截图 10 张、基线 10 张、对照 4 组 + 总览、
+- **奶龙换成本仓库自建 `assets/characters/nailong.glb`**：静态网格、14 个网格、
+  18,880 tris；不再做任何骨骼旋转。旧 `nailong_dl.glb` 的 225 根 Rigify 骨被按世界轴硬拧，
+  导致四肢/脖子变形，已弃用（文件保留在仓库中，不再引用）。
+- 行走/拦截只动整体节点（bob/前倾/横摆），不改变网格；`set_block` 仍驱动前倾。
+- 自审 Qwen2-VL：脖子特写 10/10、全身近景 9/10；场景 7–8/10（地面偏空）。
+- 场景：暖色中央通道 + 深色门前区 + 冷色外围；装货口加高光柱/横梁/门楣牌/
+  门内沿灯圈/中央箭头；冷色轮廓光 + 单侧工作灯阴影；两个边线货柜。
+- 自测 `passes=44 failures=0`；截图 11 张（新增脖子特写）、基线 10 张、对照 4 组；
   录像 444 帧（scored=true）。
-- 性能：793→622 FPS，550→868 draw calls，53k→108k primitives（仍 >600 FPS）。
-- **视觉待人工确认**：本环境无法查看图片；请先看 `docs/art_compare/` 与 `docs/shots/`。
+- 性能：386 FPS / 1,235 draw calls / 120,818 primitives（仍远高于 60 Hz）。
 - 详见 `docs/ART_PASS_2026-11-18.md`。
 
 ## 快照（2026-11-10 玩法）
@@ -26,8 +26,8 @@
 - 最新提交：以 `git log -1 --oneline` 为准
 - 预览目录：`game/previews/gulu_planet`
 - 当前玩法：**足球式地面踢球**（一球、一门、一只守门奶龙）
-- 最新自测：`GULU SELFTEST SUMMARY passes=43 failures=0`
-- 交付：`docs/shots/` 7 张、`docs/record/gulu_kick_loop.mp4`（30 fps，脚本演示）
+- 最新自测：`GULU SELFTEST SUMMARY passes=44 failures=0`
+- 交付：`docs/shots/` 11 张、`docs/record/gulu_kick_loop.mp4`（30 fps，脚本演示）
 
 ## 本轮（2026-11-10 第二次）：从「伪物理」换成真刚体，AI 从「门线跟球」换成四状态
 

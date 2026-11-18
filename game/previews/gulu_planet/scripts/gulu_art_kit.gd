@@ -33,6 +33,21 @@ func paint(color: Color, rough: float = 0.46, metallic: float = 0.10,
 	return m
 
 
+## 干净烤漆：大面壳体用。没有高光反射的“塑料白”，避免大面积过曝。
+func clean_paint(color: Color, rough: float = 0.62, metallic: float = 0.04) -> StandardMaterial3D:
+	var key := "clean:%s:%.2f:%.2f" % [color.to_html(), rough, metallic]
+	if _cache.has(key):
+		return _cache[key] as StandardMaterial3D
+	var m := StandardMaterial3D.new()
+	m.albedo_color = color
+	m.roughness = rough
+	m.metallic = metallic
+	m.specular_mode = BaseMaterial3D.SPECULAR_DISABLED
+	m.metallic_specular = 0.0
+	_cache[key] = m
+	return m
+
+
 func bare_metal(color: Color = Color("#8b979b"), rough: float = 0.30, seed: float = 2.0) -> ShaderMaterial:
 	var key := "bare:%s:%.2f:%.2f" % [color.to_html(), rough, seed]
 	if _cache.has(key):
