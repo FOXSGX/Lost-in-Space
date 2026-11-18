@@ -135,3 +135,30 @@ mean 0.41–0.52，p95 0.73–0.89，clipped 0.0–3.3%。
 `--record` 只做三件事：按住 W 走路、改朝向、调用和左键相同的 `_try_kick()`。
 **不传送球、不传送玩家、不强制计分、不切换 AI 状态。**
 录像里若出现进球，是球真的越过了门口平面。
+
+## 3. 第三轮动作/物理复现（2026-11-18）
+
+```powershell
+# 动作：待机 → 横移 → 拦截 → 恢复 → 停下
+& $godot --path $preview -- --motion
+& $godot --path $preview --write-movie "$preview\docs\record\motion_raw\k.png" --fixed-fps 30 -- --motion
+
+# 球物理：落地 / 直线滚停 / 撞门柱 / 撞奶龙
+& $godot --headless --path $preview -- --physics
+```
+
+当前输出（摘要）：
+
+```
+drop  bounce_peak=0.766
+roll  travel=7.434 angle=14.545 expected=21.864 inst_slip=0.000
+post  before=0 after=0 (deflected out)
+dragon guard=off post=0.22 / guard=on post=1.74, swats=0
+```
+
+说明：累计角度落后于 `distance/R` 是踢球瞬间的滑动过渡；稳定滚动时
+`inst_slip=0.000`，转动与位移匹配。撞奶龙已改为接触只发反馈、不再补拨球冲量。
+
+截图/对照：`docs/shots/` 11 张；`docs/round3_before/`（改造前 01/10）；
+`docs/round3_compare/`（同机位对照）。录像 `docs/record/gulu_kick_loop.mp4`
+（758 帧、25.2 s、scored=true）。性能 481 FPS / 934 draw calls / 93,061 primitives。

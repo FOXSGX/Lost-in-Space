@@ -95,6 +95,24 @@ func set_block(weight: float) -> void:
 # ------------------------------------------------------------------ 组装
 
 func _build() -> void:
+	# 接地阴影：静态模型没有脚部动画时，靠一块低对比圆盘把脚“压”在地面上。
+	var shadow_material := StandardMaterial3D.new()
+	shadow_material.albedo_color = Color(0.03, 0.045, 0.04, 0.30)
+	shadow_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	shadow_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	shadow_material.cull_mode = BaseMaterial3D.CULL_DISABLED
+	var shadow_mesh := CylinderMesh.new()
+	shadow_mesh.top_radius = 0.78
+	shadow_mesh.bottom_radius = 0.78
+	shadow_mesh.height = 0.006
+	shadow_mesh.radial_segments = 24
+	var shadow := MeshInstance3D.new()
+	shadow.name = "ContactShadow"
+	shadow.mesh = shadow_mesh
+	shadow.position.y = 0.008
+	shadow.material_override = shadow_material
+	add_child(shadow)
+
 	_body = Node3D.new()
 	_body.name = "Body"
 	add_child(_body)
@@ -234,7 +252,7 @@ func _animate(delta: float) -> void:
 
 
 func _apply_pose() -> void:
-	var bob := absf(sin(_gait)) * 0.032 * _speed01
+	var bob := 0.0
 	_body.position.y = bob
 	_body.position.x = sin(_gait * 0.5) * 0.012 * absf(_lateral01) * _stride_blend
 	# 静态模型的步态只走整体节点：轻微上下、前后俯仰、左右摆，不改骨骼/网格。
@@ -299,6 +317,8 @@ func _apply_pose() -> void:
 
 	if _ring != null:
 		_ring.visible = ring_enabled
+
+
 
 
 

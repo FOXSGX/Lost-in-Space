@@ -46,6 +46,7 @@ var mat_concrete: ShaderMaterial
 var mat_hull: StandardMaterial3D
 var mat_hull_light: StandardMaterial3D
 var mat_bay_cream: StandardMaterial3D
+var mat_mark: StandardMaterial3D
 var mat_hull_dark: StandardMaterial3D
 var mat_trim: StandardMaterial3D
 var mat_trim_dark: ShaderMaterial
@@ -91,6 +92,7 @@ func _build_materials() -> void:
 	mat_hull = kit.clean_paint(HULL, 0.62)
 	mat_hull_light = kit.clean_paint(HULL_LIGHT, 0.58)
 	mat_bay_cream = kit.clean_paint(Color("#d2c6ae"), 0.56)
+	mat_mark = kit.clean_paint(Color("#c79a52"), 0.82)
 	mat_hull_dark = kit.clean_paint(HULL_DARK, 0.68)
 	mat_trim = kit.clean_paint(TRIM, 0.52, 0.08)
 	mat_trim_dark = kit.dark_metal(TRIM_DARK, 0.50, 25.0)
@@ -147,67 +149,17 @@ func _build_ground() -> void:
 	# 40×30 的场地底板；碰撞与旧版完全一致。
 	_box(Vector3(40.0, 0.5, 30.0), Vector3(0.0, -0.25, 0.0), GROUND, true, 0.0, Vector3.ZERO, mat_ground)
 
-	# 大色块分区：中央踢球/搬运通道（暖色）、门前深色工作区、外围冷色地面。
-	_box(Vector3(22.0, 0.012, 13.0), Vector3(-1.0, 0.008, 0.0), Color("#b8ab92"), false, 0.0, Vector3.ZERO, mat_ground_warm)
+	# 只保留两块大色差：暖色球场 + 深色装货平台。不再铺小砖、环线、灯带。
+	_box(Vector3(24.0, 0.012, 15.0), Vector3(0.0, 0.008, 0.0), Color("#b8ab92"), false, 0.0, Vector3.ZERO, mat_ground_warm)
 	_box(Vector3(5.4, 0.014, 7.2), Vector3(13.4, 0.010, 0.0), Color("#5f6f68"), false, 0.0, Vector3.ZERO, mat_ground_cool)
-	_box(Vector3(6.4, 0.010, 6.6), Vector3(-11.0, 0.009, 5.0), Color("#a99c84"), false, 0.0, Vector3.ZERO, mat_ground_warm)
-	# 从出生点指向装货口的暖色通道：宽 4.2 m，两侧细边线。
-	_box(Vector3(20.0, 0.014, 4.2), Vector3(1.6, 0.011, 1.4), Color("#c3b49a"), false, 0.0, Vector3.ZERO, kit.concrete(Color("#c3b49a"), 0.92, 15.0))
-	for side in [-1.0, 1.0]:
-		_box(Vector3(19.0, 0.006, 0.07), Vector3(1.6, 0.020, 1.4 + side * 2.15), AMBER, false, 0.0, Vector3.ZERO, mat_amber)
 
-	# 板缝：宽 3.5 cm、厚 8 mm，无碰撞；只切大区，不切碎踢球区。
-	for z in [-6.6, 6.6]:
-		_box(Vector3(22.0, 0.008, 0.04), Vector3(-1.0, 0.014, z), SCUFF, false)
-	_box(Vector3(0.04, 0.008, 13.2), Vector3(10.6, 0.014, 0.0), SCUFF, false)
+	# 舱口附近只留 3 段实体短标线，给踢球方向一个参照。
+	for index in range(3):
+		var x := 9.9 + float(index) * 0.55
+		_box(Vector3(0.46, 0.006, 0.10), Vector3(x, 0.020, 0.0), AMBER, false, 0.0, Vector3.ZERO, mat_mark)
 
-	# 常走路线磨痕：宽而低对比，不做密集条纹。
-	for index in range(5):
-		var t := float(index)
-		_box(Vector3(2.6, 0.006, 0.42), Vector3(-8.6 + t * 3.2, 0.018, 4.3 - t * 0.30),
-			SCUFF, false, 0.0, Vector3(0.0, 0.10, 0.0))
-
-	# 停机坪：压深圆盘 + 金属边圈 + 四块检修盖板。
-	var pad := CylinderMesh.new()
-	pad.top_radius = 4.55
-	pad.bottom_radius = 4.42
-	pad.height = 0.035
-	pad.radial_segments = 48
-	_add(pad, Vector3(6.6, 0.018, 0.0), Color.WHITE, 0.0, Vector3.ZERO, Vector3.ONE, mat_bare)
-	var pad_inner := CylinderMesh.new()
-	pad_inner.top_radius = 3.30
-	pad_inner.bottom_radius = 3.22
-	pad_inner.height = 0.038
-	pad_inner.radial_segments = 40
-	_add(pad_inner, Vector3(6.6, 0.022, 0.0), Color.WHITE, 0.0, Vector3.ZERO, Vector3.ONE, mat_concrete)
-	_ring(4.30, 4.42, Vector3(6.6, 0.038, 0.0), WHITE, Vector3.ZERO, 0.0, mat_trim)
-	for index in range(4):
-		var ang := TAU * float(index) / 4.0 + PI * 0.25
-		var at := Vector3(6.6 + cos(ang) * 3.95, 0.040, sin(ang) * 3.95)
-		_box(Vector3(0.55, 0.018, 0.42), at, Color.WHITE, false, 0.0, Vector3(0.0, -ang, 0.0), mat_dark_steel)
-		_bolt(at + Vector3.UP * 0.012, ang + PI * 0.5, 0.045)
-
-	# 门前工作区：两条暗金属导引条 + 五枚小箭头；不发光、不挡球。
-	for side in [-1.0, 1.0]:
-		_box(Vector3(9.6, 0.006, 0.09), Vector3(6.2, 0.020, side * 2.58), Color.WHITE,
-			false, 0.0, Vector3.ZERO, mat_dark_steel)
-		for index in range(3):
-			var x := 8.8 + float(index) * 0.85
-			_box(Vector3(0.46, 0.006, 0.08), Vector3(x, 0.022, side * 1.90), AMBER,
-				false, 0.0, Vector3(0.0, side * 0.55, 0.0), mat_amber)
-	# 中央大箭头：从球场指向装货口。
-	for side in [-1.0, 1.0]:
-		_box(Vector3(1.05, 0.006, 0.11), Vector3(10.15, 0.022, side * 0.22), AMBER,
-			false, 0.0, Vector3(0.0, side * 0.48, 0.0), mat_amber)
-	# 场地边界漆线：只画轮廓，不铺满，给空地一个可读的“工作区”。
-	for side in [-1.0, 1.0]:
-		_box(Vector3(19.0, 0.005, 0.10), Vector3(0.0, 0.021, side * 5.20), Color("#8f7f5f"), false)
-		for x in [-9.0, 9.0]:
-			_box(Vector3(0.10, 0.005, 1.20), Vector3(x, 0.021, side * 4.65), AMBER, false, 0.0, Vector3.ZERO, mat_amber)
-
-	# 门前磨损：两片被踩暗的区域，形状不规整但边缘柔和。
-	_box(Vector3(3.6, 0.004, 1.7), Vector3(10.2, 0.017, 1.4), SCUFF, false, 0.0, Vector3(0.0, 0.12, 0.0))
-	_box(Vector3(3.0, 0.004, 1.4), Vector3(9.8, 0.017, -1.7), SCUFF, false, 0.0, Vector3(0.0, -0.18, 0.0))
+	# 门前平台边缘一条低对比压条，交代“球场→平台”的边界。
+	_box(Vector3(0.08, 0.006, 6.8), Vector3(10.7, 0.020, 0.0), Color("#8f7f5f"), false)
 
 
 # ---------------------------------------------------------------- 边界与地形
@@ -317,33 +269,17 @@ func _sky_planet() -> void:
 # ---------------------------------------------------------------- 搬运场地
 
 func _build_yard() -> void:
-	# 场地现在要踢球：中央完全留空，道具全部移到边线外。
+	# 场地现在要踢球：中央完全留空，只保留边线外的轮廓物。
 	_rock(Vector3(-12.2, 0.0, -2.0), Vector3(2.2, 2.6, 2.4), 0.6)
 	_rock(Vector3(-13.6, 0.0, 9.8), Vector3(2.0, 2.2, 1.8), -0.4)
-	_rock(Vector3(2.4, 0.0, 13.4), Vector3(2.4, 2.0, 1.8), 0.9)
 
-	# 边线货箱堆：不进场，球撞上会弹回场内（有碰撞）。
-	_crate(Vector3(-5.6, 0.0, 10.6), 1.35, 0.12)
-	_crate(Vector3(-6.1, 0.0, 11.8), 1.05, -0.35)
-	_crate(Vector3(-5.7, 1.35, 10.7), 0.95, 0.55)
-	_crate(Vector3(6.6, 0.0, 10.2), 1.2, 0.40)
-	_crate(Vector3(7.4, 0.0, 11.1), 0.9, -0.20)
-	_crate(Vector3(-9.0, 0.0, -12.2), 1.0, 0.32)
+	# 边线货箱只留一组，作为尺度参照；不进场。
+	_crate(Vector3(-5.7, 0.0, 10.9), 1.25, 0.12)
+	_crate(Vector3(-6.2, 1.25, 11.0), 0.95, 0.45)
 
-	# 靠边线的装货门架：只做轮廓与承力，不进入可玩区。
-	_cargo_gantry(Vector3(-9.2, 0.0, 12.1))
-	# 两个大型货柜给远景一个尺度参照；位置在边线外，不挡球路。
-	_container(Vector3(-13.2, 0.0, 11.6), Vector3(6.2, 2.55, 2.5), 0.0, Color("#b98a5a"), Color("#2f5c68"))
-	_container(Vector3(8.4, 0.0, -12.0), Vector3(5.6, 2.5, 2.4), PI, Color("#9aa8a0"), Color("#8f6640"))
-
-	# 两盏工作灯：给场地一个竖向参照，也让夜景有暖色支点。
+	# 两盏工作灯：给场地一个竖向参照，也让侧光有来源。
 	_lamp_post(Vector3(-9.4, 0.0, 8.6))
 	_lamp_post(Vector3(6.2, 0.0, -9.4))
-
-	# 场地标线：中圈 + 门前弧，细、暗、不发光，只用来读距离。
-	_ring(3.80, 3.95, Vector3(-2.0, 0.026, 1.2), TRIM, Vector3.ZERO, 0.0, mat_trim)
-	_ring(5.60, 5.74, Vector3(11.6, 0.026, 0.0), TRIM, Vector3.ZERO, 0.0, mat_trim)
-	_box(Vector3(0.12, 0.016, 21.0), Vector3(-2.0, 0.026, 0.0), TRIM, false, 0.0, Vector3.ZERO, mat_trim)
 
 
 func _crate(at: Vector3, size: float, yaw: float, tilt: float = 0.0) -> void:
@@ -552,16 +488,7 @@ func _build_bay_frame() -> void:
 	liner.material_override = mat_rubber
 	add_child(liner)
 
-	# 目标识别：门口内沿一圈窄琥珀灯，远看能读出“这里就是入口”。
-	var goal_rim := MeshInstance3D.new()
-	goal_rim.mesh = kit.arch(5.50, 3.50, 5.34, 3.37, 0.055, 0.08, 0.04)
-	goal_rim.position = Vector3(13.095, 0.0, 0.0)
-	goal_rim.material_override = mat_bay_strip
-	add_child(goal_rim)
 
-	# 门楣上的横向状态牌：三格灯之外再给一个远距离可读的暖色标识。
-	_box(Vector3(0.05, 0.34, 4.30), Vector3(13.015, 4.15, 0.0), AMBER, false, 0.0, Vector3.ZERO, mat_bay_strip)
-	_box(Vector3(0.03, 0.46, 4.55), Vector3(13.035, 4.15, 0.0), INTAKE, false, 0.0, Vector3.ZERO, mat_intake_slot)
 
 	# 门拱上的六角螺栓：只在需要装配的节点出现。
 	for y in [0.55, 1.55, 2.55]:
@@ -615,10 +542,8 @@ func _build_bay_frame() -> void:
 	# 门口地标：两根高光柱 + 顶部横梁 + 信标，让装货口在出生点就能被认出来。
 	for side in [-1.0, 1.0]:
 		_box(Vector3(0.42, 6.2, 0.42), Vector3(13.55, 3.10, side * 3.86), Color.WHITE, true, 0.0, Vector3.ZERO, mat_bay_cream)
-		_box(Vector3(0.10, 5.2, 0.10), Vector3(13.30, 3.20, side * 3.86), CYAN, false, 0.0, Vector3.ZERO, mat_cyan)
 		_box(Vector3(0.62, 0.22, 0.62), Vector3(13.55, 0.11, side * 3.86), Color.WHITE, false, 0.0, Vector3.ZERO, mat_trim_dark)
 	_box(Vector3(0.50, 0.50, 8.30), Vector3(13.55, 6.20, 0.0), Color.WHITE, false, 0.0, Vector3.ZERO, mat_bay_cream)
-	_box(Vector3(0.16, 0.14, 7.80), Vector3(13.28, 6.42, 0.0), CYAN, false, 0.0, Vector3.ZERO, mat_cyan)
 	_cyl(0.16, 0.22, 0.55, Vector3(13.55, 6.65, 0.0), AMBER, Vector3.ZERO, 0.65, 12, mat_amber)
 
 
@@ -808,6 +733,8 @@ func _box_collider(size: Vector3, at: Vector3, rot: Vector3 = Vector3.ZERO) -> v
 
 func _solid_only(size: Vector3, at: Vector3) -> void:
 	_box_collider(size, at)
+
+
 
 
 
