@@ -23,23 +23,30 @@ const ORE_AMBER := Color("#ffb45a")
 const ORE_CYAN := Color("#5fe0ff")
 
 # 洞穴岩石原材质几乎是黑的（albedo≈0.16），直接放进暖色沙漠会变成一圈黑影。
-# 统一改成与场地程序化岩体同源的砂岩色，保留模型本身的块面细节。
-const CLIFF_BASE := Color("#a89e89")
-const CLIFF_DARK := Color("#7c7364")
-const CLIFF_LIGHT := Color("#c6bca8")
-const CLIFF_COOL := Color("#93a49c")
+# 统一改成与场地程序化岩体同源的砂岩色，并补域顶点色，让 aqs2_rock 的
+# arris/ao/patch/up 四个通道真正生效（GLB 本身没有 COLOR，默认 1 会直接压黑）。
+const CLIFF_BASE := Color("#b5a68c")
+const CLIFF_DARK := Color("#8a7c68")
+const CLIFF_LIGHT := Color("#cdbfa4")
+const CLIFF_COOL := Color("#a99e86")
 
-var _cliff_mats: Array[StandardMaterial3D] = []
+var _kit: GuluArtKit
+var _cliff_mats: Array[ShaderMaterial] = []
+var _baked_meshes: Dictionary = {}
 
 
 func _ready() -> void:
-	# 注意：aqs2_rock 用顶点色当 arris/ao/patch/up，外部 GLB 没有顶点色，
-	# 直接套会因 COLOR=1 被压成近黑。所以导入岩石用纯 StandardMaterial3D 砂岩。
+	_kit = GuluArtKit.new()
 	_cliff_mats = [
-		_stone_mat(CLIFF_BASE),
-		_stone_mat(CLIFF_COOL),
-		_stone_mat(CLIFF_LIGHT),
+		_kit.rock(CLIFF_BASE, CLIFF_DARK, CLIFF_LIGHT, 0.30, 0.50, 71.0),
+		_kit.rock(CLIFF_COOL, CLIFF_DARK, CLIFF_LIGHT, 0.42, 0.60, 72.0),
+		_kit.rock(CLIFF_LIGHT, CLIFF_BASE, CLIFF_DARK, 0.24, 0.45, 73.0),
 	]
+	# kit.rock 默认尘土色偏绿（#a9b4ad），在暖色沙漠里会把大块面拉成灰绿；
+	# 这里换成暖沙尘土，底部湿气也改暖褐。
+	for mat in _cliff_mats:
+		mat.set_shader_parameter("dust_color", Color("#d3c3a4"))
+		mat.set_shader_parameter("damp_color", Color("#6b5f4c"))
 	_build_backdrop_cliffs()
 	_build_spires()
 	_build_gate()
@@ -125,24 +132,47 @@ func _build_crystals() -> void:
 		add_child(light)
 
 
-func _stone_mat(color: Color) -> StandardMaterial3D:
-	var mat := StandardMaterial3D.new()
-	mat.albedo_color = color
-	mat.roughness = 0.94
-	mat.metallic = 0.0
-	mat.specular_mode = BaseMaterial3D.SPECULAR_DISABLED
-	return mat
-
-
 func _tint_rock(root: Node) -> void:
-	# 用场地同款砂岩材质覆盖洞穴岩石的暗色 albedo，块面细节保留。
+	# 用场地同款砂岩材质覆盖洞穴岩石的暗色 albedo，并补域顶点色让层理/AO 生效。
 	# Crack* 是模型自带的暖橙色裂隙条，保留原材质，当作岩层里的暖色纹理。
 	for mi in _meshes(root):
 		if mi.name.begins_with("Crack"):
 			continue
+		mi.mesh = _bake_rock_colors(mi)
 		for surface in range(mi.mesh.get_surface_count()):
 			mi.set_surface_override_material(
 				surface, _cliff_mats[(surface + mi.get_index()) % _cliff_mats.size()])
+
+
+## 外部 GLB 没有顶点色；aqs2_rock 把 COLOR 当 arris/ao/patch/up 用，
+## 缺省白色会让 AO 直接乘到 0.2。这里按位置/法线生成近似值。
+func _bake_rock_colors(mi: MeshInstance3D) -> Mesh:
+	var source := mi.mesh
+	var key := source.get_instance_id()
+	if _baked_meshes.has(key):
+		return _baked_meshes[key] as Mesh
+	var out := ArrayMesh.new()
+	for surface in range(source.get_surface_count()):
+		var arrays := source.surface_get_arrays(surface)
+		var verts: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+		var normals: PackedVector3Array = arrays[Mesh.ARRAY_NORMAL]
+		var colors := PackedColorArray()
+		colors.resize(verts.size())
+		for i in range(verts.size()):
+			var p := verts[i]
+			var n := normals[i] if normals.size() > i else Vector3.UP
+			var g1 := 0.5 + 0.5 * sin(p.x * 1.7 + p.z * 1.3 + p.y * 0.9)
+			var g2 := 0.5 + 0.5 * sin(p.x * 0.31 - p.z * 0.27 + 4.0)
+			colors[i] = Color(
+				clampf(0.10 + 0.55 * g1 * g2, 0.0, 1.0),      # arris：亮棱
+				clampf(0.20 + 0.45 * g2, 0.0, 1.0),            # ao：凹处压暗
+				clampf(0.65 * g1 * g1, 0.0, 1.0),              # patch：崩落坑
+				clampf(n.y, 0.0, 1.0))                          # up：朝上积尘土
+		arrays[Mesh.ARRAY_COLOR] = colors
+		out.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+		out.surface_set_material(surface, source.surface_get_material(surface))
+	_baked_meshes[key] = out
+	return out
 
 
 func _make_ore_glow(root: Node) -> void:

@@ -23,7 +23,20 @@ const KICK_RANGE := 1.9
 const KICK_MIN_DOT := 0.35      ## 约 ±69.5°，只要求“大致朝向”
 ## 单击固定力度：冲量 16 N·s ≈ 1.2 kg 的球获得 13.3 m/s
 const KICK_IMPULSE := 16.0
+## 蓄力：按住左键 0.10–1.10 s，力度线性 0.55–1.55 倍。
+const CHARGE_MIN_TIME := 0.10
+const CHARGE_MAX_TIME := 1.10
+const CHARGE_MIN_POWER := 1.0
+const CHARGE_MAX_POWER := 1.6
+## 街机模式：90 秒内尽可能多进球，每球 +5 秒。
+const ROUND_SECONDS := 90.0
+const TIME_BONUS_PER_GOAL := 5.0
+const SCORE_PER_GOAL := 100
+const COMBO_WINDOW := 12.0
+const COMBO_MAX := 9
+## 确定性模式（--selftest / --physics / --motion*）保持“进一球就结束”。
 const GOAL_TARGET := 1
+const ARCADE_TARGET := 999
 
 const GROUND := Color("#4e615e")
 const STONE := Color("#8fa29d")
@@ -42,6 +55,21 @@ var actors: Dictionary = {}
 var loaded_count := 0
 var completed := false
 
+## --- 街机模式状态 ---
+var goal_target := GOAL_TARGET
+var arcade := false
+var round_time_left := ROUND_SECONDS
+var score := 0
+var combo := 1
+var best_score := 0
+var goals_this_round := 0
+var _combo_timer := 0.0
+var _respawn_timer := -1.0
+var _charging := false
+var _charge := 0.0
+var _dragon_defaults := {}
+const RECORD_FILE := "user://gulu_record.cfg"
+
 var _debug := false
 var _help_visible := true
 var _hud: CanvasLayer
@@ -50,6 +78,7 @@ var _mode_label: Label
 var _objective_label: Label
 var _hint_label: Label
 var _counter_label: Label
+var _arcade_label: Label
 var _pips: Array[ColorRect] = []
 var _debug_panel: PanelContainer
 var _debug_label: Label
@@ -74,6 +103,16 @@ const RECORD_INTERVAL := 0.125
 
 
 func _ready() -> void:
+	var args := OS.get_cmdline_user_args()
+	# 确定性模式保持旧规则（进一球即结束），其余都是 90 秒街机模式。
+	var deterministic := args.has("--selftest") or args.has("--physics")
+	for arg in args:
+		if arg.begins_with("--motion"):
+			deterministic = true
+	arcade = not deterministic
+	goal_target = GOAL_TARGET if deterministic else ARCADE_TARGET
+	_load_best()
+
 	_register_input()
 	_build_environment()
 	_build_field()
@@ -85,7 +124,6 @@ func _ready() -> void:
 	_build_sfx()
 	_build_hud()
 
-	var args := OS.get_cmdline_user_args()
 	if args.has("--selftest"):
 		_automation = true
 		call_deferred("_run_selftest")
@@ -119,6 +157,9 @@ func _ready() -> void:
 	elif args.has("--physics"):
 		_automation = true
 		call_deferred("_run_physics")
+	elif args.has("--arcade-test"):
+		_automation = true
+		call_deferred("_run_arcade_test")
 
 	set_process(true)
 
@@ -158,15 +199,22 @@ func _register_input() -> void:
 
 
 func _input(event: InputEvent) -> void:
-	# 左键：没锁定鼠标时先锁定（这一下不算射门）；锁定后才踢球。
-	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
-		if Input.mouse_mode != Input.MOUSE_MODE_CAPTURED:
-			Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+	# 左键：没锁定鼠标时先锁定（这一下不算射门）；锁定后按住蓄力、松手踢出。
+	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
+		if event.pressed:
+			if Input.mouse_mode != Input.MOUSE_MODE_CAPTURED:
+				Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+				get_viewport().set_input_as_handled()
+				return
+			_charging = true
+			_charge = 0.0
 			get_viewport().set_input_as_handled()
 			return
-		get_viewport().set_input_as_handled()
-		_try_kick()
-		return
+		if _charging:
+			_charging = false
+			_try_kick(_charge_power())
+			get_viewport().set_input_as_handled()
+			return
 	if event is InputEventKey and event.pressed and not event.echo:
 		if event.keycode == KEY_R:
 			reset_round()
@@ -205,6 +253,27 @@ func _build_environment() -> void:
 	env.fog_sky_affect = 0.12
 	env.tonemap_mode = Environment.TONE_MAPPER_ACES
 	env.tonemap_exposure = 1.0
+
+	# --- 2026-11-23 画面质感：环境光遮蔽 + 辉光 + 色调 ---
+	# SSAO 主要给货箱/门框/岩体的接触面压暗，让物体不再“飘”在均匀亮度里。
+	env.ssao_enabled = true
+	env.ssao_radius = 1.35
+	env.ssao_intensity = 1.7
+	env.ssao_power = 1.4
+	env.ssao_detail = 0.6
+	env.ssao_light_affect = 0.12
+	# 辉光只抬自发光（燃料罐/球/晶簇/门带），阈值高于 1.0 以免整体发糊。
+	env.glow_enabled = true
+	env.glow_intensity = 0.55
+	env.glow_strength = 1.0
+	env.glow_bloom = 0.04
+	env.glow_hdr_threshold = 1.05
+	env.glow_blend_mode = Environment.GLOW_BLEND_MODE_SCREEN
+	# 轻微提对比/饱和，抵消 ACES 的灰。
+	env.adjustment_enabled = true
+	env.adjustment_contrast = 1.06
+	env.adjustment_saturation = 1.10
+	env.adjustment_brightness = 1.01
 	var world_env := WorldEnvironment.new()
 	world_env.environment = env
 	add_child(world_env)
@@ -256,7 +325,7 @@ func _build_field() -> void:
 func _build_collector() -> void:
 	collector = load("res://scripts/collector.gd").new() as Node3D
 	collector.name = "ShipLoadingBay"
-	collector.set("target_count", GOAL_TARGET)
+	collector.set("target_count", goal_target)
 	add_child(collector)
 	collector.connect("fuel_collected", _on_goal_scored)
 
@@ -300,6 +369,13 @@ func _build_dragon() -> void:
 	dragon.connect("save_made", func() -> void: print("DRAGON EVENT save_made"))
 	dragon.connect("intercept_missed", func() -> void: print("DRAGON EVENT intercept_missed"))
 	dragon.connect("goal_conceded", func() -> void: print("DRAGON EVENT goal_conceded"))
+	# 街机模式难度递增的基准值（reset_round 用）。
+	_dragon_defaults = {
+		"walk_speed": dragon.get("walk_speed"),
+		"charge_speed": dragon.get("charge_speed"),
+		"intercept_cooldown": dragon.get("intercept_cooldown"),
+		"react_delay": dragon.get("react_delay"),
+	}
 
 
 func _make_dragon_visual() -> Node3D:
@@ -389,6 +465,11 @@ func _build_hud() -> void:
 	_hint_label.add_theme_color_override("font_color", Color("#b9d4cf"))
 	column.add_child(_hint_label)
 
+	if arcade:
+		title.text = "奶龙星 · 90 秒装卸挑战"
+		_objective_label.text = "90 秒内尽可能多进球 · 每球 +5 秒 · 被拦下连击清零"
+		_hint_label.text = "左键点一下 = 普通射门；按住蓄力 = 抽射。R 重开。"
+
 	_mode_label = Label.new()
 	_mode_label.position = Vector2(1080, 22)
 	_mode_label.size = Vector2(176, 30)
@@ -405,11 +486,31 @@ func _build_hud() -> void:
 	_counter_label.add_theme_color_override("font_color", Color("#ffcf8a"))
 	_root.add_child(_counter_label)
 
+	# 街机模式：顶部中央的计时 / 得分 / 连击
+	var arcade_panel := PanelContainer.new()
+	arcade_panel.position = Vector2(452, 18)
+	arcade_panel.custom_minimum_size = Vector2(376, 54)
+	arcade_panel.add_theme_stylebox_override("panel", _panel_style(0.74))
+	_root.add_child(arcade_panel)
+	var amargin := MarginContainer.new()
+	amargin.add_theme_constant_override("margin_left", 14)
+	amargin.add_theme_constant_override("margin_right", 14)
+	amargin.add_theme_constant_override("margin_top", 8)
+	amargin.add_theme_constant_override("margin_bottom", 8)
+	arcade_panel.add_child(amargin)
+	_arcade_label = Label.new()
+	_arcade_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_arcade_label.add_theme_font_size_override("font_size", 22)
+	_arcade_label.add_theme_color_override("font_color", Color("#eaf7f4"))
+	_arcade_label.text = "01:30　　0 分"
+	amargin.add_child(_arcade_label)
+
 	for index in range(GOAL_TARGET):
 		var pip := ColorRect.new()
 		pip.position = Vector2(1124 + index * 44, 90)
 		pip.size = Vector2(34, 10)
 		pip.color = Color(0.24, 0.33, 0.34, 0.9)
+		pip.visible = not arcade
 		_root.add_child(pip)
 		_pips.append(pip)
 
@@ -517,6 +618,7 @@ func _process(delta: float) -> void:
 		var lit: bool = index < loaded_count
 		_pips[index].color = AMBER if lit else Color(0.24, 0.33, 0.34, 0.9)
 
+	_update_arcade(delta)
 	_update_prompt()
 
 	if _debug:
@@ -531,6 +633,42 @@ func _process(delta: float) -> void:
 		]))
 
 
+func _update_arcade(delta: float) -> void:
+	if _charging:
+		_charge = minf(_charge + delta, CHARGE_MAX_TIME)
+	if _respawn_timer > 0.0:
+		_respawn_timer -= delta
+		if _respawn_timer <= 0.0:
+			_respawn_ball()
+	if not arcade:
+		return
+	if not completed:
+		round_time_left = maxf(round_time_left - delta, 0.0)
+		if _combo_timer > 0.0:
+			_combo_timer = maxf(_combo_timer - delta, 0.0)
+			if _combo_timer <= 0.0 and combo > 1:
+				combo = 1
+		if round_time_left <= 0.0:
+			_end_round()
+	_update_arcade_label()
+
+
+func _update_arcade_label() -> void:
+	if _arcade_label == null:
+		return
+	_arcade_label.visible = arcade
+	if not arcade:
+		return
+	var total := int(ceil(round_time_left))
+	var text := "%02d:%02d　　%d 分" % [total / 60, total % 60, score]
+	if combo > 1:
+		text += "　　x%d" % combo
+	_arcade_label.text = text
+	var low := round_time_left <= 10.0
+	_arcade_label.add_theme_color_override("font_color",
+		Color("#ff7d61") if low else Color("#eaf7f4"))
+
+
 func _update_prompt() -> void:
 	if completed:
 		_set_prompt("燃料已装载——按 R 再来一局", Color("#ffe0a8"))
@@ -542,7 +680,11 @@ func _update_prompt() -> void:
 		return
 	var distance := player.global_position.distance_to(ball.global_position)
 	if distance <= KICK_RANGE:
-		_set_prompt("左键把球踢向装货口", Color("#7dffd4"))
+		if _charging:
+			var pct := int(round(100.0 * clampf((_charge - CHARGE_MIN_TIME) / (CHARGE_MAX_TIME - CHARGE_MIN_TIME), 0.0, 1.0)))
+			_set_prompt("蓄力 %d%%　松手踢出" % pct, Color("#ffd479"))
+		else:
+			_set_prompt("左键点一下＝普通射门；按住蓄力＝抽射", Color("#7dffd4"))
 	else:
 		_set_prompt("", Color("#8fa6b2"))
 
@@ -561,7 +703,7 @@ func _flash(text: String, seconds: float = 1.4) -> void:
 
 # ---------------------------------------------------------------- 踢球
 
-func _try_kick() -> bool:
+func _try_kick(power: float = 1.0) -> bool:
 	if completed or ball == null or player == null:
 		return false
 	var cam := player.get("camera") as Camera3D
@@ -588,11 +730,23 @@ func _try_kick() -> bool:
 		_flash("中间被挡住了，换个位置再踢")
 		return false
 
-	ball.call("kick", forward, KICK_IMPULSE)
+	ball.call("kick", forward, KICK_IMPULSE * power)
 	if _sfx != null:
 		_sfx.call("play", "kick")
 	_spawn_kick_pulse(ball.global_position)
+	if power > 1.25:
+		_flash("全力抽射！", 0.9)
+	elif power < 0.85:
+		_flash("轻推", 0.7)
 	return true
+
+
+## 蓄力时长 → 力度：点击仍是 1.0，按住最多 1.6 倍。
+func _charge_power() -> float:
+	if _charge <= CHARGE_MIN_TIME:
+		return CHARGE_MIN_POWER
+	var t := clampf((_charge - CHARGE_MIN_TIME) / (CHARGE_MAX_TIME - CHARGE_MIN_TIME), 0.0, 1.0)
+	return lerpf(CHARGE_MIN_POWER, CHARGE_MAX_POWER, t)
 
 
 ## 踢中时脚边的短促视觉反馈（一圈快速扩散的环，不遮挡球）。
@@ -639,21 +793,100 @@ func _spawn_kick_pulse(at: Vector3) -> void:
 func _on_goal_scored(total: int, target: int) -> void:
 	loaded_count = total
 	_record_peak_loaded = maxi(_record_peak_loaded, loaded_count)
-	_counter_label.text = "已装载 %d / %d" % [loaded_count, target]
 	_counter_punch = 1.0
 	if _sfx != null:
 		_sfx.call("play", "loaded")
 	if env_art != null and is_instance_valid(env_art):
 		env_art.call("on_loaded", loaded_count)
+
+	if arcade:
+		goals_this_round += 1
+		var points := SCORE_PER_GOAL * combo
+		score += points
+		round_time_left = minf(round_time_left + TIME_BONUS_PER_GOAL, ROUND_SECONDS + 30.0)
+		combo = mini(combo + 1, COMBO_MAX)
+		_combo_timer = COMBO_WINDOW
+		_counter_label.text = "已进 %d 球" % loaded_count
+		_flash("+%d　连击 x%d　+%ds" % [points, combo, int(TIME_BONUS_PER_GOAL)], 1.8)
+		_raise_difficulty()
+		_respawn_timer = 0.9
+		return
+
+	_counter_label.text = "已装载 %d / %d" % [loaded_count, target]
 	_flash("燃料已装载", 1.6)
 	if loaded_count >= target and not completed:
 		completed = true
 		_banner.visible = true
 
 
+## 街机模式：每两球提一档奶龙速度/反应，让分数越高越难。
+func _raise_difficulty() -> void:
+	if dragon == null or _dragon_defaults.is_empty():
+		return
+	var rank := float(goals_this_round) * 0.5
+	dragon.set("walk_speed", minf(float(_dragon_defaults["walk_speed"]) + 0.07 * rank, 3.2))
+	dragon.set("charge_speed", minf(float(_dragon_defaults["charge_speed"]) + 0.06 * rank, 4.0))
+	dragon.set("intercept_cooldown", maxf(1.2, float(_dragon_defaults["intercept_cooldown"]) - 0.08 * rank))
+	dragon.set("react_delay", maxf(0.10, float(_dragon_defaults["react_delay"]) - 0.010 * rank))
+
+
+func _restore_difficulty() -> void:
+	if dragon == null or _dragon_defaults.is_empty():
+		return
+	for key in _dragon_defaults:
+		dragon.set(key, _dragon_defaults[key])
+
+
+## 进球后把球重新放到场内几个固定点，玩家必须重新走位。
+const BALL_SPOTS := [
+	Vector3(-4.6, 0.0, 1.4),
+	Vector3(-1.6, 0.0, -3.4),
+	Vector3(-7.8, 0.0, -4.4),
+	Vector3(0.9, 0.0, 4.3),
+	Vector3(-8.6, 0.0, 5.2),
+]
+
+
+func _respawn_ball() -> void:
+	_respawn_timer = -1.0
+	if ball == null:
+		return
+	var spot: Vector3 = BALL_SPOTS[randi() % BALL_SPOTS.size()]
+	ball.call("reset_to", spot)
+
+
+func _end_round() -> void:
+	if completed:
+		return
+	completed = true
+	if score > best_score:
+		best_score = score
+		_save_best()
+	_banner_label.text = "时间到\n得分 %d · 最高 %d\n按 R 再来一局" % [score, best_score]
+	_banner.visible = true
+
+
+func _load_best() -> void:
+	var cfg := ConfigFile.new()
+	if cfg.load(RECORD_FILE) == OK:
+		best_score = int(cfg.get_value("record", "best", 0))
+
+
+func _save_best() -> void:
+	var cfg := ConfigFile.new()
+	cfg.load(RECORD_FILE)
+	cfg.set_value("record", "best", best_score)
+	cfg.save(RECORD_FILE)
+
+
 func _on_dragon_blocked(_point: Vector3, _speed: float) -> void:
 	if _sfx != null:
 		_sfx.call("play", "block")
+	if arcade and combo > 1:
+		combo = 1
+		_combo_timer = 0.0
+		_flash("被奶龙拦下——连击中断", 1.5)
+		return
 	_flash("被奶龙拦下来了——换个位置再踢", 1.5)
 
 
@@ -692,7 +925,18 @@ func reset_round() -> void:
 	loaded_count = 0
 	completed = false
 	_banner.visible = false
-	_counter_label.text = "已装载 0 / %d" % GOAL_TARGET
+	_banner_label.text = "燃料已装载\n按 R 再来一局"
+	_counter_label.text = ("已装载 0 / %d" % goal_target) if not arcade else "已进 0 球"
+	# 街机模式重置：计时、比分、连击、球位、奶龙难度
+	score = 0
+	combo = 1
+	_combo_timer = 0.0
+	_respawn_timer = -1.0
+	round_time_left = ROUND_SECONDS
+	goals_this_round = 0
+	_charging = false
+	_charge = 0.0
+	_restore_difficulty()
 	_feedback = ""
 	_feedback_timer = 0.0
 	_last_collisions = int(player.get("contacts"))
@@ -792,6 +1036,80 @@ func _ball_speed() -> float:
 	return float(ball.call("speed")) if ball != null else 0.0
 
 # ---------------------------------------------------------------- 自测
+
+## 街机模式自测：计时/计分/连击/重生/难度/结束，不依赖人工操作。
+func _run_arcade_test() -> void:
+	var passes: Array = []
+	var failures: Array = []
+	print("GULU ARCADE TEST start")
+	await _wait(0.6)
+
+	_check(arcade, "arcade rules active without --selftest", passes, failures)
+	_check(goal_target == ARCADE_TARGET, "goal target is open-ended in arcade", passes, failures)
+	_check(score == 0 and combo == 1, "score/combo start at 0/1", passes, failures)
+	_check(_arcade_label != null and _arcade_label.visible, "arcade HUD visible", passes, failures)
+
+	# 蓄力映射
+	_charge = 0.05
+	_check(is_equal_approx(_charge_power(), CHARGE_MIN_POWER), "tap keeps normal power", passes, failures)
+	_charge = CHARGE_MAX_TIME
+	_check(_charge_power() >= CHARGE_MAX_POWER - 0.01, "held shot reaches max power", passes, failures)
+	_charge = 0.0
+
+	# 进球：+分数、+时间、连击+1、球重生
+	var before_time := round_time_left
+	_on_goal_scored(1, goal_target)
+	_check(score == SCORE_PER_GOAL, "goal adds score", passes, failures)
+	_check(combo == 2, "goal raises combo to 2", passes, failures)
+	_check(round_time_left > before_time, "goal adds time bonus", passes, failures)
+	_check(not completed, "arcade does not end after one goal", passes, failures)
+	await _wait(1.3)
+	var ball_pos: Vector3 = ball.global_position
+	var near_spot := false
+	for spot in BALL_SPOTS:
+		if Vector2(ball_pos.x - spot.x, ball_pos.z - spot.z).length() < 0.5:
+			near_spot = true
+			break
+	_check(not bool(ball.get("collected")), "ball is live again after goal", passes, failures)
+	_check(near_spot, "ball respawns at a yard spot", passes, failures)
+
+	# 被拦：连击清零
+	_on_dragon_blocked(Vector3.ZERO, 1.0)
+	_check(combo == 1, "keeper save resets combo", passes, failures)
+
+	# 难度递增
+	var base_walk := float(_dragon_defaults["walk_speed"])
+	goals_this_round = 4
+	_raise_difficulty()
+	_check(float(dragon.get("walk_speed")) > base_walk, "difficulty ramps with goals", passes, failures)
+
+	# 时间到
+	round_time_left = 0.3
+	await _wait(0.7)
+	_check(completed, "timer ends the round", passes, failures)
+	_check(_banner.visible, "end-of-round banner shows", passes, failures)
+	_check(_banner_label.text.contains("得分"), "banner shows the score", passes, failures)
+	_check(best_score >= score, "best score recorded", passes, failures)
+
+	reset_round()
+	_check(not completed and score == 0 and is_equal_approx(round_time_left, ROUND_SECONDS),
+		"R restores the arcade round", passes, failures)
+	_check(is_equal_approx(float(dragon.get("walk_speed")), base_walk),
+		"reset restores keeper speed", passes, failures)
+
+	# 蓄力蹴地：1.5 倍力度应该比普通射门快
+	await _wait(0.4)
+	_place_player(BALL_HOME + Vector3(-1.4, 0.02, 0.0), BALL_HOME)
+	_aim_at(BALL_HOME + Vector3(6.0, 0.5, 0.0))
+	await _wait(0.25)
+	var charged := _try_kick(1.5)
+	await _wait(0.12)
+	var charged_speed := _ball_speed()
+	_check(charged and charged_speed > 17.0, "charged kick launches faster (%.1f m/s)" % charged_speed,
+		passes, failures)
+
+	print("GULU ARCADE SUMMARY passes=%d failures=%d" % [passes.size(), failures.size()])
+	get_tree().quit(0 if failures.is_empty() else 1)
 
 func _run_selftest() -> void:
 	await _wait(0.9)
@@ -1454,10 +1772,23 @@ func _run_record() -> void:
 	var second := _try_kick()
 	print("GULU RECORD kick2=%s dist=%.2f" % [str(second), player.global_position.distance_to(ball.global_position)])
 	for _probe in range(300):
-		if completed:
+		if (arcade and loaded_count > 0) or (not arcade and completed):
 			break
 		await _wait(0.02)
-	print("GULU RECORD scored=%s loaded=%d" % [str(completed), loaded_count])
+	# 脚本化的斜射对帧时敏感：没进就换到“奶龙反侧空当”再补一脚（不动奶龙，真实物理）。
+	if loaded_count == 0:
+		var keep_side := 1.0 if dragon.global_position.z >= 0.0 else -1.0
+		var open_side := -keep_side
+		print("GULU RECORD retry on open side %.0f" % open_side)
+		ball.call("reset_to", Vector3(10.4, 0.0, 2.0 * open_side))
+		await _wait(0.5)
+		ball.call("kick", Vector3(1.0, 0.0, -0.25 * open_side), 18.0)
+		for _probe in range(240):
+			if loaded_count > 0:
+				break
+			await _wait(0.02)
+	var record_scored := loaded_count > 0 if arcade else completed
+	print("GULU RECORD scored=%s loaded=%d" % [str(record_scored), loaded_count])
 	await _wait(1.6)
 
 	reset_round()
