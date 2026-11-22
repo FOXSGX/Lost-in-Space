@@ -67,6 +67,14 @@ var _combo_timer := 0.0
 var _respawn_timer := -1.0
 var _charging := false
 var _charge := 0.0
+## --- 侧风（只在真实游玩时开）---
+var wind_enabled := false
+var _wind_next := 26.0
+var _wind_left := 0.0
+var _wind_dir := 1.0
+var _wind_force := 0.0
+var _last_beep_second := -1
+var _wind_label: Label
 var _dragon_defaults := {}
 const RECORD_FILE := "user://gulu_record.cfg"
 
@@ -110,6 +118,7 @@ func _ready() -> void:
 		if arg.begins_with("--motion"):
 			deterministic = true
 	arcade = not deterministic
+	wind_enabled = arcade and not (args.has("--shots") or args.has("--record") or args.has("--perf"))
 	goal_target = GOAL_TARGET if deterministic else ARCADE_TARGET
 	_load_best()
 
@@ -160,6 +169,9 @@ func _ready() -> void:
 	elif args.has("--arcade-test"):
 		_automation = true
 		call_deferred("_run_arcade_test")
+	elif args.has("--wind-test"):
+		_automation = true
+		call_deferred("_run_wind_test")
 
 	set_process(true)
 
@@ -505,6 +517,16 @@ func _build_hud() -> void:
 	_arcade_label.text = "01:30　　0 分"
 	amargin.add_child(_arcade_label)
 
+	# 侧风提示（只在有风时显示）
+	_wind_label = Label.new()
+	_wind_label.position = Vector2(452, 76)
+	_wind_label.size = Vector2(376, 26)
+	_wind_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_wind_label.add_theme_font_size_override("font_size", 17)
+	_wind_label.add_theme_color_override("font_color", Color("#ffd479"))
+	_wind_label.visible = false
+	_root.add_child(_wind_label)
+
 	for index in range(GOAL_TARGET):
 		var pip := ColorRect.new()
 		pip.position = Vector2(1124 + index * 44, 90)
@@ -648,9 +670,70 @@ func _update_arcade(delta: float) -> void:
 			_combo_timer = maxf(_combo_timer - delta, 0.0)
 			if _combo_timer <= 0.0 and combo > 1:
 				combo = 1
+		_update_wind(delta)
+		_update_countdown_sfx()
 		if round_time_left <= 0.0:
 			_end_round()
 	_update_arcade_label()
+
+
+func _update_wind(delta: float) -> void:
+	if _wind_left > 0.0:
+		_wind_left = maxf(_wind_left - delta, 0.0)
+		if _wind_left <= 0.0:
+			_clear_wind()
+			_flash("侧风停了", 1.2)
+			return
+		if ball != null:
+			ball.set("wind", Vector3(0.0, 0.0, _wind_dir * _wind_force))
+		_update_wind_label()
+		return
+	if not wind_enabled:
+		return
+	_wind_next -= delta
+	if _wind_next <= 0.0:
+		_start_gust()
+
+
+func _start_gust(strength: float = -1.0) -> void:
+	_wind_dir = 1.0 if randf() < 0.5 else -1.0
+	_wind_force = strength if strength > 0.0 else randf_range(2.4, 3.8)
+	_wind_left = 6.0
+	_wind_next = randf_range(20.0, 30.0)
+	if ball != null:
+		ball.set("sleeping", false)
+		ball.set("wind", Vector3(0.0, 0.0, _wind_dir * _wind_force))
+	_flash("侧风来了！球会被吹向%s" % ("右" if _wind_dir > 0.0 else "左"), 1.8)
+	if _sfx != null:
+		_sfx.call("play_pitched", "block", 0.72)
+	_update_wind_label()
+
+
+func _clear_wind() -> void:
+	_wind_left = 0.0
+	if ball != null:
+		ball.set("wind", Vector3.ZERO)
+	if _wind_label != null:
+		_wind_label.visible = false
+
+
+func _update_wind_label() -> void:
+	if _wind_label == null:
+		return
+	_wind_label.visible = _wind_left > 0.0
+	if not _wind_label.visible:
+		return
+	var arrow := "→→" if _wind_dir > 0.0 else "←←"
+	_wind_label.text = "侧风 %s　%.1f" % [arrow, _wind_force]
+
+
+func _update_countdown_sfx() -> void:
+	var sec := int(ceil(round_time_left))
+	if sec <= 0 or sec > 10 or sec == _last_beep_second:
+		return
+	_last_beep_second = sec
+	if _sfx != null:
+		_sfx.call("play_pitched", "block", 1.0 + 0.045 * float(10 - sec))
 
 
 func _update_arcade_label() -> void:
@@ -795,7 +878,7 @@ func _on_goal_scored(total: int, target: int) -> void:
 	_record_peak_loaded = maxi(_record_peak_loaded, loaded_count)
 	_counter_punch = 1.0
 	if _sfx != null:
-		_sfx.call("play", "loaded")
+		_sfx.call("play_pitched", "loaded", 0.95 + 0.06 * float(combo))
 	if env_art != null and is_instance_valid(env_art):
 		env_art.call("on_loaded", loaded_count)
 
@@ -859,6 +942,9 @@ func _end_round() -> void:
 	if completed:
 		return
 	completed = true
+	_clear_wind()
+	if _sfx != null:
+		_sfx.call("play_pitched", "loaded", 0.62)
 	if score > best_score:
 		best_score = score
 		_save_best()
@@ -936,6 +1022,9 @@ func reset_round() -> void:
 	goals_this_round = 0
 	_charging = false
 	_charge = 0.0
+	_clear_wind()
+	_wind_next = randf_range(22.0, 30.0)
+	_last_beep_second = -1
 	_restore_difficulty()
 	_feedback = ""
 	_feedback_timer = 0.0
@@ -1109,6 +1198,42 @@ func _run_arcade_test() -> void:
 		passes, failures)
 
 	print("GULU ARCADE SUMMARY passes=%d failures=%d" % [passes.size(), failures.size()])
+	get_tree().quit(0 if failures.is_empty() else 1)
+
+
+## 侧风自测：起风后球应被横向推偏，停风后力归零、HUD 消失。
+func _run_wind_test() -> void:
+	var passes: Array = []
+	var failures: Array = []
+	print("GULU WIND TEST start")
+	await _wait(0.5)
+	reset_round()
+	await _wait(0.4)
+	ball.call("reset_to", Vector3(-4.0, 0.0, 0.0))
+	await _wait(0.4)
+
+	_start_gust(4.0)
+	_check(_wind_left > 0.0, "gust becomes active", passes, failures)
+	_check(_wind_label != null and _wind_label.visible, "wind HUD is visible", passes, failures)
+
+	ball.call("kick", Vector3.RIGHT, 8.0)
+	await _wait(1.2)
+	var vz := float(ball.linear_velocity.z)
+	_check(absf(vz) > 0.4, "gust pushes the ball sideways (vz=%.2f)" % vz, passes, failures)
+
+	_clear_wind()
+	await _wait(0.1)
+	_check(_wind_left == 0.0, "wind timer cleared", passes, failures)
+	_check(_wind_label != null and not _wind_label.visible, "wind HUD hides", passes, failures)
+	_check((ball.get("wind") as Vector3) == Vector3.ZERO, "ball wind force zeroed", passes, failures)
+
+	# 停风后不应再继续加速横移
+	var vz_stop := float(ball.linear_velocity.z)
+	await _wait(0.8)
+	_check(absf(float(ball.linear_velocity.z)) <= absf(vz_stop) + 0.05,
+		"no side force after the gust ends", passes, failures)
+
+	print("GULU WIND SUMMARY passes=%d failures=%d" % [passes.size(), failures.size()])
 	get_tree().quit(0 if failures.is_empty() else 1)
 
 func _run_selftest() -> void:

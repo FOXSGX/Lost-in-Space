@@ -44,6 +44,11 @@ func _ready() -> void:
 
 
 func play(key: String) -> void:
+	play_pitched(key, 1.0)
+
+
+## 带音高变化（连击 / 倒计时用）：1.0 = 原调，>1 更尖。
+func play_pitched(key: String, pitch: float) -> void:
 	var player := _players.get(key) as AudioStreamPlayer
 	if player == null:
 		return
@@ -52,4 +57,5 @@ func play(key: String) -> void:
 	if now - int(_last_ms.get(key, -100000)) < interval:
 		return
 	_last_ms[key] = now
+	player.pitch_scale = clampf(pitch, 0.5, 2.0)
 	player.play()

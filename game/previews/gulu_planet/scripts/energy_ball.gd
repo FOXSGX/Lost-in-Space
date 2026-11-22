@@ -22,6 +22,8 @@ const KICK_IMPULSE := 19.0
 var collected := false
 var swat_count := 0
 var credit_peer := 0
+## 侧风：由 gulu_app 写入的持续力（N）；不需要时保持零向量。
+var wind := Vector3.ZERO
 
 var _visual: Node3D
 var _time := 0.0
@@ -122,6 +124,9 @@ func _physics_process(delta: float) -> void:
 	if _pending_impulse != Vector3.ZERO:
 		apply_central_impulse(_pending_impulse)
 		_pending_impulse = Vector3.ZERO
+	# 侧风：持续力，只影响运动中的球；静止球不推。
+	if wind != Vector3.ZERO and not collected and not sleeping:
+		apply_central_force(wind)
 	# 只有“真的掉出世界”才算需要救援；正常停球/门边停球一律不动它。
 	var p := global_position
 	if p.y < -8.0 or absf(p.x) > 28.0 or absf(p.z) > 22.0:
