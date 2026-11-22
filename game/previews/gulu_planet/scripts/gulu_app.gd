@@ -27,12 +27,12 @@ const KICK_IMPULSE := 16.0
 const CHARGE_MIN_TIME := 0.10
 const CHARGE_MAX_TIME := 1.10
 const CHARGE_MIN_POWER := 1.0
-const CHARGE_MAX_POWER := 1.6
+const CHARGE_MAX_POWER := 1.5
 ## 街机模式：90 秒内尽可能多进球，每球 +5 秒。
 const ROUND_SECONDS := 90.0
-const TIME_BONUS_PER_GOAL := 5.0
+const TIME_BONUS_PER_GOAL := 4.0
 const SCORE_PER_GOAL := 100
-const COMBO_WINDOW := 12.0
+const COMBO_WINDOW := 10.0
 const COMBO_MAX := 9
 ## 确定性模式（--selftest / --physics / --motion*）保持“进一球就结束”。
 const GOAL_TARGET := 1
@@ -75,6 +75,9 @@ var _wind_dir := 1.0
 var _wind_force := 0.0
 var _last_beep_second := -1
 var _wind_label: Label
+## 蓄力条（准星下方，只在按住左键时出现）
+var _charge_track: ColorRect
+var _charge_fill: ColorRect
 var _dragon_defaults := {}
 const RECORD_FILE := "user://gulu_record.cfg"
 
@@ -479,7 +482,7 @@ func _build_hud() -> void:
 
 	if arcade:
 		title.text = "奶龙星 · 90 秒装卸挑战"
-		_objective_label.text = "90 秒内尽可能多进球 · 每球 +5 秒 · 被拦下连击清零"
+		_objective_label.text = "90 秒内尽可能多进球 · 每球 +4 秒 · 被拦下连击清零"
 		_hint_label.text = "左键点一下 = 普通射门；按住蓄力 = 抽射。R 重开。"
 
 	_mode_label = Label.new()
@@ -526,6 +529,19 @@ func _build_hud() -> void:
 	_wind_label.add_theme_color_override("font_color", Color("#ffd479"))
 	_wind_label.visible = false
 	_root.add_child(_wind_label)
+
+	# 蓄力条：准星下沿，只在蓄力时显示
+	_charge_track = ColorRect.new()
+	_charge_track.position = Vector2(560, 448)
+	_charge_track.size = Vector2(160, 8)
+	_charge_track.color = Color(0.06, 0.09, 0.10, 0.72)
+	_charge_track.visible = false
+	_root.add_child(_charge_track)
+	_charge_fill = ColorRect.new()
+	_charge_fill.position = Vector2(1, 1)
+	_charge_fill.size = Vector2(0, 6)
+	_charge_fill.color = Color("#7dffd4")
+	_charge_track.add_child(_charge_fill)
 
 	for index in range(GOAL_TARGET):
 		var pip := ColorRect.new()
@@ -641,6 +657,7 @@ func _process(delta: float) -> void:
 		_pips[index].color = AMBER if lit else Color(0.24, 0.33, 0.34, 0.9)
 
 	_update_arcade(delta)
+	_update_charge_bar()
 	_update_prompt()
 
 	if _debug:
@@ -677,6 +694,20 @@ func _update_arcade(delta: float) -> void:
 	_update_arcade_label()
 
 
+func _update_charge_bar() -> void:
+	if _charge_track == null:
+		return
+	var near := ball != null and player != null \
+		and player.global_position.distance_to(ball.global_position) <= KICK_RANGE
+	var visible := _charging and near and not completed
+	_charge_track.visible = visible
+	if not visible:
+		return
+	var t := clampf((_charge - CHARGE_MIN_TIME) / (CHARGE_MAX_TIME - CHARGE_MIN_TIME), 0.0, 1.0)
+	_charge_fill.size = Vector2(158.0 * t, 6.0)
+	_charge_fill.color = Color("#7dffd4").lerp(Color("#ffb347"), t)
+
+
 func _update_wind(delta: float) -> void:
 	if _wind_left > 0.0:
 		_wind_left = maxf(_wind_left - delta, 0.0)
@@ -697,9 +728,9 @@ func _update_wind(delta: float) -> void:
 
 func _start_gust(strength: float = -1.0) -> void:
 	_wind_dir = 1.0 if randf() < 0.5 else -1.0
-	_wind_force = strength if strength > 0.0 else randf_range(2.4, 3.8)
-	_wind_left = 6.0
-	_wind_next = randf_range(20.0, 30.0)
+	_wind_force = strength if strength > 0.0 else randf_range(2.0, 3.0)
+	_wind_left = 5.0
+	_wind_next = randf_range(25.0, 35.0)
 	if ball != null:
 		ball.set("sleeping", false)
 		ball.set("wind", Vector3(0.0, 0.0, _wind_dir * _wind_force))
@@ -748,8 +779,11 @@ func _update_arcade_label() -> void:
 		text += "　　x%d" % combo
 	_arcade_label.text = text
 	var low := round_time_left <= 10.0
-	_arcade_label.add_theme_color_override("font_color",
-		Color("#ff7d61") if low else Color("#eaf7f4"))
+	if combo >= 5 and not low:
+		_arcade_label.add_theme_color_override("font_color", Color("#ffd479"))
+	else:
+		_arcade_label.add_theme_color_override("font_color",
+			Color("#ff7d61") if low else Color("#eaf7f4"))
 
 
 func _update_prompt() -> void:
@@ -980,8 +1014,13 @@ func _on_ball_out_of_bounds(_point: Vector3) -> void:
 	# 只有“真的掉出世界”才恢复；正常停球、门边停球一律不动。
 	if ball == null:
 		return
-	ball.call("reset_to", BALL_HOME)
-	_flash("球掉出场地了，已放回发球点", 2.0)
+	if arcade:
+		var spot: Vector3 = BALL_SPOTS[randi() % BALL_SPOTS.size()]
+		ball.call("reset_to", spot)
+		_flash("球掉出场地了，已放回场内", 2.0)
+	else:
+		ball.call("reset_to", BALL_HOME)
+		_flash("球掉出场地了，已放回发球点", 2.0)
 	print("GULU ball out of bounds -> reset")
 
 
