@@ -1136,6 +1136,19 @@ func _run_shots() -> void:
 	await _wait(0.8)
 	await _shot("11_dragon_neck_closeup.png")
 
+	# 2026-11-23 美术验收：西侧场站大门 / 北侧崖壁 / 东南天际线
+	_place_player(Vector3(-6.0, 0.02, 0.0), Vector3(-16.6, 3.0, 0.0))
+	await _wait(0.6)
+	await _shot("12_gate_west.png")
+
+	_place_player(Vector3(0.0, 0.02, 2.0), Vector3(-6.0, 4.0, -22.0))
+	await _wait(0.6)
+	await _shot("13_north_cliffs.png")
+
+	_place_player(Vector3(-2.0, 0.02, 4.0), Vector3(30.0, 8.0, -12.0))
+	await _wait(0.6)
+	await _shot("14_skyline_east.png")
+
 	print("GULU SHOTS dir=%s" % ProjectSettings.globalize_path(_shot_dir))
 	get_tree().quit(0)
 

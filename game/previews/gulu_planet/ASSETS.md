@@ -142,3 +142,25 @@ python tools\audio\make_sfx.py assets\audio
   （头/颈/四肢全部保持 glTF 静置姿态），只做整体节点 bob/前倾/横摆。
 - `nailong.glb`（本仓库自建）保留为可编辑源文件，但不再被游戏引用。
 - 自审：Qwen2-VL 近景确认“像经典黄色奶龙，头身比例/四肢/脸正常，脖子无拉长/压扁/扭曲/穿模”。
+
+## 12. 复用其他星球模型的场景装饰（2026-11-23）
+
+按用户要求，环境美术改为**直接复用同一仓库里其他星球预览的成品模型**，
+不再只靠运行时程序化几何。全部素材均为本仓库自建资产（Blender 源文件在
+`art-source/editable/resonance/`），只复制、不修改；运行时只覆盖材质颜色。
+
+| 新资产（`game/previews/gulu_planet/assets/props/`） | 来源 | 许可 | 用途 |
+| --- | --- | --- | --- |
+| `resonance_cave_rock_wall.glb`（150 KB） | `game/assets/resonance/models/cave_rock_wall.glb` | 本仓库自建 | 边界外崖壁 ×4 |
+| `resonance_cave_stalactite.glb`（13 KB） | 同上 `cave_stalactite.glb` | 本仓库自建 | 外围尖石 ×5 |
+| `resonance_cave_ore_crystal.glb`（20 KB） | 同上 `cave_ore_crystal.glb` | 本仓库自建 | 自发光矿石晶簇 ×6 |
+| `resonance_support_safety_gate.glb`（3.1 MB） | 同上 `resonance_support_safety_gate.glb` | 本仓库自建 | 西侧场站大门 |
+| `resonance_drone_dock.glb`（3.3 MB） | 同上 `resonance_drone_dock.glb` | 本仓库自建 | 东墙外无人机坪 |
+| `resonance_reactor_tower.glb`（4.0 MB） | 同上 `resonance_reactor_tower.glb` | 本仓库自建 | 远处天际线（30 m） |
+
+- 加载与摆位：`scripts/gulu_asset_dressing.gd`；挂载点
+  `nailong_environment.gd::_build_imported_dressing()`。
+- 不引入任何第三方新增素材；Kenney 的 CC0 套件（`art-source/third-party/kenney/`）本轮未使用，
+  避免卡通比例与现有写实工业风冲突。
+- 验证：自测 45/0；`tools/probe_dressing.gd` 确认所有装饰贴地且不侵入球路/出生点；
+  详见 `docs/ART_PASS_2026-11-23.md`。

@@ -77,10 +77,19 @@ func _ready() -> void:
 	_build_ground()
 	_build_perimeter()
 	_build_yard()
+	_build_imported_dressing()
 	_build_nest()
 	_build_bay_frame()
 	_build_lights()
 	set_process(true)
+
+
+func _build_imported_dressing() -> void:
+	# 复用本仓库其他星球的成品模型（共振星洞穴/采矿站），只做摆位与缩放。
+	# 见 gulu_asset_dressing.gd 与 ASSETS.md；不参与玩法与碰撞。
+	var dressing := load("res://scripts/gulu_asset_dressing.gd").new() as Node3D
+	dressing.name = "ImportedDressing"
+	add_child(dressing)
 
 
 func _build_materials() -> void:
@@ -182,9 +191,9 @@ func _build_perimeter() -> void:
 		Vector3(6.5, 0.0, -13.6), Vector3(14.0, 0.0, -12.8),
 		Vector3(-16.5, 0.0, 12.6), Vector3(-8.5, 0.0, 13.2), Vector3(-0.5, 0.0, 12.8),
 		Vector3(7.5, 0.0, 13.4),
-		Vector3(-17.8, 0.0, -6.0), Vector3(-18.2, 0.0, 2.5), Vector3(-17.4, 0.0, 9.0),
+		Vector3(-17.4, 0.0, 9.0),
 	]:
-		var size := Vector3(7.4, 4.6, 6.0) + Vector3(1.6 * sin(spot.x * 0.7), 1.8 * cos(spot.z * 0.5), 0.0)
+		var size := Vector3(7.4, 3.4, 6.0) + Vector3(1.6 * sin(spot.x * 0.7), 1.2 * cos(spot.z * 0.5), 0.0)
 		_ridge(spot, size, spot.x * 0.13 + spot.z * 0.07)
 
 	# 墙外远景岩层：只做剪影和层次，不堆细节。
