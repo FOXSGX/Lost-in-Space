@@ -82,6 +82,7 @@ func _ready() -> void:
 	_build_nest()
 	_build_bay_frame()
 	_build_lights()
+	_build_air_dust()
 	set_process(true)
 
 
@@ -661,6 +662,52 @@ func _build_lights() -> void:
 	beacon_light.light_energy = 1.0
 	beacon_light.omni_range = 7.0
 	add_child(beacon_light)
+
+
+# ---------------------------------------------------------------- 空气感
+
+## 漂浮尘埃：只做氛围，不参与任何碰撞。粒子数很小（220），开销可忽略。
+func _build_air_dust() -> void:
+	var particles := GPUParticles3D.new()
+	particles.name = "AirDust"
+	particles.amount = 220
+	particles.lifetime = 16.0
+	particles.preprocess = 9.0
+	particles.position = Vector3(0.0, 4.5, 0.0)
+	particles.visibility_aabb = AABB(Vector3(-24.0, -4.0, -18.0), Vector3(48.0, 14.0, 36.0))
+
+	var process := ParticleProcessMaterial.new()
+	process.emission_shape = ParticleProcessMaterial.EMISSION_SHAPE_BOX
+	process.emission_box_extents = Vector3(20.0, 4.5, 14.0)
+	process.direction = Vector3(1.0, 0.2, 0.35)
+	process.spread = 180.0
+	process.initial_velocity_min = 0.04
+	process.initial_velocity_max = 0.30
+	process.gravity = Vector3(0.0, -0.02, 0.0)
+	process.scale_min = 0.6
+	process.scale_max = 1.6
+
+	var gradient := Gradient.new()
+	gradient.set_color(0, Color(1.0, 0.95, 0.84, 0.0))
+	gradient.set_color(1, Color(1.0, 0.95, 0.84, 0.0))
+	gradient.add_point(0.22, Color(1.0, 0.95, 0.84, 0.20))
+	gradient.add_point(0.78, Color(1.0, 0.95, 0.84, 0.16))
+	var ramp := GradientTexture1D.new()
+	ramp.gradient = gradient
+	process.color_ramp = ramp
+	particles.process_material = process
+
+	var quad := QuadMesh.new()
+	quad.size = Vector2(0.055, 0.055)
+	var mat := StandardMaterial3D.new()
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	mat.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
+	mat.vertex_color_use_as_albedo = true
+	mat.disable_receive_shadows = true
+	quad.material = mat
+	particles.draw_pass_1 = quad
+	add_child(particles)
 
 
 # ---------------------------------------------------------------- 基础工具

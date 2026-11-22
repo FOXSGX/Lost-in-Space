@@ -63,6 +63,7 @@ var score := 0
 var combo := 1
 var best_score := 0
 var goals_this_round := 0
+var best_combo_this_round := 1
 var _combo_timer := 0.0
 var _respawn_timer := -1.0
 var _charging := false
@@ -75,6 +76,9 @@ var _wind_dir := 1.0
 var _wind_force := 0.0
 var _last_beep_second := -1
 var _wind_label: Label
+## 表现层：标题屏 / 开场倒计时 / 浮字 / 结算
+var _presentation: CanvasLayer
+var _round_active := true
 ## 蓄力条（准星下方，只在按住左键时出现）
 var _charge_track: ColorRect
 var _charge_fill: ColorRect
@@ -175,11 +179,56 @@ func _ready() -> void:
 	elif args.has("--wind-test"):
 		_automation = true
 		call_deferred("_run_wind_test")
+	elif args.has("--ui-shots"):
+		_automation = true
+		call_deferred("_run_ui_shots")
+	elif args.has("--flow-test"):
+		_automation = true
+		call_deferred("_run_flow_test")
 
+	_build_presentation()
 	set_process(true)
 
 
 # ---------------------------------------------------------------- input
+
+func _build_presentation() -> void:
+	_presentation = load("res://scripts/gulu_presentation.gd").new() as CanvasLayer
+	if _presentation == null:
+		return
+	add_child(_presentation)
+	_presentation.call("setup", _font)
+	_presentation.connect("start_requested", _on_start_requested)
+	_presentation.connect("countdown_finished", _on_countdown_finished)
+	if _automation:
+		# 自动化（自测/截图/录像）直接开局，不打包场屏与倒计时，保证确定性。
+		_round_active = true
+		return
+	_round_active = false
+	_set_play_enabled(false)
+	_presentation.call("show_title", best_score)
+
+
+func _on_start_requested() -> void:
+	if _round_active:
+		return
+	reset_round()
+	_presentation.call("hide_title")
+	_presentation.call("play_countdown")
+
+
+func _on_countdown_finished() -> void:
+	_round_active = true
+	_set_play_enabled(true)
+
+
+func _set_play_enabled(enabled: bool) -> void:
+	if player == null:
+		return
+	player.set_process(enabled)
+	player.set_physics_process(enabled)
+	player.set_process_input(enabled)
+	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED if enabled else Input.MOUSE_MODE_VISIBLE
 
 func _register_input() -> void:
 	var map := {
@@ -214,6 +263,12 @@ func _register_input() -> void:
 
 
 func _input(event: InputEvent) -> void:
+	# 标题屏 / 倒计时阶段：不处理踢球，把输入留给开场 UI。
+	if not _round_active:
+		if event is InputEventKey and event.pressed and not event.echo \
+				and (event.keycode == KEY_ENTER or event.keycode == KEY_SPACE):
+			_on_start_requested()
+		return
 	# 左键：没锁定鼠标时先锁定（这一下不算射门）；锁定后按住蓄力、松手踢出。
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
 		if event.pressed:
@@ -623,7 +678,7 @@ func _build_hud() -> void:
 	_debug_label.add_theme_color_override("font_color", Color("#a9d8cd"))
 	dmargin.add_child(_debug_label)
 
-	_counter_label.text = "已装载 0 / %d" % GOAL_TARGET
+	_counter_label.text = ("已装载 0 / %d" % goal_target) if not arcade else "已进 0 球"
 	set_process(true)
 
 
@@ -680,6 +735,8 @@ func _update_arcade(delta: float) -> void:
 		if _respawn_timer <= 0.0:
 			_respawn_ball()
 	if not arcade:
+		return
+	if not _round_active:
 		return
 	if not completed:
 		round_time_left = maxf(round_time_left - delta, 0.0)
@@ -821,7 +878,7 @@ func _flash(text: String, seconds: float = 1.4) -> void:
 # ---------------------------------------------------------------- 踢球
 
 func _try_kick(power: float = 1.0) -> bool:
-	if completed or ball == null or player == null:
+	if completed or not _round_active or ball == null or player == null:
 		return false
 	var cam := player.get("camera") as Camera3D
 	var forward := -cam.global_transform.basis.z
@@ -922,9 +979,15 @@ func _on_goal_scored(total: int, target: int) -> void:
 		score += points
 		round_time_left = minf(round_time_left + TIME_BONUS_PER_GOAL, ROUND_SECONDS + 30.0)
 		combo = mini(combo + 1, COMBO_MAX)
+		best_combo_this_round = maxi(best_combo_this_round, combo)
 		_combo_timer = COMBO_WINDOW
 		_counter_label.text = "已进 %d 球" % loaded_count
 		_flash("+%d　连击 x%d　+%ds" % [points, combo, int(TIME_BONUS_PER_GOAL)], 1.8)
+		if _presentation != null and player != null:
+			var cam := player.get("camera") as Camera3D
+			if cam != null:
+				_presentation.call("celebrate", cam.unproject_position(ball.global_position + Vector3.UP * 0.6),
+					points, combo, Color("#ffcf5c"))
 		_raise_difficulty()
 		_respawn_timer = 0.9
 		return
@@ -979,11 +1042,15 @@ func _end_round() -> void:
 	_clear_wind()
 	if _sfx != null:
 		_sfx.call("play_pitched", "loaded", 0.62)
-	if score > best_score:
+	var is_record := score > best_score
+	if is_record:
 		best_score = score
 		_save_best()
-	_banner_label.text = "时间到\n得分 %d · 最高 %d\n按 R 再来一局" % [score, best_score]
-	_banner.visible = true
+	if _presentation != null and arcade:
+		_presentation.call("show_result", score, best_score, goals_this_round, best_combo_this_round, is_record)
+	else:
+		_banner_label.text = "时间到\n得分 %d · 最高 %d\n按 R 再来一局" % [score, best_score]
+		_banner.visible = true
 
 
 func _load_best() -> void:
@@ -1055,6 +1122,7 @@ func reset_round() -> void:
 	# 街机模式重置：计时、比分、连击、球位、奶龙难度
 	score = 0
 	combo = 1
+	best_combo_this_round = 1
 	_combo_timer = 0.0
 	_respawn_timer = -1.0
 	round_time_left = ROUND_SECONDS
@@ -1065,6 +1133,8 @@ func reset_round() -> void:
 	_wind_next = randf_range(22.0, 30.0)
 	_last_beep_second = -1
 	_restore_difficulty()
+	if _presentation != null:
+		_presentation.call("hide_result")
 	_feedback = ""
 	_feedback_timer = 0.0
 	_last_collisions = int(player.get("contacts"))
@@ -1215,8 +1285,10 @@ func _run_arcade_test() -> void:
 	round_time_left = 0.3
 	await _wait(0.7)
 	_check(completed, "timer ends the round", passes, failures)
-	_check(_banner.visible, "end-of-round banner shows", passes, failures)
-	_check(_banner_label.text.contains("得分"), "banner shows the score", passes, failures)
+	_check(_presentation != null and bool(_presentation.call("result_visible")),
+		"end-of-round result panel shows", passes, failures)
+	_check(int(_presentation.get("last_result_score")) == score,
+		"result panel carries the score (%d)" % score, passes, failures)
 	_check(best_score >= score, "best score recorded", passes, failures)
 
 	reset_round()
@@ -1241,6 +1313,54 @@ func _run_arcade_test() -> void:
 
 
 ## 侧风自测：起风后球应被横向推偏，停风后力归零、HUD 消失。
+func _run_flow_test() -> void:
+	var passes: Array = []
+	var failures: Array = []
+	print("GULU FLOW TEST start")
+	await _wait(0.6)
+
+	# 模拟“标题屏 → 点击开始 → 倒计时 → 开局”
+	_round_active = false
+	_set_play_enabled(false)
+	_presentation.call("show_title", best_score)
+	await _wait(0.3)
+	_check(_try_kick() == false, "cannot kick on the title screen", passes, failures)
+	_on_start_requested()
+	await _wait(0.4)
+	_check(not _round_active, "round does not start until the countdown ends", passes, failures)
+	await _wait(3.2)
+	_check(_round_active, "countdown unlocks the round", passes, failures)
+	var t0 := round_time_left
+	await _wait(0.6)
+	_check(round_time_left < t0, "timer runs after the countdown", passes, failures)
+	_check(player.is_processing() and player.is_physics_processing(), "player control is enabled", passes, failures)
+
+	print("GULU FLOW SUMMARY passes=%d failures=%d" % [passes.size(), failures.size()])
+	get_tree().quit(0 if failures.is_empty() else 1)
+
+
+func _run_ui_shots() -> void:
+	await _wait(0.8)
+	reset_round()
+	await _wait(0.3)
+	if _presentation != null:
+		_presentation.call("show_title", maxi(best_score, 1240))
+	await _wait(0.7)
+	await _shot("20_title.png")
+	if _presentation != null:
+		_presentation.call("hide_title")
+		_presentation.call("play_countdown")
+	await _wait(0.30)
+	await _shot("21_countdown.png")
+	await _wait(2.6)
+	if _presentation != null:
+		_presentation.call("show_result", 940, 1240, 5, 4, false)
+	await _wait(0.7)
+	await _shot("22_result.png")
+	print("GULU UI SHOTS done")
+	get_tree().quit(0)
+
+
 func _run_wind_test() -> void:
 	var passes: Array = []
 	var failures: Array = []
