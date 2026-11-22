@@ -22,3 +22,6 @@ Local changes applied by tools/blender/build_nailong_dl.py:
 Note: CC-BY-4.0 covers this 3D asset as published by the uploader. It does not
 transfer any rights to the underlying character IP. This project is a private
 course/practice preview; ask before any public or commercial release.
+
+派生文件 nailong_repaired.glb 沿用上述署名和 CC BY 4.0 许可。修改：清理身体蒙皮权重、移除占位球，添加随头部运动的眼睑、高光及 Blink 形态键。保留原模型嘴部。
+后续修改：在原网格添加 MouthClosed 形态键，默认闭嘴，事件驱动张嘴与恢复。没有使用额外嘴部盖片。

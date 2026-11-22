@@ -12,10 +12,9 @@ class_name MilkDragonModelVisual
 ##
 ## 模型自身：高 1.83 m、脚底 y=-0.072、脸朝 +Z。所以底下垫 0.072，外层绕 Y 转 180°。
 ##
-## 说明：本环境看不到画面，“脚步是否自然”只能靠代码规则保证（步频由实际速度驱动、
-## 停止时步态归零、支撑脚回正），最终观感需要用户看录像确认。
+## 骨架与眼睑由 Blender 修复；嘴部使用原网格闭嘴形态键。
 
-const MODEL_PATH := "res://assets/characters/nailong_dl.glb"
+const MODEL_PATH := "res://assets/characters/nailong_repaired.glb"
 const GROUND_OFFSET := 0.072
 ## 每走 1 米播放多少弧度步态（约 2.4 m 一个完整步幅）
 const GAIT_PER_METER := 2.6
@@ -42,6 +41,12 @@ var _shin_bones: Array[int] = []
 var _foot_bones: Array[int] = []
 var _arm_bones: Array[int] = []
 var _rest := {}
+var _blink_meshes: Array[MeshInstance3D] = []
+var _mouth_mesh: MeshInstance3D
+var _mouth_closed := 1.0
+var _blink_clock := 0.0
+var _blink_next := 3.1
+var _blink_count := 0
 
 var _head_yaw := 0.0
 var _head_pitch := 0.0
@@ -178,6 +183,10 @@ func _build() -> void:
 			placeholders.append(mi)
 			continue
 		mi.visible = true
+		if mi.find_blend_shape_by_name("MouthClosed") >= 0:
+			_mouth_mesh = mi
+		if mi.find_blend_shape_by_name("Blink") >= 0:
+			_blink_meshes.append(mi)
 		for surface in range(mi.mesh.get_surface_count()):
 			var material := mi.get_active_material(surface)
 			if material is StandardMaterial3D:
@@ -243,17 +252,20 @@ func _build_fallback() -> Node3D:
 func _cache_bones() -> void:
 	for index in range(_skeleton.get_bone_count()):
 		var bone_name := _skeleton.get_bone_name(index)
-		if bone_name.begins_with("DEF-spine.006"):
+		var normalized_name := bone_name
+		while normalized_name.get_slice("_", normalized_name.get_slice_count("_") - 1).is_valid_int():
+			normalized_name = normalized_name.left(normalized_name.rfind("_"))
+		if normalized_name == "DEF-spine.006":
 			_head_bone = index
-		elif bone_name.begins_with("DEF-spine.005"):
+		elif normalized_name == "DEF-spine.005":
 			_neck_bone = index
-		elif bone_name.begins_with("DEF-thigh.") and not bone_name.contains(".001"):
+		elif normalized_name.begins_with("DEF-thigh.") and not normalized_name.ends_with(".001"):
 			_thigh_bones.append(index)
-		elif bone_name.begins_with("DEF-shin.") and not bone_name.contains(".001"):
+		elif normalized_name.begins_with("DEF-shin.") and not normalized_name.ends_with(".001"):
 			_shin_bones.append(index)
-		elif bone_name.begins_with("DEF-foot."):
+		elif normalized_name.begins_with("DEF-foot.") and not normalized_name.ends_with(".001"):
 			_foot_bones.append(index)
-		elif bone_name.begins_with("DEF-upper_arm") and not bone_name.contains(".001"):
+		elif normalized_name.begins_with("DEF-upper_arm") and not normalized_name.ends_with(".001"):
 			_arm_bones.append(index)
 		_rest[index] = _skeleton.get_bone_pose_rotation(index)
 
@@ -262,10 +274,29 @@ func _cache_bones() -> void:
 
 func _process(delta: float) -> void:
 	_time += delta
+	_blink_clock += delta
+	var blink := 0.0
+	if _blink_clock >= _blink_next:
+		var phase := (_blink_clock - _blink_next) / 0.22
+		blink = sin(clampf(phase, 0.0, 1.0) * PI)
+		if phase >= 1.0:
+			_blink_count += 1
+			_blink_clock = 0.0
+			_blink_next = 2.7 + fmod(float(_blink_count) * 1.37, 2.1)
+	for mesh in _blink_meshes:
+		mesh.set_blend_shape_value(mesh.find_blend_shape_by_name("Blink"), blink)
 	if _reaction != "":
 		_reaction_t += delta
 		if _reaction_t >= _reaction_duration:
 			_reaction = ""
+	var mouth_target := 1.0
+	if _reaction == "whiff" or _reaction == "goal":
+		mouth_target = 0.35
+	elif _block > 0.2:
+		mouth_target = 0.75
+	_mouth_closed = lerpf(_mouth_closed, mouth_target, 1.0 - exp(-10.0 * delta))
+	if _mouth_mesh != null:
+		_mouth_mesh.set_blend_shape_value(_mouth_mesh.find_blend_shape_by_name("MouthClosed"), _mouth_closed)
 	_animate(delta)
 	_apply_pose()
 
@@ -292,10 +323,10 @@ func _animate(delta: float) -> void:
 
 
 func _apply_pose() -> void:
-	var bob := 0.0
+	var bob := 0.005 * sin(_time * 1.8) + 0.009 * absf(sin(_gait)) * _stride_blend
 	_body.position.y = bob
 	_body.position.x = sin(_gait * 0.5) * 0.012 * absf(_lateral01) * _stride_blend
-	# 静态模型的步态只走整体节点：不上下抬脚，靠俯仰/横摆表达重心。
+	# 低幅重心随呼吸和脚步移动，四肢另由骨骼驱动。
 	var ready_pitch := 0.08 * _ready_weight
 	var react_pitch := 0.0
 	var react_roll := 0.0
@@ -324,46 +355,37 @@ func _apply_pose() -> void:
 	if _skeleton == null:
 		return
 
-	var head_animation := false
-	if head_animation and _head_bone >= 0:
-		var yaw := _head_yaw
-		var pitch := _head_pitch - 0.10 * _block
-		_skeleton.set_bone_pose_rotation(_head_bone,
-			_rest[_head_bone] * Quaternion(Vector3.UP, yaw) * Quaternion(Vector3.RIGHT, pitch))
-		if head_animation and _neck_bone >= 0:
-			_skeleton.set_bone_pose_rotation(_neck_bone,
-				_rest[_neck_bone] * Quaternion(Vector3.UP, yaw * 0.35))
+	if _head_bone >= 0:
+		var yaw := clampf(_head_yaw, -0.22, 0.22)
+		var pitch := clampf(_head_pitch - 0.10 * _block, -0.12, 0.12)
+		_set_bone_world_delta(_head_bone, Quaternion(Vector3.UP, yaw) * Quaternion(Vector3.RIGHT, pitch))
+		if _neck_bone >= 0:
+			_set_bone_world_delta(_neck_bone, Quaternion(Vector3.UP, yaw * 0.35))
 
-	# 四肢骨骼的局部轴没有在 glTF 里验证过；按世界 X 轴旋转会把腿/手臂拧进身体，
-	# 造成“人物完全变形”。本轮先关闭四肢骨骼动画，只保留整体位移/前倾/转头；
-	# 宁可少一点步态细节，也不能让模型变形。
-	var limb_animation := false
+	# 动画轴在骨架静置坐标系定义，再转换为每根骨骼自己的局部轴。
+	var limb_animation := not _thigh_bones.is_empty()
 	if limb_animation:
 		# 迈步幅度：前进速度与“确实在走”两个因子
-		var amplitude := 0.34 * absf(_forward01) * _stride_blend
+		var amplitude := 0.28 * maxf(absf(_forward01), absf(_lateral01) * 0.6) * _stride_blend
 		var swing := sin(_gait) * amplitude
 		for index in range(_thigh_bones.size()):
 			var phase := 1.0 if index == 0 else -1.0
 			var thigh := swing * phase
-			_skeleton.set_bone_pose_rotation(_thigh_bones[index],
-				_rest[_thigh_bones[index]] * Quaternion(Vector3.RIGHT, thigh))
+			_set_bone_world_delta(_thigh_bones[index], Quaternion(Vector3.RIGHT, thigh))
 			var knee := 0.0
 			if index < _shin_bones.size():
-				knee = maxf(0.0, sin(_gait) * phase) * 0.50 * absf(_forward01) * _stride_blend
-				_skeleton.set_bone_pose_rotation(_shin_bones[index],
-					_rest[_shin_bones[index]] * Quaternion(Vector3.RIGHT, knee))
+				knee = maxf(0.0, sin(_gait) * phase) * 0.30 * maxf(absf(_forward01), absf(_lateral01) * 0.6) * _stride_blend
+				_set_bone_world_delta(_shin_bones[index], Quaternion(Vector3.RIGHT, knee))
 			if index < _foot_bones.size():
 				var foot := -(thigh * 0.85) - knee * 0.45
-				_skeleton.set_bone_pose_rotation(_foot_bones[index],
-					_rest[_foot_bones[index]] * Quaternion(Vector3.RIGHT, foot))
+				_set_bone_world_delta(_foot_bones[index], Quaternion(Vector3.RIGHT, foot))
 
 		var arm_swing := -swing * 0.45
 		for index in range(_arm_bones.size()):
 			var side := 1.0 if index == 0 else -1.0
-			var spread := 0.10 + 0.45 * _block
-			_skeleton.set_bone_pose_rotation(_arm_bones[index],
-				_rest[_arm_bones[index]]
-				* Quaternion(Vector3.RIGHT, arm_swing * side)
+			var spread := 0.14 * _block
+			_set_bone_world_delta(_arm_bones[index],
+				Quaternion(Vector3.RIGHT, arm_swing * side)
 				* Quaternion(Vector3.UP, side * spread))
 	else:
 		# 回到 glTF 的静置姿态；只允许整体节点动。
@@ -376,12 +398,14 @@ func _apply_pose() -> void:
 		for index in _arm_bones:
 			_skeleton.set_bone_pose_rotation(index, _rest[index])
 
+
 	if _ring != null:
 		_ring.visible = ring_enabled
 
 
-
-
-
-
-
+func _set_bone_world_delta(index: int, world_delta: Quaternion) -> void:
+	# The delta is expressed in skeleton rest space, not parent pose space.
+	# Conjugating once preserves the imported rest pose and inherited motion.
+	var rest_global := _skeleton.get_bone_global_rest(index).basis.orthonormalized().get_rotation_quaternion()
+	var local_delta := rest_global.inverse() * world_delta * rest_global
+	_skeleton.set_bone_pose_rotation(index, (_rest[index] * local_delta).normalized())
