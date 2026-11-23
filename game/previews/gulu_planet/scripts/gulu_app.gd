@@ -125,7 +125,7 @@ func _ready() -> void:
 		if arg.begins_with("--motion"):
 			deterministic = true
 	arcade = not deterministic
-	wind_enabled = arcade and not (args.has("--shots") or args.has("--record") or args.has("--perf"))
+	wind_enabled = arcade and args.has("--wind")
 	goal_target = GOAL_TARGET if deterministic else ARCADE_TARGET
 	_load_best()
 
@@ -185,6 +185,12 @@ func _ready() -> void:
 	elif args.has("--flow-test"):
 		_automation = true
 		call_deferred("_run_flow_test")
+	elif args.has("--dragon-test"):
+		_automation = true
+		call_deferred("_run_dragon_test")
+	elif args.has("--wind-goal"):
+		_automation = true
+		call_deferred("_run_wind_goal_test")
 
 	_build_presentation()
 	set_process(true)
@@ -434,6 +440,7 @@ func _build_dragon() -> void:
 	add_child(dragon)
 	dragon.call("setup_ball", ball)
 	dragon.call("setup_goal", collector)
+	dragon.call("setup_player", player)
 	dragon.connect("blocked", _on_dragon_blocked)
 	dragon.connect("state_changed", _on_dragon_state_changed)
 	dragon.connect("save_made", func() -> void: print("DRAGON EVENT save_made"))
@@ -1309,6 +1316,89 @@ func _run_arcade_test() -> void:
 		passes, failures)
 
 	print("GULU ARCADE SUMMARY passes=%d failures=%d" % [passes.size(), failures.size()])
+	get_tree().quit(0 if failures.is_empty() else 1)
+
+
+func _run_dragon_test() -> void:
+	var passes: Array = []
+	var failures: Array = []
+	print("GULU DRAGON TEST start")
+	await _wait(0.6)
+	reset_round()
+	await _wait(0.4)
+
+	# 1) 玩家站在球的左后侧（真实射门站位）→ 奶龙应读出 -z 并提前偏过去
+	ball.call("reset_to", Vector3(2.0, 0.0, 0.0))
+	_teleport(Vector3(0.9, 0.02, -1.3), 0.0)
+	await _wait(1.0)
+	_check(float(dragon.get("_precommit_side")) == -1.0, "keeper reads the player's side", passes, failures)
+
+	# 2) 绕到 +z 侧：预判应重置并重新锁定
+	_teleport(Vector3(0.9, 0.02, 1.3), 0.0)
+	await _wait(0.85)
+	_check(float(dragon.get("_precommit_side")) == 1.0, "side switch re-reads the tell", passes, failures)
+
+	# 3) 射向它预判的一侧：它应该朝那一侧扑（目标点 z 正方向）
+	ball.call("kick", Vector3(1.0, 0.0, 0.22), 17.0)
+	await _wait(0.30)
+	var dive_z := float((dragon.get("_target") as Vector3).z)
+	_check(dive_z > 0.5, "keeper dives toward the anticipated side (z=%.1f)" % dive_z, passes, failures)
+	await _wait(1.4)
+
+	# 4) 先诱到 +z，再踩回 -z 射门（它已扑向 +z）→ 应该进
+	reset_round()
+	await _wait(0.5)
+	ball.call("reset_to", Vector3(4.0, 0.0, 0.0))
+	_teleport(Vector3(2.9, 0.02, -1.3), 0.0)
+	await _wait(1.0)
+	_teleport(Vector3(2.9, 0.02, 1.3), 0.0)
+	await _wait(0.75)
+	_check(float(dragon.get("_precommit_side")) == 1.0, "keeper is lured to the wrong side", passes, failures)
+	ball.call("kick", Vector3(1.0, 0.0, -0.22), 18.0)
+	var scored := false
+	for _probe in range(200):
+		if loaded_count > 0:
+			scored = true
+			break
+		await _wait(0.02)
+	_check(scored, "a late switch beats the committed dive", passes, failures)
+
+	print("GULU DRAGON SUMMARY passes=%d failures=%d" % [passes.size(), failures.size()])
+	get_tree().quit(0 if failures.is_empty() else 1)
+
+
+## 侧风 + 完整进球周期（开启侧风时的组合验证）。
+func _run_wind_goal_test() -> void:
+	var passes: Array = []
+	var failures: Array = []
+	print("GULU WIND GOAL TEST start")
+	wind_enabled = true
+	await _wait(0.5)
+	reset_round()
+	await _wait(0.4)
+
+	_start_gust(2.0)
+	_check(_wind_left > 0.0, "wind is on for the whole cycle", passes, failures)
+	dragon.global_position = Vector3(10.2, 0.0, -2.6)
+	ball.call("reset_to", Vector3(10.4, 0.0, 2.0))
+	await _wait(0.5)
+	ball.call("kick", Vector3(1.0, 0.0, -0.25), 18.0)
+	var scored := false
+	for _probe in range(240):
+		if loaded_count > 0:
+			scored = true
+			break
+		await _wait(0.02)
+	_check(scored, "goal still works with wind on", passes, failures)
+	_check(score == SCORE_PER_GOAL, "wind does not break scoring (%d)" % score, passes, failures)
+	_check(combo == 2, "combo increments with wind on", passes, failures)
+
+	reset_round()
+	await _wait(0.3)
+	_check(score == 0 and loaded_count == 0, "R resets score with wind on", passes, failures)
+	_check(_wind_left == 0.0, "R clears the gust", passes, failures)
+
+	print("GULU WIND GOAL SUMMARY passes=%d failures=%d" % [passes.size(), failures.size()])
 	get_tree().quit(0 if failures.is_empty() else 1)
 
 

@@ -175,41 +175,15 @@ func _build_ground() -> void:
 
 # ---------------------------------------------------------------- 地面细节
 
-## 只做“地面上的痕迹”：轮胎印、碎石、油渣。全部无碰撞、厚度≤4 mm，不影响球。
+## 只保留边线外碎石；车辙/油斑这类“旧、脏”痕迹已撤掉（不靠脏乱假装统一风格）。
 func _build_ground_detail() -> void:
-	var rubber := Color("#5e5749")
-	var track := Color("#6e6555")
-	# 两条车辙：从西侧停车区拉到装货平台前，读得岀“这里天天过车”。
-	for side: float in [-1.0, 1.0]:
-		var z := side * 1.18
-		_box(Vector3(22.0, 0.004, 0.20), Vector3(-2.0, 0.016, z), track,
-			false, 0.0, Vector3(0.0, 0.012 * side, 0.0), mat_concrete)
-		# 胎纹：短横向暗条，间距 1.6 m
-		for index in range(14):
-			var x := -12.6 + float(index) * 1.6
-			_box(Vector3(0.10, 0.005, 0.30), Vector3(x, 0.018, z), rubber,
-				false, 0.0, Vector3(0.0, 0.02 * side, 0.0), mat_concrete)
 
-	# 平台前的刹车痕：两条深色弧线，交给玩家“平台边缘”的读图。
-	for side in [-1.0, 1.0]:
-		_box(Vector3(2.4, 0.005, 0.26), Vector3(9.4, 0.019, side * 2.1), rubber,
-			false, 0.0, Vector3(0.0, 0.10 * side, 0.0), mat_concrete)
-
-	# 油渣：装货平台前的黑斑，无碰撞。
-	for spot in [Vector3(10.9, 0.017, -1.9), Vector3(10.4, 0.017, 1.6), Vector3(11.4, 0.017, 0.6)]:
-		var blotch := CylinderMesh.new()
-		blotch.top_radius = 0.52
-		blotch.bottom_radius = 0.62
-		blotch.height = 0.004
-		blotch.radial_segments = 15
-		_add(blotch, spot, Color("#3d3a32"), 0.0, Vector3.ZERO, Vector3.ONE, mat_concrete)
 
 	# 场边碎石：只留在边线外（|z|>3.0），避免遮球。
 	var spots := [
-		Vector3(-9.6, 0.0, -3.4), Vector3(-7.1, 0.0, -4.1), Vector3(-2.4, 0.0, -3.6),
-		Vector3(2.6, 0.0, -3.3), Vector3(6.8, 0.0, -3.8), Vector3(9.2, 0.0, -4.6),
-		Vector3(-10.4, 0.0, 3.3), Vector3(-6.6, 0.0, 3.9), Vector3(-3.2, 0.0, 3.4),
-		Vector3(1.8, 0.0, 3.7), Vector3(5.4, 0.0, 3.2), Vector3(8.6, 0.0, 4.2),
+		Vector3(-9.6, 0.0, -3.4), Vector3(-2.4, 0.0, -3.6),
+		Vector3(6.8, 0.0, -3.8), Vector3(-10.4, 0.0, 3.3),
+		Vector3(-3.2, 0.0, 3.4), Vector3(5.4, 0.0, 3.2),
 	]
 	for index in range(spots.size()):
 		var radius := 0.10 + 0.10 * float(index % 3)

@@ -62,6 +62,9 @@ var _ring_material: StandardMaterial3D
 var _tint_materials: Array[StandardMaterial3D] = []
 var _tint_base: Array[Color] = []
 var ring_enabled := false
+## 预判姿态（重心先动）
+var _anticipation_side := 0.0
+var _anticipation_weight := 0.0
 
 
 func _ready() -> void:
@@ -106,6 +109,12 @@ func set_ready(weight: float) -> void:
 	_ready_weight = clampf(weight, 0.0, 1.0)
 	if _ready_weight > 0.6 and _reaction != "":
 		_reaction = ""
+
+
+## 预判重心：side -1/+1，weight 0..1。只是表现（重心偏移 + 侧倾），不改碰撞。
+func set_anticipation(side: float, weight: float) -> void:
+	_anticipation_side = clampf(side, -1.0, 1.0)
+	_anticipation_weight = clampf(weight, 0.0, 1.0)
 
 
 func play_save() -> void:
@@ -326,6 +335,8 @@ func _apply_pose() -> void:
 	var bob := 0.005 * sin(_time * 1.8) + 0.009 * absf(sin(_gait)) * _stride_blend
 	_body.position.y = bob
 	_body.position.x = sin(_gait * 0.5) * 0.012 * absf(_lateral01) * _stride_blend
+	# 预判：重心先向预判侧偏一点，玩家能从体态读出“它要扑哪边”。
+	_body.position.x += _anticipation_side * 0.055 * _anticipation_weight
 	# 低幅重心随呼吸和脚步移动，四肢另由骨骼驱动。
 	var ready_pitch := 0.08 * _ready_weight
 	var react_pitch := 0.0
@@ -349,7 +360,7 @@ func _apply_pose() -> void:
 				react_pitch = 0.15 * env
 	_body.rotation.x = _lean + ready_pitch + sin(_gait) * 0.022 * _speed01 + react_pitch
 	_body.rotation.y = react_yaw
-	_body.rotation.z = lerpf(_body.rotation.z, -0.030 * _lateral01 * _speed01 + sin(_gait * 0.5) * 0.018 * _speed01 + react_roll, 0.12)
+	_body.rotation.z = lerpf(_body.rotation.z, -0.030 * _lateral01 * _speed01 + sin(_gait * 0.5) * 0.018 * _speed01 + react_roll - 0.075 * _anticipation_side * _anticipation_weight, 0.12)
 	_body.scale = Vector3.ONE
 
 	if _skeleton == null:

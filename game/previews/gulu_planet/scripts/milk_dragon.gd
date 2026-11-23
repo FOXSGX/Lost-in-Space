@@ -52,6 +52,8 @@ const STATE_RETURN := "回防"
 
 var ball: RigidBody3D
 var goal: Node3D
+## 玩家引用只用于“读站位”（可观察信息），不读任何输入状态。
+var player: Node3D
 var state := STATE_OBSERVE
 var visual: Node3D
 
@@ -67,6 +69,16 @@ var _save_pending := false
 var _save_timer := 0.0
 var _target := Vector3.ZERO
 var _time := 0.0
+## --- 预判/假动作 ---
+## 玩家在球哪一侧：-1 / +1 / 0。只用于“站在那里读站位”，不读输入。
+var _precommit_side := 0.0
+var _anticipate_timer := 0.0
+var _look_player_timer := 0.0
+var _look_player_delay := 0.0
+var _tell_side := 0.0
+const ANTICIPATE_TIME := 0.40
+const TELL_RANGE := 2.9
+const TELL_LEAN := 0.42
 
 
 func _ready() -> void:
@@ -87,6 +99,11 @@ func _ready() -> void:
 
 func setup_ball(next_ball: RigidBody3D) -> void:
 	ball = next_ball
+
+
+## 只保存引用：用来判断玩家站在球的哪边（可观察信息）。
+func setup_player(node: Node3D) -> void:
+	player = node
 
 
 func setup_goal(next_goal: Node3D) -> void:
@@ -158,7 +175,8 @@ func _physics_process(delta: float) -> void:
 	match state:
 		STATE_OBSERVE:
 			_state_timer += delta
-			_target = _stand_point()
+			_update_anticipation(delta)
+			_target = _stand_point() + Vector3(0.0, 0.0, 0.42 * _precommit_side)
 			_face_point(_sample, delta)
 			if _should_intercept() and _state_timer > 0.15:
 				_begin_intercept()
@@ -170,13 +188,27 @@ func _physics_process(delta: float) -> void:
 					intercept_missed.emit()
 					if visual != null:
 						visual.call("play_whiff")
+					# 先看滚走的球，再看玩家
+					_look_player_delay = 0.35
+					_look_player_timer = 0.60
 				_set_state(STATE_RECOVER)
 		STATE_RECOVER:
 			_state_timer += delta
 			velocity.x = move_toward(velocity.x, 0.0, max_accel * delta)
 			velocity.z = move_toward(velocity.z, 0.0, max_accel * delta)
-			_face_point(_sample, delta)
+			# 扑空后：先看滚走的球，再看一眼玩家（“你骗到我了”）。
+			if _look_player_delay > 0.0:
+				_look_player_delay -= delta
+				if visual != null:
+					visual.call("set_look_point", _sample, true)
+			elif _look_player_timer > 0.0:
+				_look_player_timer -= delta
+				if visual != null and player != null and is_instance_valid(player):
+					visual.call("set_look_target", player)
+			else:
+				_face_point(_sample, delta)
 			if _state_timer >= recover_time:
+				_look_player_timer = 0.0
 				_set_state(STATE_RETURN)
 		STATE_RETURN:
 			_state_timer += delta
@@ -195,6 +227,47 @@ func _stand_point() -> Vector3:
 	var closeness := clampf((_sample.x - 9.0) / 3.0, 0.0, 1.0)
 	var near_side := clampf(_sample.z * 0.9, -2.6, 2.6) * closeness
 	return Vector3(11.1, 0.0, near_side)
+
+
+## 读“玩家站在球的哪一边”——只读位置，不读输入；玩家绕到另一边就能骗它。
+func _read_player_side() -> float:
+	if player == null or not is_instance_valid(player) or ball == null:
+		return 0.0
+	var approach := ball.global_position - player.global_position
+	approach.y = 0.0
+	var distance := approach.length()
+	if distance > TELL_RANGE or distance < 0.2:
+		return 0.0
+	var to_goal := Vector3(_goal_x - ball.global_position.x, 0.0, -ball.global_position.z)
+	if to_goal.length_squared() < 0.01:
+		return 0.0
+	to_goal = to_goal.normalized()
+	# 玩家要大致处在“球和门之间”才当成准备射门
+	if approach.normalized().dot(to_goal) < 0.25:
+		return 0.0
+	return signf(player.global_position.z - ball.global_position.z)
+
+
+## 预判：站位稳定 0.4 s 才锁定；换边会重新计时，所以绕到另一边就是假动作。
+func _update_anticipation(delta: float) -> void:
+	var side := _read_player_side()
+	if side == 0.0:
+		_tell_side = 0.0
+		_anticipate_timer = 0.0
+		_precommit_side = 0.0
+		if visual != null:
+			visual.call("set_anticipation", 0.0, 0.0)
+		return
+	if side != _tell_side:
+		_tell_side = side
+		_anticipate_timer = 0.0
+		_precommit_side = 0.0
+	_anticipate_timer += delta
+	if _anticipate_timer >= ANTICIPATE_TIME:
+		_precommit_side = side
+	if visual != null:
+		visual.call("set_anticipation", side,
+			clampf(_anticipate_timer / ANTICIPATE_TIME, 0.0, 1.0))
 
 
 ## 只有“球朝球门来 + 预计到达够快 + 落点在门洞附近”才出击。
@@ -224,14 +297,23 @@ func _should_intercept() -> bool:
 func _begin_intercept() -> void:
 	var vx := maxf(_sample_vel.x, 0.5)
 	var eta := clampf((_goal_x - _sample.x) / vx, 0.0, 0.45)
+	var aim_z := clampf(_sample.z + _sample_vel.z * eta, -zone_half_z - 0.3, zone_half_z + 0.3)
+	# 预判锁错：它按“玩家站位”先入为主，真球射向另一边时就会扑错。
+	if _precommit_side != 0.0 and signf(aim_z) != _precommit_side:
+		if visual != null:
+			visual.call("play_whiff")
+		aim_z = _precommit_side * (zone_half_z + 0.25)
 	_target = Vector3(
 		clampf(_sample.x + _sample_vel.x * eta, zone_min_x - 0.4, zone_max_x),
 		0.0,
-		clampf(_sample.z + _sample_vel.z * eta, -zone_half_z - 0.3, zone_half_z + 0.3)
+		aim_z
 	)
 	_state_timer = 0.0
 	_cooldown = intercept_cooldown
 	_intercept_hit = false
+	_precommit_side = 0.0
+	_tell_side = 0.0
+	_anticipate_timer = 0.0
 	_set_state(STATE_INTERCEPT)
 
 
@@ -306,6 +388,8 @@ func _update_visual(_delta: float) -> void:
 	visual.call("set_block", block if _swat_ready > 0.0 else 0.0)
 	visual.call("set_ready", 1.0 if state == STATE_INTERCEPT else 0.0)
 	visual.call("set_look_point", ball.global_position, true)
+	if state != STATE_OBSERVE:
+		visual.call("set_anticipation", 0.0, 0.0)
 
 
 func _set_state(next: String) -> void:

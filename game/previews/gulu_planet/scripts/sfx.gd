@@ -24,6 +24,7 @@ const VOLUME_DB := {
 
 var _players: Dictionary = {}
 var _last_ms: Dictionary = {}
+var _duck_until := 0
 
 
 func _ready() -> void:
@@ -56,6 +57,11 @@ func play_pitched(key: String, pitch: float) -> void:
 	var interval := int(float(MIN_INTERVAL.get(key, 0.3)) * 1000.0)
 	if now - int(_last_ms.get(key, -100000)) < interval:
 		return
+	# 优先听清“进球”：进球后的 0.38 s 内不再叠倒计时/风声。
+	if key != "loaded" and now < _duck_until:
+		return
+	if key == "loaded":
+		_duck_until = now + 380
 	_last_ms[key] = now
-	player.pitch_scale = clampf(pitch, 0.5, 2.0)
+	player.pitch_scale = clampf(pitch, 0.6, 1.35)
 	player.play()
