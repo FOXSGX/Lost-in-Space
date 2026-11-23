@@ -11,7 +11,6 @@ const JOURNAL_MAP_SCENE := preload("res://scripts/journal_map_view.gd")
 const FROST_FIELD_INTERACTIONS := preload("res://scripts/frost_field_interactions.gd")
 const GOOFY_ITEM_EFFECTS := preload("res://scripts/goofy_item_effects.gd")
 const FROST_ROAM_ACTIVITIES := preload("res://scripts/frost_roam_activities.gd")
-const RESONANCE_STAGE_SCENE := preload("res://scenes/resonance_stage.tscn")
 const SCAN_DURATION := 4.0
 const SCAN_STARTUP := 0.8
 const SCAN_COOLDOWN := 6.0
@@ -38,8 +37,7 @@ const KIT_SCAN_MULTIPLIER := 1.5
 const KIT_SHIELD_DURATION := 3.0
 const KIT_SHIELD_DAMAGE_SCALE := 0.35
 const KIT_MODS := {
-    "frost_ash": "warm_supply",
-    "resonance": "overload_resist"
+    "frost_ash": "warm_supply"
 }
 var kit_assignments: Dictionary = {}
 
@@ -101,7 +99,6 @@ const STORY_ARC_FLAGS := [
     "arc_reply", "arc_ending", "arc_return"
 ]
 const PLANET_ID := "frost_ash"
-const RESONANCE_PLANET_ID := "resonance"
 const SIDE_QUEST_DATA := {
     "echo_route": {"title": "第二条路线", "kind": "主线支线", "clue": "第一座信标的旧频道指向气象站；沿回波走，能为主线开启更安全的路线。", "reward": 15},
     "ice_garden": {"title": "冰下花园", "kind": "星球见闻", "clue": "异常冰样的脉动组成了地下生态的节拍。带回一枚样本，记录这座星球的另一面。", "reward": 20},
@@ -160,7 +157,6 @@ var discovered_regions: Array[String] = []
 var route_seed := 0
 
 var _ship_session: ShipSession3D
-var _resonance_stage: ResonanceStage3D
 var ship_active: bool:
     get:
         return _ship_session != null and _ship_session.active
@@ -314,7 +310,6 @@ var _room_status: Label
 var _route_status: Label
 var _trade_status: Label
 var _land_button: Button
-var _electro_land_button: Button
 var _screen_view := "home"
 
 var _items: CrewItems3D
@@ -341,9 +336,6 @@ func _ready() -> void:
     _health_hud = HealthHUD3D.new()
     _health_hud.name = "HealthHUD"
     add_child(_health_hud)
-    _resonance_stage = RESONANCE_STAGE_SCENE.instantiate() as ResonanceStage3D
-    add_child(_resonance_stage)
-    _resonance_stage.setup(self)
 
 func _input(event: InputEvent) -> void:
     if not event is InputEventKey:
@@ -421,26 +413,6 @@ func _process(delta: float) -> void:
     if not game_started:
         _menu_time += delta
         _animate_menu_world()
-        return
-    if current_planet_id == "electromagnetic" and _resonance_stage != null:
-        _resonance_stage.stage_tick(delta)
-        # 共振星保留轨道压力状态，但不启用霜烬星式周期视线遮罩。
-        if _storm_overlay != null:
-            _storm_overlay.visible = false
-        _update_vision_overlay()
-        _update_hud()
-        _update_interaction_hint()
-        _update_feedback(delta)
-        if is_host:
-            if mission_completed or mission_failed:
-                mission_return_timer += delta
-                if mission_return_timer >= MISSION_RETURN_DELAY:
-                    var resonance_result := mission_summary if not mission_summary.is_empty() else ("共振星任务完成，已返回飞船准备区。" if mission_completed else "共振星登陆失败，已返回飞船准备区。")
-                    return_to_ship.rpc(resonance_result, _vitals_snapshot())
-            _vitals_accumulator += delta
-            if _vitals_accumulator >= 0.1:
-                _vitals_accumulator = 0.0
-                sync_vitals.rpc(_vitals_snapshot())
         return
     var local_peer_id := multiplayer.get_unique_id()
     for mark_action in ["mark_heat", "mark_clue", "clear_marker"]:
@@ -942,11 +914,6 @@ func _build_route_ui() -> void:
     _ui_label(planet_card, "FROST ASH\n环境调查 · 气象信标 · 暴风雪撤离", Vector2(22, 100), Vector2(420, 52), 15, Color("#9ebdca"))
     _land_button = _ui_button(planet_card, "登陆霜烬星  →", Vector2(334, 116), Vector2(176, 48), func(): _select_destination("demo"), true)
     _route_status = _ui_label(_route_group, "", Vector2(91, 424), Vector2(520, 24), 14, Color("#8fb4c4"))
-    var resonance_card := _panel(_route_group, Vector2(690, 236), Vector2(500, 188), Color(0.08, 0.08, 0.19, 0.94), Color("#8977e8"), 13)
-    _ui_label(resonance_card, "02  /  可登陆", Vector2(22, 18), Vector2(440, 25), 14, Color("#b6a8ff"))
-    _ui_label(resonance_card, "共振星", Vector2(22, 52), Vector2(280, 42), 30, Color("#eeeaff"))
-    _ui_label(resonance_card, "RESONANCE\n双人同步供能 · 能源核心撤离", Vector2(22, 100), Vector2(310, 52), 15, Color("#c8c1e8"))
-    _electro_land_button = _ui_button(resonance_card, "登陆共振星  →", Vector2(300, 116), Vector2(176, 48), func(): _select_destination("electromagnetic"), true)
     var market_card := _panel(_route_group, Vector2(91, 462), Vector2(1099, 86), Color(0.08, 0.07, 0.17, 0.94), Color("#9b79d6"), 13)
     _ui_label(market_card, "星际集市 · 交易星球", Vector2(20, 12), Vector2(290, 28), 20, Color("#eadfff"))
     _ui_label(market_card, "共享回收点数兑换装备与欢乐道具", Vector2(320, 14), Vector2(430, 24), 15, Color("#c4b9d8"))
@@ -1033,8 +1000,6 @@ func _show_route() -> void:
     _menu_layer.visible = true
     if _land_button != null:
         _land_button.disabled = not is_host
-    if _electro_land_button != null:
-        _electro_land_button.disabled = not is_host
     if _route_status != null:
         var selected_title := String(PlanetRegistry.info(_ship_session.selected_destination).get("title", "霜烬星")) if _ship_session != null else "霜烬星"
         _route_status.text = ("已选择%s · 点击对应卡片确认登陆" % selected_title) if is_host else "等待主机确认登陆"
@@ -1272,8 +1237,6 @@ func _on_peer_connected(peer_id: int) -> void:
     _set_status("玩家 %d 已加入 3D 霜烬星。" % peer_id)
 
 func _on_peer_disconnected(peer_id: int) -> void:
-    if _resonance_stage != null:
-        _resonance_stage.release_core_carrier(peer_id)
     if is_host and game_started and current_planet_id == "demo" and players.has(peer_id):
         var departing: SpacePlayer3D = players[peer_id] as SpacePlayer3D
         for entry: Dictionary in _items.cargo_entries(peer_id):
@@ -1439,9 +1402,6 @@ func start_planet(stage_id: String = "demo") -> void:
     _start_planet(stage_id)
 
 func _start_planet(stage_id: String = "demo") -> void:
-    if stage_id == "electromagnetic":
-        _start_resonance_planet()
-        return
     if stage_id == "ruin":
         _start_ruin_planet()
         return
@@ -1536,62 +1496,6 @@ func _start_planet(stage_id: String = "demo") -> void:
         enemy_wave_timer = 0.0
         sync_full_state.rpc(_world_snapshot())
         sync_contract_state.rpc(mission_elapsed, salvage_value, knowledge_flags.keys(), taken_samples, scan_revealed_clues)
-
-func _start_resonance_planet() -> void:
-    if game_started:
-        return
-    if _settings_visible:
-        _close_settings()
-    var departure := _vitals_snapshot() if ship_active else []
-    _ship_session.leave()
-    _ship_session.disable_menu_environment()
-    _clear_players()
-    game_started = true
-    current_planet_id = "electromagnetic"
-    mission_completed = false
-    mission_failed = false
-    mission_summary = ""
-    mission_return_timer = 0.0
-    mission_elapsed = 0.0
-    salvage_value = 0
-    contract_sync_accumulator = 0.0
-    extraction_enabled = false
-    extraction_progress = 0.0
-    storm_active = false
-    storm_elapsed = 0.0
-    storm_remaining = 0.0
-    enemy_spawned = false
-    enemy_wave_index = 0
-    enemy_wave_timer = 0.0
-    next_enemy_id = 1
-    reviving.clear()
-    revive_progress.clear()
-    scan_device_active = false
-    scan_device_position = Vector3.ZERO
-    scan_peer_id = -1
-    scan_remaining = 0.0
-    scan_cooldown = 0.0
-    _journal_visible = false
-    if _journal_panel != null:
-        _journal_panel.visible = false
-    _hide_clue_minigame()
-    if _menu_world != null:
-        _menu_world.visible = false
-    if _resonance_stage != null:
-        _resonance_stage.start_planet("electromagnetic")
-    _game_layer.visible = true
-    _menu_layer.visible = false
-    var focused := get_viewport().gui_get_focus_owner()
-    if focused != null:
-        focused.release_focus()
-    for peer_id in connected_ids:
-        if is_host:
-            spawn_player_for_peer.rpc(peer_id)
-        else:
-            spawn_player_for_peer(peer_id)
-    sync_vitals(departure)
-    if is_host:
-        sync_full_state.rpc(_world_snapshot())
 
 func _prepare_layout() -> void:
     var rng := RandomNumberGenerator.new()
@@ -2566,14 +2470,10 @@ func _build_exploration_clues() -> void:
 func _spawn_position(peer_id: int) -> Vector3:
     if current_planet_id == "ruin" and _ruin_planet != null:
         return _ruin_planet.spawn_position(peer_id)
-    if current_planet_id == "electromagnetic" and _resonance_stage != null:
-        return _resonance_stage.spawn_position(peer_id)
     var slots := [Vector3(SAFEHOUSE.x - 2.2, 0.0, SAFEHOUSE.y + 1.8), Vector3(SAFEHOUSE.x, 0.0, SAFEHOUSE.y + 1.8), Vector3(SAFEHOUSE.x + 2.2, 0.0, SAFEHOUSE.y + 1.8), Vector3(SAFEHOUSE.x + 4.4, 0.0, SAFEHOUSE.y + 1.8)]
     return slots[(peer_id - 1) % slots.size()]
 
 func get_active_map_size() -> Vector2:
-    if current_planet_id == "electromagnetic" and _resonance_stage != null:
-        return _resonance_stage.get_active_map_size()
     return MAP_SIZE
 
 func _enemy_spawn_center_away_from_players(preferred: Vector2) -> Vector2:
@@ -2974,7 +2874,7 @@ func _update_storm_visual(_delta: float) -> void:
 func _update_vision_overlay() -> void:
     if _vision_overlay == null:
         return
-    var vision_obscured := storm_active and current_planet_id != "electromagnetic"
+    var vision_obscured := storm_active
     _vision_overlay.visible = vision_obscured
     var material := _vision_overlay.material as ShaderMaterial
     if material == null:
@@ -2992,12 +2892,6 @@ func sync_storm_state(active: bool, remaining: float) -> void:
         storm_elapsed = 0.0
 
 func start_scan_for_peer(peer_id: int) -> void:
-    if current_planet_id == "electromagnetic" and _resonance_stage != null:
-        if is_host:
-            _resonance_stage.request_scan(peer_id)
-        else:
-            request_scan.rpc_id(1, peer_id)
-        return
     if not is_host:
         request_scan.rpc_id(1, peer_id)
         return
@@ -3594,21 +3488,6 @@ func handle_action(peer_id: int, action: String) -> void:
         return
     if _ruin_planet != null and current_planet_id == "ruin" and _ruin_planet.handle_action(peer_id, action):
         return
-    if current_planet_id == "electromagnetic" and _resonance_stage != null:
-        var target := _resonance_stage.get_stage_action_target(peer_id, action)
-        if not is_host:
-            _resonance_stage.request_coop_action.rpc_id(1, peer_id, action, String(target.get("puzzle_id", "")), target)
-        elif not target.is_empty() or action in ["drop", "revive"]:
-            var carrier: SpacePlayer3D = players.get(peer_id) as SpacePlayer3D
-            if action == "pickup" and carrier != null and carrier.carrying < 3 and _items.occupied(peer_id) >= 2:
-                _ship_session._notify(peer_id, "物品栏已满，先空出一格再搬运设备。")
-                return
-            _resonance_stage.handle_stage_action(peer_id, action, int(target.get("target_id", 0)))
-            if _items.sync_heavy(peer_id):
-                _items.publish()
-        elif action == "repair" or action == "pickup":
-            _resonance_stage.feedback_no_target(peer_id, action)
-        return
     if not is_host:
         request_action.rpc_id(1, peer_id, action)
         return
@@ -3881,12 +3760,6 @@ func _tick_revive(delta: float) -> void:
             revive_progress[reviver_id] = progress
 
 func attack_from_peer(peer_id: int) -> void:
-    if current_planet_id == "electromagnetic" and _resonance_stage != null:
-        if is_host:
-            _resonance_stage.attack_from_peer(peer_id)
-        else:
-            request_attack.rpc_id(1, peer_id)
-        return
     if not is_host:
         request_attack.rpc_id(1, peer_id)
         return
@@ -3984,8 +3857,6 @@ func damage_player(peer_id: int, amount: int) -> void:
         player.velocity = Vector3.ZERO
         player.sprinting = false
         player.stop_jet()
-        if _resonance_stage != null:
-            _resonance_stage.release_core_carrier(peer_id, player.global_position)
         _set_status("玩家 %d 倒地。" % peer_id)
         _spawn_particle_burst(player.global_position + Vector3(0, 1.0, 0), Color("#ff3333"), 15)
         camera_shake_rpc.rpc(peer_id, 0.2, 0.28)
@@ -4005,8 +3876,6 @@ func kill_player_in_lava(peer_id: int) -> void:
     player.velocity = Vector3.ZERO
     reviving.erase(peer_id)
     revive_progress.erase(peer_id)
-    if _resonance_stage != null:
-        _resonance_stage.release_core_carrier(peer_id, player.global_position)
     _set_status("玩家 %d 坠入熔岩，无法复活。" % peer_id)
     floating_feedback_rpc.rpc(player.global_position + Vector3(0.0, 1.4, 0.0), "熔岩阵亡 · 无法复活", Color("#ff5f43"))
     show_feedback_rpc.rpc("熔岩阵亡：队友无法复活", Color("#ff4b3e"), 2.2)
@@ -4117,9 +3986,6 @@ func _tick_extraction(delta: float) -> void:
 
 @rpc("authority", "call_local", "reliable")
 func return_to_ship(reason: String, final_vitals: Array = []) -> void:
-    if current_planet_id == "electromagnetic":
-        _return_from_resonance(reason, final_vitals)
-        return
     var returning_vitals := final_vitals if not final_vitals.is_empty() else _vitals_snapshot()
     if is_host:
         _save_planet_progress(mission_failed)
@@ -4215,37 +4081,6 @@ func return_to_ship(reason: String, final_vitals: Array = []) -> void:
     if is_host:
         _ship_session.broadcast()
 
-func _return_from_resonance(reason: String, final_vitals: Array = []) -> void:
-    var returning_vitals := final_vitals if not final_vitals.is_empty() else _vitals_snapshot()
-    if is_host:
-        _items.clear_planet_cargo()
-        _ship_session.settle(mission_completed, 0, reason)
-    if _resonance_stage != null:
-        _resonance_stage.stop_stage()
-    current_planet_id = "demo"
-    game_started = false
-    mission_completed = false
-    mission_failed = false
-    mission_summary = ""
-    mission_return_timer = 0.0
-    extraction_enabled = false
-    extraction_progress = 0.0
-    storm_active = false
-    storm_elapsed = 0.0
-    storm_remaining = 0.0
-    reviving.clear()
-    revive_progress.clear()
-    _clear_players()
-    if _menu_world != null:
-        _menu_world.visible = true
-    if _game_layer != null:
-        _game_layer.visible = false
-    if _menu_layer != null:
-        _menu_layer.visible = true
-    _ship_session.enter_ship(true, connected_ids, _ship_session.snapshot(), returning_vitals)
-    _ship_session.show_notice(reason)
-    if is_host:
-        _ship_session.broadcast()
 
 func _objectives_ready() -> bool:
     return activated_beacons.size() >= beacon_positions.size() and anomaly_resolved and _missing_required_knowledge().is_empty()
@@ -4261,7 +4096,7 @@ func _enemy_snapshot() -> Array:
     return snapshot
 
 func _world_snapshot() -> Dictionary:
-    return {"extraction_enabled": extraction_enabled, "extraction_progress": extraction_progress, "planet_id": current_planet_id, "ruin_enemies": _ruin_planet.enemy_snapshot() if (_ruin_planet != null and current_planet_id == "ruin") else [], "kit": kit_assignments.duplicate(true), "credits": credits, "owned_skins": owned_skins, "player_skins": player_skins.duplicate(true), "resonance_state": _resonance_stage.stage_snapshot() if current_planet_id == "electromagnetic" and _resonance_stage != null else {}, "ship_state": _ship_session.snapshot(), "wave": enemy_wave_index, "timer": enemy_wave_timer, "enemies": _enemy_snapshot(), "beacons": activated_beacons, "crates": taken_crates, "samples": taken_samples, "deposited": deposited_resources, "salvage": salvage_value, "mission_elapsed": mission_elapsed, "knowledge": knowledge_flags.keys(), "anomaly_resolved": anomaly_resolved, "ending_choice": ending_choice, "story_flags": story_flags, "side_quest_states": side_quest_states, "achievements": achievement_flags, "world_flags": world_flags, "resource_epoch": _planet_resource_epoch, "lost_cargo": lost_cargo, "rift_valve_open": rift_valve_open, "signal_mode": signal_mode, "signal_lure_until": signal_lure_until, "signal_lure_position": signal_lure_position, "signal_cooldown_until": signal_cooldown_until, "map_markers": map_markers, "vitals": _vitals_snapshot(), "beacon_positions": beacon_positions, "crate_positions": crate_positions, "sample_positions": sample_positions, "journal": journal_entries, "regions": discovered_regions, "clues": discovered_clues, "scan_clues": scan_revealed_clues, "scan_device_active": scan_device_active, "scan_device_position": scan_device_position, "scan_remaining": scan_remaining, "goofy_effects": _goofy_items.snapshot() if _goofy_items != null else [], "field_state": _field_interactions.snapshot() if _field_interactions != null else {}, "roam_state": _roam_activities.snapshot() if _roam_activities != null else {}}
+    return {"extraction_enabled": extraction_enabled, "extraction_progress": extraction_progress, "planet_id": current_planet_id, "ruin_enemies": _ruin_planet.enemy_snapshot() if (_ruin_planet != null and current_planet_id == "ruin") else [], "kit": kit_assignments.duplicate(true), "credits": credits, "owned_skins": owned_skins, "player_skins": player_skins.duplicate(true), "ship_state": _ship_session.snapshot(), "wave": enemy_wave_index, "timer": enemy_wave_timer, "enemies": _enemy_snapshot(), "beacons": activated_beacons, "crates": taken_crates, "samples": taken_samples, "deposited": deposited_resources, "salvage": salvage_value, "mission_elapsed": mission_elapsed, "knowledge": knowledge_flags.keys(), "anomaly_resolved": anomaly_resolved, "ending_choice": ending_choice, "story_flags": story_flags, "side_quest_states": side_quest_states, "achievements": achievement_flags, "world_flags": world_flags, "resource_epoch": _planet_resource_epoch, "lost_cargo": lost_cargo, "rift_valve_open": rift_valve_open, "signal_mode": signal_mode, "signal_lure_until": signal_lure_until, "signal_lure_position": signal_lure_position, "signal_cooldown_until": signal_cooldown_until, "map_markers": map_markers, "vitals": _vitals_snapshot(), "beacon_positions": beacon_positions, "crate_positions": crate_positions, "sample_positions": sample_positions, "journal": journal_entries, "regions": discovered_regions, "clues": discovered_clues, "scan_clues": scan_revealed_clues, "scan_device_active": scan_device_active, "scan_device_position": scan_device_position, "scan_remaining": scan_remaining, "goofy_effects": _goofy_items.snapshot() if _goofy_items != null else [], "field_state": _field_interactions.snapshot() if _field_interactions != null else {}, "roam_state": _roam_activities.snapshot() if _roam_activities != null else {}}
 
 func _vitals_snapshot() -> Array:
     var snapshot: Array = []
@@ -4325,13 +4160,6 @@ func sync_full_state(snapshot: Dictionary) -> void:
             if carrier != null:
                 carrier.set_tool(kit_tool_for(int(peer_id)))
     var snapshot_planet := String(snapshot.get("planet_id", "demo"))
-    if snapshot_planet == "electromagnetic":
-        if not game_started or current_planet_id != "electromagnetic":
-            _start_resonance_planet()
-        if _resonance_stage != null:
-            _resonance_stage.apply_stage_snapshot(snapshot.get("resonance_state", {}))
-        sync_vitals(snapshot.get("vitals", []))
-        return
     if not game_started:
         _start_planet()
     extraction_enabled = bool(snapshot.get("extraction_enabled", false))
@@ -4543,14 +4371,6 @@ func _next_objective_text() -> String:
 
 func _update_hud() -> void:
     if not game_started:
-        return
-    if current_planet_id == "electromagnetic" and _resonance_stage != null:
-        _side_quest_panel.visible = false
-        _compass_panel.visible = false
-        _objective_panel.visible = not _journal_visible
-        _vitals_panel.visible = not _journal_visible
-        _hint_label.visible = not _journal_visible
-        _resonance_stage.update_hud(players.get(multiplayer.get_unique_id()) as SpacePlayer3D)
         return
     _objective_panel.visible = not _journal_visible
     _side_quest_panel.visible = not _journal_visible
@@ -4776,9 +4596,6 @@ func _nearest_threat_distance(local: SpacePlayer3D) -> float:
 
 func _update_interaction_hint() -> void:
     if _interaction_label == null or not game_started:
-        return
-    if current_planet_id == "electromagnetic" and _resonance_stage != null:
-        _resonance_stage.update_hint(players.get(multiplayer.get_unique_id()) as SpacePlayer3D)
         return
     if _interaction_progress != null:
         _interaction_progress.visible = false

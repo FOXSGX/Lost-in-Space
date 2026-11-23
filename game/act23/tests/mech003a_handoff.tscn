@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://act23/tests/mech003a_handoff.gd" id="1_h"]
+
+[node name="Mech003AHandoff" type="Node"]
+script = ExtResource("1_h")
