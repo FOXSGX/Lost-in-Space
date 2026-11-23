@@ -79,6 +79,14 @@ var _wind_label: Label
 ## 表现层：标题屏 / 开场倒计时 / 浮字 / 结算
 var _presentation: CanvasLayer
 var _round_active := true
+## 局内控制：暂停 / 静音（2026-11-23 第七轮）
+var _paused := false
+var _muted := false
+## 本局统计（结算面板用）
+var shots_this_round := 0
+var saves_this_round := 0
+## 奶龙等级：每 2 球 +1，HUD 显示，难度曲线与它同步
+var dragon_level := 1
 ## 蓄力条（准星下方，只在按住左键时出现）
 var _charge_track: ColorRect
 var _charge_fill: ColorRect
@@ -191,6 +199,9 @@ func _ready() -> void:
 	elif args.has("--wind-goal"):
 		_automation = true
 		call_deferred("_run_wind_goal_test")
+	elif args.has("--pause-test"):
+		_automation = true
+		call_deferred("_run_pause_test")
 
 	_build_presentation()
 	set_process(true)
@@ -204,8 +215,12 @@ func _build_presentation() -> void:
 		return
 	add_child(_presentation)
 	_presentation.call("setup", _font)
+	_presentation.call("set_mute_state", _muted)
 	_presentation.connect("start_requested", _on_start_requested)
 	_presentation.connect("countdown_finished", _on_countdown_finished)
+	_presentation.connect("resume_requested", _on_resume_requested)
+	_presentation.connect("restart_requested", _on_restart_requested)
+	_presentation.connect("mute_toggled", _on_mute_toggled)
 	if _automation:
 		# 自动化（自测/截图/录像）直接开局，不打包场屏与倒计时，保证确定性。
 		_round_active = true
@@ -226,6 +241,58 @@ func _on_start_requested() -> void:
 func _on_countdown_finished() -> void:
 	_round_active = true
 	_set_play_enabled(true)
+
+
+# ---------------------------------------------------------------- 暂停 / 静音
+
+## 打开暂停：冻结整棵树（计时、物理、AI 一起停），释放鼠标给按钮。
+func _open_pause() -> void:
+	if _paused or not _round_active or completed:
+		return
+	_paused = true
+	_charging = false
+	_charge = 0.0
+	if _charge_track != null:
+		_charge_track.visible = false
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	get_tree().paused = true
+	if _presentation != null:
+		_presentation.call("show_pause", _muted)
+
+
+func _close_pause(recapture: bool = true) -> void:
+	if not _paused:
+		return
+	_paused = false
+	get_tree().paused = false
+	if _presentation != null:
+		_presentation.call("hide_pause")
+	if recapture and _round_active and not completed:
+		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+
+
+func _on_resume_requested() -> void:
+	_close_pause()
+
+
+func _on_restart_requested() -> void:
+	_close_pause(false)
+	reset_round()
+
+
+func _on_mute_toggled() -> void:
+	_set_muted(not _muted)
+
+
+func _set_muted(value: bool) -> void:
+	_muted = value
+	if _sfx != null:
+		_sfx.call("set_muted", value)
+	if _presentation != null:
+		_presentation.call("set_mute_state", value)
+	_save_best()
+	if not _paused:
+		_flash("音效已关闭" if value else "音效已开启", 1.1)
 
 
 func _set_play_enabled(enabled: bool) -> void:
@@ -301,6 +368,16 @@ func _input(event: InputEvent) -> void:
 			_toggle_help()
 		elif event.keycode == KEY_F4:
 			_toggle_blender_test()
+		elif event.keycode == KEY_P:
+			_open_pause()
+			get_viewport().set_input_as_handled()
+		elif event.keycode == KEY_M:
+			_set_muted(not _muted)
+			get_viewport().set_input_as_handled()
+		elif event.keycode == KEY_ESCAPE and Input.mouse_mode != Input.MOUSE_MODE_CAPTURED:
+			# 鼠标已经释放时，Esc 不再“切回锁定”，而是打开暂停菜单。
+			_open_pause()
+			get_viewport().set_input_as_handled()
 
 
 # ---------------------------------------------------------------- world
@@ -480,6 +557,7 @@ func _build_sfx() -> void:
 	_sfx = load("res://scripts/sfx.gd").new() as Node
 	_sfx.name = "Sfx"
 	add_child(_sfx)
+	_sfx.call("set_muted", _muted)
 
 
 func _on_dragon_state_changed(current: String) -> void:
@@ -841,6 +919,7 @@ func _update_arcade_label() -> void:
 	var text := "%02d:%02d　　%d 分" % [total / 60, total % 60, score]
 	if combo > 1:
 		text += "　　x%d" % combo
+	text += "　　Lv.%d" % dragon_level
 	_arcade_label.text = text
 	var low := round_time_left <= 10.0
 	if combo >= 5 and not low:
@@ -911,6 +990,7 @@ func _try_kick(power: float = 1.0) -> bool:
 		_flash("中间被挡住了，换个位置再踢")
 		return false
 
+	shots_this_round += 1
 	ball.call("kick", forward, KICK_IMPULSE * power)
 	if _sfx != null:
 		_sfx.call("play", "kick")
@@ -989,13 +1069,17 @@ func _on_goal_scored(total: int, target: int) -> void:
 		best_combo_this_round = maxi(best_combo_this_round, combo)
 		_combo_timer = COMBO_WINDOW
 		_counter_label.text = "已进 %d 球" % loaded_count
-		_flash("+%d　连击 x%d　+%ds" % [points, combo, int(TIME_BONUS_PER_GOAL)], 1.8)
+		var next_level := 1 + int(goals_this_round / 2)
+		var level_note := ""
+		if next_level > dragon_level:
+			level_note = "　奶龙 Lv.%d" % next_level
+		_raise_difficulty()
+		_flash("+%d　连击 x%d　+%ds%s" % [points, combo, int(TIME_BONUS_PER_GOAL), level_note], 1.8)
 		if _presentation != null and player != null:
 			var cam := player.get("camera") as Camera3D
 			if cam != null:
 				_presentation.call("celebrate", cam.unproject_position(ball.global_position + Vector3.UP * 0.6),
 					points, combo, Color("#ffcf5c"))
-		_raise_difficulty()
 		_respawn_timer = 0.9
 		return
 
@@ -1011,6 +1095,7 @@ func _raise_difficulty() -> void:
 	if dragon == null or _dragon_defaults.is_empty():
 		return
 	var rank := float(goals_this_round) * 0.5
+	dragon_level = 1 + int(goals_this_round / 2)
 	dragon.set("walk_speed", minf(float(_dragon_defaults["walk_speed"]) + 0.07 * rank, 3.2))
 	dragon.set("charge_speed", minf(float(_dragon_defaults["charge_speed"]) + 0.06 * rank, 4.0))
 	dragon.set("intercept_cooldown", maxf(1.2, float(_dragon_defaults["intercept_cooldown"]) - 0.08 * rank))
@@ -1054,7 +1139,8 @@ func _end_round() -> void:
 		best_score = score
 		_save_best()
 	if _presentation != null and arcade:
-		_presentation.call("show_result", score, best_score, goals_this_round, best_combo_this_round, is_record)
+		_presentation.call("show_result", score, best_score, goals_this_round, best_combo_this_round,
+			is_record, shots_this_round, saves_this_round)
 	else:
 		_banner_label.text = "时间到\n得分 %d · 最高 %d\n按 R 再来一局" % [score, best_score]
 		_banner.visible = true
@@ -1064,16 +1150,19 @@ func _load_best() -> void:
 	var cfg := ConfigFile.new()
 	if cfg.load(RECORD_FILE) == OK:
 		best_score = int(cfg.get_value("record", "best", 0))
+		_muted = bool(cfg.get_value("audio", "muted", false))
 
 
 func _save_best() -> void:
 	var cfg := ConfigFile.new()
 	cfg.load(RECORD_FILE)
 	cfg.set_value("record", "best", best_score)
+	cfg.set_value("audio", "muted", _muted)
 	cfg.save(RECORD_FILE)
 
 
 func _on_dragon_blocked(_point: Vector3, _speed: float) -> void:
+	saves_this_round += 1
 	if _sfx != null:
 		_sfx.call("play", "block")
 	if arcade and combo > 1:
@@ -1134,6 +1223,9 @@ func reset_round() -> void:
 	_respawn_timer = -1.0
 	round_time_left = ROUND_SECONDS
 	goals_this_round = 0
+	shots_this_round = 0
+	saves_this_round = 0
+	dragon_level = 1
 	_charging = false
 	_charge = 0.0
 	_clear_wind()
@@ -1319,6 +1411,83 @@ func _run_arcade_test() -> void:
 	get_tree().quit(0 if failures.is_empty() else 1)
 
 
+## 暂停 / 静音 / 统计自测：不依赖人工操作。
+func _run_pause_test() -> void:
+	var passes: Array = []
+	var failures: Array = []
+	print("GULU PAUSE TEST start")
+	await _wait(0.6)
+	reset_round()
+	await _wait(0.3)
+	_check(not _paused and not get_tree().paused, "starts unpaused", passes, failures)
+
+	# 先让球动起来，确认暂停真的冻结物理。
+	ball.call("kick", Vector3(1.0, 0.0, 0.0), 14.0)
+	await _wait(0.2)
+	var paused_time := round_time_left
+	var paused_speed := _ball_speed()
+	_check(paused_speed > 1.0, "ball is moving before pause (%.1f m/s)" % paused_speed, passes, failures)
+
+	_open_pause()
+	_check(_paused and get_tree().paused, "pause freezes the tree", passes, failures)
+	_check(bool(_presentation.call("pause_visible")), "pause menu shows", passes, failures)
+	_check(not player.can_process(), "player stops processing while paused", passes, failures)
+
+	await _wait(0.6)
+	_check(is_equal_approx(round_time_left, paused_time), "round timer frozen while paused", passes, failures)
+	_check(absf(_ball_speed() - paused_speed) < 0.01, "ball physics frozen while paused", passes, failures)
+
+	# 静音开关（含写盘）
+	var mute_before := bool(_sfx.get("muted"))
+	_presentation.emit_signal("mute_toggled")
+	_check(bool(_sfx.get("muted")) == not mute_before and bool(_sfx.get("muted")) == _muted,
+		"mute toggles the sfx layer", passes, failures)
+	var cfg := ConfigFile.new()
+	_check(cfg.load(RECORD_FILE) == OK and bool(cfg.get_value("audio", "muted", false)) == _muted,
+		"mute is saved to disk", passes, failures)
+	_presentation.emit_signal("mute_toggled")
+	_check(bool(_sfx.get("muted")) == mute_before, "mute toggles back", passes, failures)
+
+	# 继续
+	_presentation.emit_signal("resume_requested")
+	_check(not _paused and not get_tree().paused, "resume unfreezes the tree", passes, failures)
+	_check(not bool(_presentation.call("pause_visible")), "pause menu hides on resume", passes, failures)
+	await _wait(0.25)
+	_check(round_time_left < paused_time, "round timer resumes", passes, failures)
+
+	# 暂停里重开
+	score = 250
+	round_time_left = 12.0
+	_open_pause()
+	_presentation.emit_signal("restart_requested")
+	_check(not _paused and not get_tree().paused, "restart leaves pause", passes, failures)
+	_check(score == 0 and is_equal_approx(round_time_left, ROUND_SECONDS), "restart resets the round", passes, failures)
+	_check(shots_this_round == 0 and saves_this_round == 0, "restart clears the shot stats", passes, failures)
+
+	# 统计 & 等级
+	_place_player(BALL_HOME + Vector3(-1.4, 0.02, 0.0), BALL_HOME)
+	_aim_at(BALL_HOME + Vector3(6.0, 0.5, 0.0))
+	await _wait(0.25)
+	var kicked := _try_kick(1.0)
+	_check(kicked and shots_this_round == 1, "kick counts as a shot", passes, failures)
+	_on_dragon_blocked(Vector3.ZERO, 8.0)
+	_check(saves_this_round == 1, "keeper save counts", passes, failures)
+	goals_this_round = 2
+	_raise_difficulty()
+	_update_arcade_label()
+	_check(dragon_level == 2, "two goals raise the keeper level", passes, failures)
+	_check(_arcade_label.text.contains("Lv.%d" % dragon_level), "HUD shows keeper level", passes, failures)
+
+	round_time_left = 0.2
+	await _wait(0.6)
+	_check(bool(_presentation.call("result_visible")), "result panel shows after timeout", passes, failures)
+	_check(int(_presentation.get("last_result_shots")) == shots_this_round, "result carries shot count", passes, failures)
+	_check(int(_presentation.get("last_result_saves")) == saves_this_round, "result carries save count", passes, failures)
+
+	print("GULU PAUSE SUMMARY passes=%d failures=%d" % [passes.size(), failures.size()])
+	get_tree().quit(0 if failures.is_empty() else 1)
+
+
 func _run_dragon_test() -> void:
 	var passes: Array = []
 	var failures: Array = []
@@ -1444,7 +1613,12 @@ func _run_ui_shots() -> void:
 	await _shot("21_countdown.png")
 	await _wait(2.6)
 	if _presentation != null:
-		_presentation.call("show_result", 940, 1240, 5, 4, false)
+		_presentation.call("show_pause", _muted)
+	await _wait(0.5)
+	await _shot("23_pause.png")
+	if _presentation != null:
+		_presentation.call("hide_pause")
+		_presentation.call("show_result", 940, 1240, 5, 4, false, 12, 4)
 	await _wait(0.7)
 	await _shot("22_result.png")
 	print("GULU UI SHOTS done")

@@ -25,6 +25,8 @@ const VOLUME_DB := {
 var _players: Dictionary = {}
 var _last_ms: Dictionary = {}
 var _duck_until := 0
+## 静音：只挡播放，不销毁播放器；设置会被 gulu_app 写进 user://gulu_record.cfg。
+var muted := false
 
 
 func _ready() -> void:
@@ -44,12 +46,22 @@ func _ready() -> void:
 		_last_ms[key] = -100000
 
 
+func set_muted(value: bool) -> void:
+	muted = value
+
+
+func is_muted() -> bool:
+	return muted
+
+
 func play(key: String) -> void:
 	play_pitched(key, 1.0)
 
 
 ## 带音高变化（连击 / 倒计时用）：1.0 = 原调，>1 更尖。
 func play_pitched(key: String, pitch: float) -> void:
+	if muted:
+		return
 	var player := _players.get(key) as AudioStreamPlayer
 	if player == null:
 		return
