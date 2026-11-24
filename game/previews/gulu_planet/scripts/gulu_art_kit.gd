@@ -13,6 +13,40 @@ extends RefCounted
 const SHADER_METAL := preload("res://shaders/aqs2_metal.gdshader")
 const SHADER_ROCK := preload("res://shaders/aqs2_rock.gdshader")
 
+## ART-SAMPLE-002 的 2K 材质家族（2026-11-25 按《美术制作与 AI 协作指南》方法二接入）：
+## paint / cast / mach / conc / rock 各一套 normal + rough + mask，按家族绑定，
+## 不再全场景共用同一张噪声（指南红线 5）。
+const TEX_DIR := "res://assets/textures/"
+var _fam_cache: Dictionary = {}
+
+
+func _family_tex(family: String, kind: String) -> Texture2D:
+	var key := family + "_" + kind
+	if _fam_cache.has(key):
+		return _fam_cache[key] as Texture2D
+	var path := TEX_DIR + key + ".png"
+	var tex: Texture2D = load(path) as Texture2D if ResourceLoader.exists(path) else null
+	_fam_cache[key] = tex
+	return tex
+
+
+## 把一族 2K 细节（法线/粗糙/掩膜）绑到材质上；缺资源时静默退回程序化。
+func _apply_family(m: ShaderMaterial, family: String, scale: float = 3.2,
+		strength: float = 0.55) -> void:
+	var n := _family_tex(family, "normal")
+	var r := _family_tex(family, "rough")
+	var k := _family_tex(family, "mask")
+	if n != null:
+		m.set_shader_parameter("detail_normal", n)
+		m.set_shader_parameter("use_detail", true)
+	if r != null:
+		m.set_shader_parameter("detail_rough", r)
+	if k != null:
+		m.set_shader_parameter("detail_mask", k)
+		m.set_shader_parameter("use_detail_mask", true)
+	m.set_shader_parameter("detail_scale", scale)
+	m.set_shader_parameter("detail_strength", strength)
+
 var _cache: Dictionary = {}
 
 
@@ -24,6 +58,7 @@ func paint(color: Color, rough: float = 0.46, metallic: float = 0.10,
 	if _cache.has(key):
 		return _cache[key] as ShaderMaterial
 	var m := _metal_base(color, rough, metallic, wear, seed)
+	_apply_family(m, "paint", 3.4, 0.55)
 	m.set_shader_parameter("paint_color", color)
 	m.set_shader_parameter("primer_color", Color(color.r * 0.55, color.g * 0.34, color.b * 0.28))
 	m.set_shader_parameter("bare_color", Color("#8e989c"))
@@ -53,6 +88,7 @@ func bare_metal(color: Color = Color("#8b979b"), rough: float = 0.30, seed: floa
 	if _cache.has(key):
 		return _cache[key] as ShaderMaterial
 	var m := _metal_base(color, rough, 0.85, 0.35, seed)
+	_apply_family(m, "mach", 2.6, 0.60)
 	m.set_shader_parameter("paint_color", color)
 	m.set_shader_parameter("bare_color", Color("#aab3b6"))
 	m.set_shader_parameter("chip_threshold", 1.55)
@@ -67,6 +103,7 @@ func dark_metal(color: Color = Color("#2b3937"), rough: float = 0.52, seed: floa
 	if _cache.has(key):
 		return _cache[key] as ShaderMaterial
 	var m := _metal_base(color, rough, 0.55, 0.55, seed)
+	_apply_family(m, "cast", 2.8, 0.55)
 	m.set_shader_parameter("paint_color", color)
 	m.set_shader_parameter("bare_color", Color("#6f7c7e"))
 	m.set_shader_parameter("chip_threshold", 0.92)
@@ -80,6 +117,7 @@ func concrete(color: Color = Color("#556662"), rough: float = 0.88, seed: float 
 	if _cache.has(key):
 		return _cache[key] as ShaderMaterial
 	var m := _metal_base(color, rough, 0.0, 0.35, seed)
+	_apply_family(m, "conc", 2.2, 0.50)
 	m.set_shader_parameter("paint_color", color)
 	m.set_shader_parameter("primer_color", Color(color.r * 0.78, color.g * 0.78, color.b * 0.76))
 	m.set_shader_parameter("bare_color", Color("#7a8580"))
@@ -117,11 +155,10 @@ func rock(stone_a: Color, stone_b: Color, stone_c: Color,
 	m.set_shader_parameter("damp_strength", 0.14)
 	m.set_shader_parameter("patch_gain", crack)
 	m.set_shader_parameter("cleft_gain", 0.8)
-	m.set_shader_parameter("cleft_scale", 0.55)
-	m.set_shader_parameter("use_detail", false)
-	m.set_shader_parameter("use_detail_mask", false)
+	m.set_shader_parameter("cleft_scale", 0.50)
 	m.set_shader_parameter("ambient_fill", 0.06)
 	m.set_shader_parameter("world_seed", seed)
+	_apply_family(m, "rock", 3.6, 0.70)
 	_cache[key] = m
 	return m
 

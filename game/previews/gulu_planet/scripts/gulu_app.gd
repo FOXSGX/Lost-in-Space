@@ -194,6 +194,9 @@ func _ready() -> void:
 	elif args.has("--ui-shots"):
 		_automation = true
 		call_deferred("_run_ui_shots")
+	elif args.has("--art-shots"):
+		_automation = true
+		call_deferred("_run_art_shots")
 	elif args.has("--flow-test"):
 		_automation = true
 		call_deferred("_run_flow_test")
@@ -2349,6 +2352,32 @@ func _run_perf() -> void:
 	print("GULU PERF samples=%d fps_avg=%.1f fps_min=%.1f draw_calls_avg=%.0f primitives_avg=%.0f" % [
 		fps_samples.size(), fps_avg / count, fps_min, draw_avg / count, prim_avg / count])
 	get_tree().quit(0)
+
+
+# ---------------------------------------------------------------- 验收截图（《指南》方法四）
+
+## A_wide(FOV 50) / B_player_eye(65) / C_interaction(44) / D_threequarter(52)
+## 对应指南“双端实机截图验收与缺陷返修闭环”的四张机位。
+func _run_art_shots() -> void:
+	_shot_dir = "user://gulu_art_shots"
+	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(_shot_dir))
+	await _wait(1.0)
+	await _art_shot("A_wide.png", Vector3(-10.0, 1.06, 19.0), Vector3(9.0, 0.2, -4.0), 50.0)
+	await _art_shot("B_player_eye.png", Vector3(2.4, 0.02, 5.2), Vector3(9.5, 1.0, 0.0), 65.0)
+	await _art_shot("C_interaction.png", Vector3(10.4, 0.02, 2.2), Vector3(12.8, 1.5, 0.0), 44.0)
+	await _art_shot("D_threequarter.png", Vector3(-7.2, 0.02, 13.6), Vector3(-6.2, 0.9, 9.2), 52.0)
+	print("GULU ART SHOTS dir=%s" % ProjectSettings.globalize_path(_shot_dir))
+	get_tree().quit(0)
+
+
+func _art_shot(file_name: String, at: Vector3, target: Vector3, fov: float) -> void:
+	_place_player(at, target)
+	var cam := player.get("camera") as Camera3D
+	var prev := cam.fov
+	cam.fov = fov
+	await _wait(0.5)
+	await _shot(file_name)
+	cam.fov = prev
 
 
 func _shot(file_name: String) -> void:
