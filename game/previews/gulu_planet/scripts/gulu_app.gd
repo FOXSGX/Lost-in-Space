@@ -2362,10 +2362,15 @@ func _run_art_shots() -> void:
 	_shot_dir = "user://gulu_art_shots"
 	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(_shot_dir))
 	await _wait(1.0)
-	await _art_shot("A_wide.png", Vector3(-10.0, 1.06, 19.0), Vector3(9.0, 0.2, -4.0), 50.0)
+	# A_wide 站台点在北货台上；集装箱堆占住了 y=1.06 的老机位（-10,19 正在箱体内），
+	# 机位东移 2 m 出箱，尽量保持原有取景方向；集装箱堆留在左侧近景。
+	await _art_shot("A_wide.png", Vector3(-8.0, 1.06, 19.0), Vector3(9.0, 0.2, -4.0), 50.0)
 	await _art_shot("B_player_eye.png", Vector3(2.4, 0.02, 5.2), Vector3(9.5, 1.0, 0.0), 65.0)
 	await _art_shot("C_interaction.png", Vector3(10.4, 0.02, 2.2), Vector3(12.8, 1.5, 0.0), 44.0)
 	await _art_shot("D_threequarter.png", Vector3(-7.2, 0.02, 13.6), Vector3(-6.2, 0.9, 9.2), 52.0)
+	# 补充机位（不属于《指南》四机位）：本次三件 Blender 中景资产的自查特写
+	await _art_shot("E_service_shed.png", Vector3(2.6, 0.02, -7.6), Vector3(0.2, 1.5, -11.7), 52.0)
+	await _art_shot("F_observation_deck.png", Vector3(1.2, 0.02, 15.4), Vector3(5.4, 2.2, 12.4), 52.0)
 	print("GULU ART SHOTS dir=%s" % ProjectSettings.globalize_path(_shot_dir))
 	get_tree().quit(0)
 

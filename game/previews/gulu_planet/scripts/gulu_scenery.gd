@@ -20,6 +20,10 @@ class_name GuluScenery
 
 const SHADER_DECAL := preload("res://shaders/gulu_contact_decal.gdshader")
 const LOADING_FRAME := preload("res://assets/models/nailong/loading_frame.glb")
+const SERVICE_SHED := preload("res://assets/models/nailong/service_shed.glb")
+const OBS_DECK := preload("res://assets/models/nailong/observation_deck.glb")
+const CONTAINER_A := preload("res://assets/models/nailong/container_a.glb")
+const CONTAINER_B := preload("res://assets/models/nailong/container_b.glb")
 const ATM := preload("res://scripts/core/art_atmosphere_kit.gd")
 
 const HULL := Color("#7f8e86")
@@ -124,11 +128,12 @@ func _glb_materials() -> Dictionary:
 	var orange := (_kit.paint(Color("#b24510"), 0.48, 0.10, 1.15, 303.0) as ShaderMaterial).duplicate() as ShaderMaterial
 	var deep := (_kit.dark_metal(TRIM_DARK, 0.58, 304.0) as ShaderMaterial).duplicate() as ShaderMaterial
 	var bare := (_kit.bare_metal(Color("#666f72"), 0.34, 305.0) as ShaderMaterial).duplicate() as ShaderMaterial
+	var rubber := _kit.rubber(Color("#20282a"))
 	for m in [cream, yellow, orange, deep, bare]:
 		(m as ShaderMaterial).set_shader_parameter("vertex_mask_valid", true)
 	_glb_mats = {
 		"M_PaintCream": cream, "M_PaintYellow": yellow, "M_PaintOrange": orange,
-		"M_SteelDeep": deep, "M_BareSteel": bare,
+		"M_SteelDeep": deep, "M_BareSteel": bare, "M_Rubber": rubber,
 	}
 	return _glb_mats
 
@@ -234,23 +239,12 @@ func _build_loading_yard() -> void:
 
 func _build_service_shed() -> void:
 	var z := -11.8
-	# 四柱 + 斜顶 + 背墙
-	for x in [-2.6, 2.6]:
-		for zz in [z - 1.15, z + 1.15]:
-			_box(Vector3(0.18, 3.0, 0.18), Vector3(x, 1.5, zz), _mat_frame, 0.0, true)
-	var roof := _box(Vector3(6.0, 0.14, 2.9), Vector3(0.0, 3.12, z), _mat_paint_light, 0.0, true)
-	roof.rotation.x = deg_to_rad(-6.0)
-	_box(Vector3(6.0, 2.3, 0.12), Vector3(0.0, 1.15, z - 1.15), _mat_paint, 0.0, true)
-	_box(Vector3(0.12, 2.3, 2.3), Vector3(-2.6, 1.15, z), _mat_paint, 0.0, true)
-	# 工作台：台面 + 台下柜 + 台钳 + 工具箱
-	_box(Vector3(2.4, 0.10, 0.9), Vector3(0.4, 0.86, z + 0.65), _mat_bare, 0.0, true)
-	for x in [-0.55, 1.35]:
-		_box(Vector3(0.10, 0.82, 0.10), Vector3(x, 0.42, z + 0.65), _mat_frame_dark, 0.0, true)
-	_box(Vector3(2.2, 0.62, 0.78), Vector3(0.4, 0.42, z + 0.65), _mat_frame_dark, 0.0, true)
-	_box(Vector3(0.34, 0.26, 0.30), Vector3(-0.6, 1.02, z + 0.66), _mat_amber, 0.0, true)
-	_box(Vector3(0.60, 0.24, 0.34), Vector3(1.1, 1.02, z + 0.66), _mat_paint, 0.0, true)
+	# 维修棚：Blender 资产（四根 H 型钢柱 + 6° 单坡瓦楞屋面 + 瓦楞背墙/侧墙 +
+	# 工作台/台钳/工具箱/挂板 + 吊装遮光工作灯，6.25×3.41×3.10 m）
+	_add_glb(SERVICE_SHED, Vector3(0.0, 0.0, z), 0.0, _glb_materials(), true)
+	# 灯罩内的自发光灯芯（真光仍是下面那盏 OmniLight，光源数量不变）
+	_box(Vector3(0.26, 0.010, 0.26), Vector3(0.4, 2.604, z + 0.2), _mat_amber, 0.0, false)
 	# 棚下工作灯（自发光 + 一盏真光）
-	_box(Vector3(0.5, 0.06, 0.22), Vector3(0.4, 2.72, z + 0.2), _mat_amber, 0.0, false)
 	var lamp := OmniLight3D.new()
 	lamp.position = Vector3(0.4, 2.55, z + 0.2)
 	lamp.light_color = Color("#ffe0b8")
@@ -314,44 +308,11 @@ func _build_derelict_cart() -> void:
 func _build_observation_deck() -> void:
 	var cx := 5.4
 	var cz := 12.4
-	var deck_y := 2.55
-	# 台面 + 四腿 + 斜撑
-	_box(Vector3(4.0, 0.18, 2.4), Vector3(cx, deck_y, cz), _mat_concrete, 0.0, true)
-	for dx in [-1.7, 1.7]:
-		for dz in [-0.95, 0.95]:
-			_box(Vector3(0.14, deck_y, 0.14), Vector3(cx + dx, deck_y * 0.5, cz + dz), _mat_frame_dark, 0.0, true)
-	# 栏杆：立柱 MultiMesh + 两道横杆
-	var post_mesh := BoxMesh.new()
-	post_mesh.size = Vector3(0.06, 1.05, 0.06)
-	var posts := [
-		Vector3(cx - 1.95, deck_y + 0.61, cz),
-		Vector3(cx + 1.95, deck_y + 0.61, cz),
-		Vector3(cx, deck_y + 0.61, cz - 1.15),
-	]
-	var mm := MultiMesh.new()
-	mm.transform_format = MultiMesh.TRANSFORM_3D
-	mm.mesh = post_mesh
-	mm.instance_count = posts.size()
-	for i in range(posts.size()):
-		mm.set_instance_transform(i, Transform3D(Basis(), posts[i]))
-	var post_node := MultiMeshInstance3D.new()
-	post_node.name = "DeckPosts"
-	post_node.multimesh = mm
-	post_node.material_override = _mat_frame
-	post_node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	add_child(post_node)
-	_box(Vector3(4.0, 0.06, 0.06), Vector3(cx, deck_y + 1.12, cz), _mat_frame, 0.0, false)
-	_box(Vector3(0.06, 0.06, 2.4), Vector3(cx - 1.95, deck_y + 1.12, cz), _mat_frame, 0.0, false)
-	_box(Vector3(0.06, 0.06, 2.4), Vector3(cx + 1.95, deck_y + 1.12, cz), _mat_frame, 0.0, false)
-	# 楼梯：六步 + 两侧斜梁
-	for i in range(6):
-		var step_y := 0.20 + float(i) * 0.40
-		_box(Vector3(0.90, 0.08, 0.34), Vector3(cx - 2.55 - float(i) * 0.34, step_y, cz), _mat_bare, 0.0, true)
-	_box(Vector3(2.3, 0.10, 0.10), Vector3(cx - 3.45, 1.30, cz - 0.55), _mat_frame_dark, 0.0, false)
-	_box(Vector3(2.3, 0.10, 0.10), Vector3(cx - 3.45, 1.30, cz + 0.55), _mat_frame_dark, 0.0, false)
-	# 台上一盏小标杆灯
-	_box(Vector3(0.10, 0.60, 0.10), Vector3(cx + 1.6, deck_y + 1.45, cz + 0.9), _mat_frame_dark, 0.0, false)
-	_box(Vector3(0.16, 0.16, 0.16), Vector3(cx + 1.6, deck_y + 1.80, cz + 0.9), _mat_amber, 0.0, false)
+	# 观测台：Blender 资产（承台底板 + 四根方管柱 + 周圈梁/次梁 + 4 块台面板 +
+	# X 形斜撑 + 三面栏杆（上/中/下横杆 + 踢脚）+ 西侧 8 级钢梯 + 标杆灯，6.54×4.50×2.42 m）
+	_add_glb(OBS_DECK, Vector3(cx, 0.0, cz), 0.0, _glb_materials(), true)
+	# 标杆灯内的自发光灯芯（灯罩骨架在 GLB 里；不新增光源）
+	_box(Vector3(0.15, 0.15, 0.15), Vector3(cx + 1.6, 4.35, cz + 0.9), _mat_amber, 0.0, false)
 	_contact(cx, cz, 2.6, 0.5)
 	_contact(cx - 3.4, cz, 1.2, 0.4)
 	ATM.build_ground_skirt(self, "SkirtDeck", Vector3(cx, 0.0, cz), Vector2(4.6, 2.9))
@@ -391,8 +352,12 @@ func _build_pipeline_corridors() -> void:
 ## 北侧货台（顶面 y=1.0）上的集装箱/托盘，以及下沉坑里的管线架。
 func _build_terrace_props() -> void:
 	var deck := 1.0
-	_box(Vector3(3.0, 2.4, 1.3), Vector3(-13.4, deck + 1.20, 18.4), _mat_paint, 0.0, true)
-	_box(Vector3(2.6, 2.2, 1.2), Vector3(-9.6, deck + 1.10, 19.4), _mat_paint_light, 0.06, true)
+	# 集装箱堆：两个规格的 Blender 资产（角件/角柱/周圈梁/瓦楞墙/双扇门 + 锁杆 + 铭牌位）
+	_add_glb(CONTAINER_A, Vector3(-13.4, deck, 18.4), 0.0, _glb_materials(), true)
+	_add_glb(CONTAINER_B, Vector3(-9.6, deck, 19.4), 0.06, _glb_materials(), true)
+	ATM.build_ground_skirt(self, "SkirtBinA", Vector3(-13.4, deck, 18.4), Vector2(4.2, 2.1))
+	ATM.build_ground_skirt(self, "SkirtBinB", Vector3(-9.6, deck, 19.4), Vector2(3.3, 1.8))
+	ATM.build_gravel_cluster(self, "GravelBins", Vector3(-13.7, deck, 16.85), 1.6, 12, 97)
 	_box(Vector3(1.1, 0.14, 1.0), Vector3(-6.6, deck + 0.07, 18.2), _mat_frame_dark, 0.0, true)
 	_box(Vector3(0.95, 0.8, 0.9), Vector3(-6.6, deck + 0.54, 18.2), _mat_paint, 0.18, true)
 	for x in [-17.0, -14.0, -11.0, -8.0, -5.0]:
@@ -452,11 +417,13 @@ func _build_west_yard() -> void:
 
 ## 东侧可漫游区域：集装箱堆 + 天线塔 + 油桶，给“往东走”一个目的地。
 func _build_east_station() -> void:
-	_box(Vector3(3.4, 2.5, 1.4), Vector3(34.0, 1.25, 12.0), _mat_paint, 0.0, true)
-	_box(Vector3(3.0, 2.2, 1.3), Vector3(36.2, 1.10, 14.0), _mat_paint_light, 0.08, true)
-	_box(Vector3(2.6, 2.0, 1.2), Vector3(33.4, 1.00, 15.6), _mat_paint, -0.12, true)
+	# 东侧堆场集装箱：三只两种规格（同 terrace 的两个 GLB 复用，只改朝向）
+	_add_glb(CONTAINER_A, Vector3(34.0, 0.0, 12.0), 0.0, _glb_materials(), true)
+	_add_glb(CONTAINER_B, Vector3(36.2, 0.0, 14.0), 0.08, _glb_materials(), true)
+	_add_glb(CONTAINER_B, Vector3(33.4, 0.0, 15.6), -0.12, _glb_materials(), true)
 	_contact(34.0, 12.0, 2.4, 0.45)
 	_contact(33.4, 15.6, 2.0, 0.45)
+	ATM.build_gravel_cluster(self, "GravelBinsEast", Vector3(31.9, 0.0, 13.9), 1.8, 12, 98)
 	# 天线塔：三根立柱 + 两道横撑 + 信标（与远处信号塔区分：更矮、有舱体）
 	var at := Vector3(38.5, 0.0, 6.0)
 	for dx in [-0.45, 0.45]:
