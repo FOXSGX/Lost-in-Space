@@ -88,6 +88,7 @@ func _ready() -> void:
 	_build_perimeter()
 	_build_yard()
 	_build_imported_dressing()
+	_build_scenery()
 	_build_nest()
 	_build_bay_frame()
 	_build_lights()
@@ -103,6 +104,14 @@ func _build_imported_dressing() -> void:
 	var dressing := load("res://scripts/gulu_asset_dressing.gd").new() as Node3D
 	dressing.name = "ImportedDressing"
 	add_child(dressing)
+
+
+## ART-SYNC-002：场边中景设施（装卸场 / 维修棚 / 废轨矿车 / 观察台 / 管线 / 远塔）。
+## 全部在球路与边界墙之外，无碰撞、不参玩法；见 gulu_scenery.gd 头注释。
+func _build_scenery() -> void:
+	var scenery := load("res://scripts/gulu_scenery.gd").new() as Node3D
+	scenery.name = "Scenery"
+	add_child(scenery)
 
 
 func _build_materials() -> void:
