@@ -46,6 +46,8 @@ var _physics_door_local := Vector3.ZERO
 var _art_crystal: Node3D
 var _art_console: Node3D
 var _art_press: Node3D
+var _task_items: Dictionary = {}
+var _task_points: Dictionary = {}
 
 
 func build(owner: Main3D, parent: Node3D) -> void:
@@ -81,6 +83,32 @@ func level_count() -> int:
 func is_inside(point: Vector3) -> bool:
 	var local := point - global_position
 	return local.y > -1.0 and local.y < FLOOR_HEIGHT * float(LEVELS) + 1.0 and absf(local.x) <= HALF_W + 2.0 and absf(local.z) <= HALF_D + 2.0
+
+
+func task_item_positions() -> Dictionary:
+	var points: Dictionary = {}
+	for id: String in _task_points.keys():
+		points[id] = global_position + _task_points[id]
+	return points
+
+
+func collect_task_item(item_id: String) -> void:
+	if _task_items.has(item_id):
+		var node := _task_items[item_id] as Node3D
+		if node != null:
+			node.visible = false
+
+
+func secret_door_position() -> Vector3:
+	return global_position + Vector3(0.0, FLOOR_HEIGHT * 2.0 + 1.0, -9.1)
+
+
+func pump_console_position() -> Vector3:
+	return global_position + Vector3(4.2, FLOOR_HEIGHT + 1.0, -7.9)
+
+
+func reactor_console_position() -> Vector3:
+	return global_position + Vector3(5.2, 1.0, 4.3)
 
 
 func _process(delta: float) -> void:
@@ -345,6 +373,7 @@ func _furnish(level: int, y: float) -> void:
 		0:
 			_crystal_growth(y)
 			_emergency_bay(y)
+			_reactor_console(y)
 		1:
 			_pump_hall(y)
 			_coolant_room(y)
@@ -398,7 +427,7 @@ func _turbine_hall(y: float) -> void:
 
 
 func _distribution_room(y: float) -> void:
-	# 伪装成配电柜的暗门；本轮只做视觉钩子，剧情信号接入后再开。
+	# 伪装成配电柜的暗门；靠近按 E 进入地下庇护所。
 	ART.block(self, "DisguisedDistributionDoor", Vector3(2.6, 2.6, 0.17), Vector3(0.0, y + 1.3, -9.75), Color("#414e4d"), 0.04)
 	for stripe: int in 7:
 		ART.block(self, "DistributionHazard", Vector3(0.25, 0.75, 0.02), Vector3(-1.0 + float(stripe) * 0.34, y + 0.55, -9.64), AMBER, 0.01, true, 0.12).rotation_degrees.z = 28.0
@@ -419,6 +448,12 @@ func _pump_hall(y: float) -> void:
 	for index: int in 3:
 		ART.torus(self, "PumpGauge", 0.20, 0.27, Vector3(10.5 + float(index) * 0.8, y + 1.7, -9.5), AMBER, true, 0.45)
 	_collider(Vector3(7.2, 1.2, 1.2), Vector3(9.8, y + 0.6, -5.5))
+	# B1 菌群泵控制台：医生方案里手动关闭菌群泵的地方。
+	ART.block(self, "ColonyPumpConsole", Vector3(2.2, 1.1, 0.8), Vector3(4.2, y + 0.55, -7.9), STEEL_DARK, 0.04)
+	ART.block(self, "ColonyPumpScreen", Vector3(1.4, 0.55, 0.07), Vector3(4.2, y + 1.0, -8.34), Color("#8e4a3a"), 0.02, true, 0.4)
+	for index: int in 3:
+		ART.torus(self, "ColonyPumpGauge", 0.16, 0.22, Vector3(3.5 + float(index) * 0.7, y + 1.0, -8.36), AMBER, true, 0.35)
+	_collider(Vector3(2.2, 1.1, 0.8), Vector3(4.2, y + 0.55, -7.9))
 
 
 func _coolant_room(y: float) -> void:
@@ -444,14 +479,26 @@ func _crystal_growth(y: float) -> void:
 
 
 func _emergency_bay(y: float) -> void:
-	# 反应堆点火核心的应急弹射舱；本轮只做结构，不接任务拾取。
-	ART.block(self, "EmergencyBayFloor", Vector3(6.0, 0.1, 5.0), Vector3(10.5, y + 0.06, 4.6), Color("#4e5854"), 0.02)
+	# 反应堆点火核心的应急弹射舱；核心登记为剧情任务物。	ART.block(self, "EmergencyBayFloor", Vector3(6.0, 0.1, 5.0), Vector3(10.5, y + 0.06, 4.6), Color("#4e5854"), 0.02)
 	ART.cylinder(self, "EjectionCapsule", 1.1, 2.4, Vector3(10.5, y + 1.25, 4.6), Color("#7b6c52"))
 	ART.cone(self, "EjectionNose", 0.1, 1.1, 1.0, Vector3(10.5, y + 2.95, 4.6), AMBER)
 	ART.torus(self, "CapsuleClamp", 1.15, 1.3, Vector3(10.5, y + 0.75, 4.6), AMBER, true, 0.4)
 	ART.block(self, "EjectionConsole", Vector3(2.2, 1.1, 0.7), Vector3(7.0, y + 0.7, 4.6), STEEL_DARK, 0.04)
 	ART.block(self, "EjectionScreen", Vector3(0.9, 0.4, 0.05), Vector3(7.0, y + 1.05, 4.25), AMBER, 0.02, true, 0.45)
 	_collider(Vector3(2.4, 2.8, 2.4), Vector3(10.5, y + 1.4, 4.6))
+	var core := _register_task_item("reactor_core", Vector3(7.0, y + 1.05, 5.25), AMBER)
+	ART.cylinder(core, "CoreCasing", 0.24, 0.52, Vector3(0.0, 0.10, 0.0), Color("#6c6253"), 0.02)
+	ART.cylinder(core, "CoreCell", 0.16, 0.38, Vector3(0.0, 0.14, 0.0), Color("#ffd184"), true, 0.6)
+	ART.torus(core, "CoreBand", 0.24, 0.30, Vector3(0.0, 0.10, 0.0), AMBER, true, 0.35)
+	ART.block(core, "CoreHandle", Vector3(0.10, 0.06, 0.34), Vector3(0.0, 0.36, 0.0), STEEL_LIGHT, 0.02)
+
+
+func _reactor_console(y: float) -> void:
+	ART.block(self, "ReactorRestartConsole", Vector3(2.4, 1.1, 0.8), Vector3(5.2, y + 0.55, 4.3), STEEL_DARK, 0.04)
+	ART.block(self, "ReactorRestartPanel", Vector3(1.6, 0.55, 0.08), Vector3(5.2, y + 1.0, 3.84), CORE_GLOW, 0.02, true, 0.35)
+	for index: int in 3:
+		ART.block(self, "ReactorRestartButton", Vector3(0.18, 0.10, 0.05), Vector3(4.7 + float(index) * 0.5, y + 0.82, 3.78), AMBER if index == 2 else STEEL_LIGHT, 0.01, index == 2, 0.3)
+	_collider(Vector3(2.4, 1.1, 0.8), Vector3(5.2, y + 0.55, 4.3))
 
 
 func _ventilation(y: float) -> void:
@@ -552,6 +599,17 @@ func _debris(y: float, level: int) -> void:
 		ART.block(self, "EnergyDebris", Vector3(rng.randf_range(0.12, 0.3), 0.04, rng.randf_range(0.15, 0.3)), Vector3(x, y + 0.03, z), Color("#8a816e"), 0.01).rotation_degrees.y = rng.randf_range(0.0, 180.0)
 	ART.plane(self, "OilStain", Vector2(1.4, 0.8), Vector3(7.0, y + 0.02, -2.0), Color("#242b2b")).rotation_degrees.y = 20.0
 	ART.plane(self, "BloodStain", Vector2(0.8, 0.5), Vector3(-3.0, y + 0.02, 3.0), BLOOD, true, 0.03).rotation_degrees.y = 40.0
+
+
+func _register_task_item(item_id: String, point: Vector3, color: Color) -> Node3D:
+	var root := Node3D.new()
+	root.name = "EnergyTask_" + item_id
+	root.position = point
+	add_child(root)
+	_task_items[item_id] = root
+	_task_points[item_id] = point
+	ART.sphere(root, "TaskGlow", Vector3(0.10, 0.10, 0.10), Vector3(0.0, 0.28, 0.0), color, true, 0.55)
+	return root
 
 
 func _collider(size: Vector3, center: Vector3, rotation_degrees_value := Vector3.ZERO) -> void:

@@ -129,6 +129,7 @@
 - `ruin_hospital_interior.gd`：53 项测试通过；效果图在 `work/ruin-hospital-interior/`。
 - `ruin_school_interior.gd`：28 项测试通过；效果图在 `work/ruin-school-interior/`。
 - `ruin_market_interior.gd`：26 项测试通过；效果图在 `work/ruin-market-interior/`。
+- `ruin_story.gd`：34 项测试通过；`ruin_story_endings.gd`：11 项通过；效果图在 `work/ruin-story/`。
 
 ## 2026-11-06 激光剑与撬棍
 
@@ -213,13 +214,15 @@
 - `godot --headless --path game --script res://tests/ruin_hospital_interior.gd`：53 项通过。
 - `godot --headless --path game --script res://tests/ruin_school_interior.gd`：28 项通过。
 - `godot --headless --path game --script res://tests/ruin_market_interior.gd`：26 项通过。
+- `godot --headless --path game --script res://tests/ruin_story.gd`：34 项通过。
+- `godot --headless --path game --script res://tests/ruin_story_endings.gd`：11 项通过。
 - `godot --headless --path game --script res://tests/ruin_energy_station.gd`：10 项通过。
 - `godot --headless --path game --script res://tests/ruin_energy_station_interior.gd`：34 项通过。
 - `godot --headless --path game --script res://tests/ruin_extraction.gd`：15 项通过。
 - `godot --headless --path game --script res://tests/ruin_multiplayer_entry.gd`：12 项通过。
 - `godot --headless --path game --script res://tests/ruin_merge_test.gd`：12 项通过。
 - 真实双进程 `tests/ruin_network_smoke.gd`：主机 11 项、客户端 7 项通过（登陆 → 客户端第一人称 → 返航）。
-- 截图：`work/ruin-first-person-20261028/`（登陆艇、主街、超市、医院、学校、感染者、激光剑、地图、撤离开放、撤离读条、门锁、撬锁界面、撬棍撬门、能源站）；医院室内另见 `work/ruin-hospital-interior/`；学校室内见 `work/ruin-school-interior/`；超市室内见 `work/ruin-market-interior/`；能源站室内见 `work/ruin-energy-interior/`。
+- 截图：`work/ruin-first-person-20261028/`（登陆艇、主街、超市、医院、学校、感染者、激光剑、地图、撤离开放、撤离读条、门锁、撬锁界面、撬棍撬门、能源站）；医院室内另见 `work/ruin-hospital-interior/`；学校室内见 `work/ruin-school-interior/`；超市室内见 `work/ruin-market-interior/`；能源站室内见 `work/ruin-energy-interior/`；剧情/庇护所见 `work/ruin-story/`。
 - 启动自检：`--headless --quit-after` 无解析/加载错误。
 
 ## 已知边界

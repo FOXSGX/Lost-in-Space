@@ -261,6 +261,13 @@ var _compass_target := ""
 var _compass_direction := ""
 var _compass_distance := 0.0
 var _objective_panel: Panel
+var _ruin_dialogue_panel: Panel
+var _ruin_dialogue_title: Label
+var _ruin_dialogue_body: Label
+var _ruin_dialogue_options: VBoxContainer
+var _ruin_dialogue_visible := false
+var _ruin_dialogue_npc := ""
+var _ruin_dialogue_previous_mouse := Input.MOUSE_MODE_CAPTURED
 var _side_quest_panel: Panel
 var _side_quest_label: Label
 var _vitals_panel: Panel
@@ -359,6 +366,11 @@ func _input(event: InputEvent) -> void:
     if not key_event.pressed or key_event.echo:
         return
     var is_escape := key_event.keycode == KEY_ESCAPE or key_event.physical_keycode == KEY_ESCAPE
+    if _ruin_dialogue_visible:
+        if is_escape:
+            _hide_ruin_dialogue_panel()
+        get_viewport().set_input_as_handled()
+        return
     if _items != null and _items.choice_open and is_escape:
         _items.close_choice()
         get_viewport().set_input_as_handled()
@@ -908,6 +920,76 @@ func _ui_button(parent: Control, text: String, position: Vector2, size: Vector2,
     button.pressed.connect(callback)
     parent.add_child(button)
     return button
+
+func _ensure_ruin_dialogue_panel() -> void:
+    if _ruin_dialogue_panel != null:
+        return
+    _ruin_dialogue_panel = _panel(_game_layer, Vector2.ZERO, Vector2(760, 430), Color(0.018, 0.055, 0.075, 0.97), Color("#62d8cb"), 18)
+    _place_hud(_ruin_dialogue_panel, Control.PRESET_CENTER, Vector2(-380, -215), Vector2(760, 430))
+    _ruin_dialogue_panel.visible = false
+    _ruin_dialogue_title = _ui_label(_ruin_dialogue_panel, "", Vector2(34, 24), Vector2(690, 42), 28, Color("#f1fbff"))
+    _ruin_dialogue_body = _ui_label(_ruin_dialogue_panel, "", Vector2(36, 76), Vector2(688, 190), 17, Color("#d6ece7"))
+    _ruin_dialogue_body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+    _ruin_dialogue_body.vertical_alignment = VERTICAL_ALIGNMENT_TOP
+    _ruin_dialogue_options = VBoxContainer.new()
+    _ruin_dialogue_options.position = Vector2(36, 276)
+    _ruin_dialogue_options.size = Vector2(688, 130)
+    _ruin_dialogue_options.add_theme_constant_override("separation", 8)
+    _ruin_dialogue_panel.add_child(_ruin_dialogue_options)
+
+
+func _show_ruin_dialogue_panel(npc_id: String, body: String, options: Array[String]) -> void:
+    _ensure_ruin_dialogue_panel()
+    _ruin_dialogue_npc = npc_id
+    _ruin_dialogue_visible = true
+    _ruin_dialogue_title.text = "老工程师" if npc_id == "engineer" else "年轻医生"
+    _ruin_dialogue_body.text = body
+    for child in _ruin_dialogue_options.get_children():
+        child.queue_free()
+    for index: int in options.size():
+        var button := Button.new()
+        button.text = "%d  %s" % [index + 1, options[index]]
+        button.focus_mode = Control.FOCUS_NONE
+        button.custom_minimum_size = Vector2(688, 38)
+        button.add_theme_font_size_override("font_size", 17)
+        var normal := StyleBoxFlat.new()
+        normal.bg_color = Color("#17334a")
+        normal.border_color = Color("#3a7188")
+        normal.set_border_width_all(1)
+        normal.set_corner_radius_all(8)
+        button.add_theme_stylebox_override("normal", normal)
+        button.add_theme_color_override("font_color", Color("#e8faff"))
+        button.add_theme_stylebox_override("hover", normal)
+        button.pressed.connect(_choose_ruin_dialogue.bind(index))
+        _ruin_dialogue_options.add_child(button)
+    _ruin_dialogue_panel.visible = true
+    _ruin_dialogue_previous_mouse = Input.mouse_mode
+    Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+
+
+func _hide_ruin_dialogue_panel() -> void:
+    if _ruin_dialogue_panel == null:
+        return
+    _ruin_dialogue_visible = false
+    _ruin_dialogue_panel.visible = false
+    _ruin_dialogue_npc = ""
+    Input.mouse_mode = _ruin_dialogue_previous_mouse
+    var local := players.get(multiplayer.get_unique_id()) as SpacePlayer3D
+    if local != null:
+        local.refresh_ruin_mouse_mode()
+
+
+func _choose_ruin_dialogue(index: int) -> void:
+    if not _ruin_dialogue_visible:
+        return
+    var npc := _ruin_dialogue_npc
+    _hide_ruin_dialogue_panel()
+    if is_host:
+        if _ruin_planet != null:
+            _ruin_planet.choose_shelter_dialogue(multiplayer.get_unique_id(), npc, index)
+    else:
+        request_ruin_dialogue_choice.rpc_id(1, npc, index)
+
 
 func _build_home_ui() -> void:
     _panel(_home_group, Vector2(54, 54), Vector2(520, 530), Color(0.025, 0.08, 0.13, 0.92), Color("#2e6a83"), 18)
@@ -3754,6 +3836,94 @@ func exit_energy_station_rpc(peer_id: int) -> void:
         _ruin_planet._apply_camera_environment()
 
 
+## 能源站配电间暗门后的地下庇护所。
+func enter_shelter(peer_id: int) -> void:
+    if not is_host or _ruin_planet == null:
+        return
+    enter_shelter_rpc.rpc(peer_id)
+
+
+@rpc("authority", "call_local", "reliable")
+func enter_shelter_rpc(peer_id: int) -> void:
+    if peer_id != multiplayer.get_unique_id():
+        return
+    var player := players.get(peer_id) as SpacePlayer3D
+    if player == null or _ruin_planet == null:
+        return
+    if _ruin_planet.is_inside_shelter(player.global_position):
+        return
+    player.teleport_to(_ruin_planet.shelter_spawn_position())
+    player.rotation.y = 0.0
+    player._camera_yaw = 0.0
+    player._camera_yaw_target = 0.0
+    player._camera_pitch = 0.0
+    player._camera_pitch_target = 0.0
+    player._update_ruin_first_person(0.016)
+    _ruin_planet._apply_camera_environment()
+
+
+func exit_shelter(peer_id: int) -> void:
+    if not is_host or _ruin_planet == null:
+        return
+    exit_shelter_rpc.rpc(peer_id)
+
+
+@rpc("authority", "call_local", "reliable")
+func exit_shelter_rpc(peer_id: int) -> void:
+    if peer_id != multiplayer.get_unique_id():
+        return
+    var player := players.get(peer_id) as SpacePlayer3D
+    if player == null or _ruin_planet == null:
+        return
+    if not _ruin_planet.is_inside_shelter(player.global_position):
+        return
+    player.teleport_to(_ruin_planet.energy_secret_return_position())
+    player.rotation.y = PI
+    player._camera_yaw = PI
+    player._camera_yaw_target = PI
+    player._camera_pitch = 0.0
+    player._camera_pitch_target = 0.0
+    player._update_ruin_first_person(0.016)
+    _ruin_planet._apply_camera_environment()
+
+
+## 庇护所对话：主机生成文本/选项，只发给正在交谈的玩家。
+func show_ruin_dialogue(peer_id: int, npc_id: String, body: String, options: Array[String]) -> void:
+    if not is_host:
+        return
+    show_ruin_dialogue_rpc.rpc(peer_id, npc_id, body, options)
+
+
+@rpc("authority", "call_local", "reliable")
+func show_ruin_dialogue_rpc(peer_id: int, npc_id: String, body: String, options: Array[String]) -> void:
+    if peer_id != multiplayer.get_unique_id():
+        return
+    _show_ruin_dialogue_panel(npc_id, body, options)
+
+
+func hide_ruin_dialogue(peer_id: int) -> void:
+    if not is_host:
+        return
+    hide_ruin_dialogue_rpc.rpc(peer_id)
+
+
+@rpc("authority", "call_local", "reliable")
+func hide_ruin_dialogue_rpc(peer_id: int) -> void:
+    if peer_id != multiplayer.get_unique_id():
+        return
+    _hide_ruin_dialogue_panel()
+
+
+@rpc("any_peer", "call_remote", "reliable")
+func request_ruin_dialogue_choice(npc_id: String, index: int) -> void:
+    if not is_host or _ruin_planet == null:
+        return
+    var sender := multiplayer.get_remote_sender_id()
+    if sender == multiplayer.get_unique_id():
+        sender = 1
+    _ruin_planet.choose_shelter_dialogue(sender, npc_id, index)
+
+
 ## 暴力撬门只给按 R 的那名玩家播撬棍动作，主机负责计时和开门。
 func start_ruin_force(peer_id: int, building_id: String) -> void:
     if not is_host:
@@ -4621,6 +4791,13 @@ func _tick_extraction(delta: float) -> void:
 func _tick_ruin_extraction(delta: float) -> void:
     if _ruin_planet == null or mission_completed or mission_failed:
         return
+    # 剧情方案由 RuinPlanet 接管：工程师/离开方案必须在登陆艇按 E 结算结局，
+    # 不能被旧的“全员站 3 秒自动返航”提前截断。
+    if _ruin_planet.story_plan != "" or _ruin_planet.story_ending != "":
+        if extraction_enabled:
+            extraction_enabled = false
+            extraction_progress = 0.0
+        return
     if not _ruin_planet.extraction_ready():
         if extraction_enabled:
             extraction_enabled = false
@@ -5178,13 +5355,15 @@ func _update_hud() -> void:
             if _ruin_planet != null:
                 ruin_noise = int(round(_ruin_planet.noise_level(local.peer_id) * 100.0))
                 ruin_status = "目标：" + _ruin_planet.objective_text()
+                if _ruin_planet.story_plan != "" or not _ruin_planet.story_flags.is_empty():
+                    ruin_status = "剧情：" + _ruin_planet.story_objective_text()
                 if _ruin_planet.is_inside_hospital(local.global_position):
                     ruin_status += "\n" + _ruin_planet.hospital_quest_hud_text()
                 elif _ruin_planet.is_inside_school(local.global_position):
                     ruin_status += "\n" + _ruin_planet.school_quest_hud_text()
                 elif _ruin_planet.is_inside_market(local.global_position):
                     ruin_status += "\n" + _ruin_planet.market_quest_hud_text()
-                elif _ruin_planet.quest_item_count() > 0:
+                elif _ruin_planet.quest_item_count() > 0 and not (_ruin_planet.story_plan != "" or not _ruin_planet.story_flags.is_empty()):
                     ruin_status += " · 任务物 %d/%d" % [_ruin_planet.quest_item_count(), _ruin_planet.quest_item_total()]
                 if extraction_enabled:
                     ruin_status = "撤离开放 · 全员到登陆艇集合"

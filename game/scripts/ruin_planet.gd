@@ -26,6 +26,7 @@ const RUIN_HOSPITAL_INTERIOR := preload("res://scripts/ruin_hospital_interior.gd
 const RUIN_ENERGY_STATION_INTERIOR := preload("res://scripts/ruin_energy_station_interior.gd")
 const RUIN_SCHOOL_INTERIOR := preload("res://scripts/ruin_school_interior.gd")
 const RUIN_MARKET_INTERIOR := preload("res://scripts/ruin_market_interior.gd")
+const RUIN_SHELTER_INTERIOR := preload("res://scripts/ruin_shelter_interior.gd")
 # 与归航号主舱一致的精致卡通语言：奶油白、青蓝、暖橙、鼠尾草绿。
 const ART := preload("res://scripts/ruin_cartoon_art.gd")
 const RUIN_HUD := preload("res://scripts/ruin_hud_3d.gd")
@@ -74,6 +75,7 @@ const ALL_QUEST_ITEMS := {
     "energy_access_card": "能源站门禁卡",
     "school_observation_data": "天文观测数据",
     "market_navigation_module": "民用导航模块",
+    "reactor_core": "反应堆启动核心",
 }
 
 # ── 食物与物资 ──
@@ -143,6 +145,7 @@ var hospital_interior: Node3D
 var energy_station_interior: Node3D
 var school_interior: Node3D
 var market_interior: Node3D
+var shelter_interior: Node3D
 var food_sites: Dictionary = {}
 var zombies: Dictionary = {}
 var noise: Dictionary = {}
@@ -150,6 +153,12 @@ var taken_food: Array[String] = []
 var discovered_buildings: Array[String] = []
 var unlocked_buildings: Array[String] = []
 var quest_items: Dictionary = {}
+var story_flags: Dictionary = {}
+var story_plan := ""
+var story_stage := "start"
+var story_timer := 0.0
+var story_ending := ""
+var _story_return_timer := -1.0
 var search_jobs: Dictionary = {}
 var force_jobs: Dictionary = {}
 var pending_message := ""
@@ -163,6 +172,7 @@ var _hospital_environment: Environment
 var _energy_environment: Environment
 var _school_environment: Environment
 var _market_environment: Environment
+var _shelter_environment: Environment
 var _pad_active_ring: MeshInstance3D
 var _pad_lights: Array[MeshInstance3D] = []
 var _time := 0.0
@@ -184,6 +194,7 @@ func build() -> void:
     _build_energy_station_interior()
     _build_school_interior()
     _build_market_interior()
+    _build_shelter_interior()
     _build_food_sites()
     _build_landing_pad()
     _build_street_dressing()
@@ -212,6 +223,13 @@ func reset() -> void:
     energy_station_interior = null
     school_interior = null
     market_interior = null
+    shelter_interior = null
+    story_flags.clear()
+    story_plan = ""
+    story_stage = "start"
+    story_timer = 0.0
+    story_ending = ""
+    _story_return_timer = -1.0
     food_sites.clear()
     zombies.clear()
     noise.clear()
@@ -348,6 +366,15 @@ func _build_scaffold() -> void:
     market_env.adjustment_saturation = 0.84
     market_env.fog_density = 0.0030
     _market_environment = market_env
+    # 地下庇护所：暖灯 + 青绿维生灯，比地表更安全、更封闭。
+    var shelter_env := env.duplicate(true) as Environment
+    shelter_env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
+    shelter_env.ambient_light_color = Color("#8d8067")
+    shelter_env.ambient_light_energy = 0.78
+    shelter_env.tonemap_exposure = 0.90
+    shelter_env.adjustment_saturation = 0.86
+    shelter_env.fog_density = 0.0040
+    _shelter_environment = shelter_env
     var environment := WorldEnvironment.new()
     environment.name = "RuinEnvironment"
     environment.environment = env
@@ -496,6 +523,12 @@ func _build_market_interior() -> void:
     var interior := RUIN_MARKET_INTERIOR.new() as Node3D
     interior.build(controller, _world())
     market_interior = interior
+
+
+func _build_shelter_interior() -> void:
+    var interior := RUIN_SHELTER_INTERIOR.new() as Node3D
+    interior.build(controller, _world())
+    shelter_interior = interior
 
 
 func _build_buildings() -> void:
@@ -1159,12 +1192,16 @@ func _tick_spawns(delta: float) -> void:
 
 
 func _zombie_cap() -> int:
-    # 单人 3 只，每多一名玩家 +1。
-    return ZOMBIE_CAP_BASE + maxi(controller.connected_ids.size() - 1, 0)
+    # 单人 3 只，每多一名玩家 +1；快速重启时菌群狂暴，额外 +2。
+    var extra := 2 if story_plan == "engineer" else 0
+    return ZOMBIE_CAP_BASE + maxi(controller.connected_ids.size() - 1, 0) + extra
 
 
 func _next_interval() -> float:
-    return _spawn_rng.randf_range(ZOMBIE_SPAWN_INTERVAL.x, ZOMBIE_SPAWN_INTERVAL.y)
+    var interval := _spawn_rng.randf_range(ZOMBIE_SPAWN_INTERVAL.x, ZOMBIE_SPAWN_INTERVAL.y)
+    if story_plan == "engineer":
+        interval *= 0.45
+    return interval
 
 
 func _pick_form() -> int:
@@ -1322,6 +1359,8 @@ func _apply_camera_environment() -> void:
             target_environment = _school_environment
         elif _market_environment != null and market_interior != null and is_inside_market(player.global_position):
             target_environment = _market_environment
+        elif _shelter_environment != null and shelter_interior != null and is_inside_shelter(player.global_position):
+            target_environment = _shelter_environment
         if camera != null and camera.environment != target_environment:
             camera.environment = target_environment
 
@@ -1334,7 +1373,7 @@ func _clear_camera_environment() -> void:
         if player == null:
             continue
         var camera := player._camera
-        if camera != null and (camera.environment == _environment or camera.environment == _hospital_environment or camera.environment == _energy_environment or camera.environment == _school_environment or camera.environment == _market_environment):
+        if camera != null and (camera.environment == _environment or camera.environment == _hospital_environment or camera.environment == _energy_environment or camera.environment == _school_environment or camera.environment == _market_environment or camera.environment == _shelter_environment):
             camera.environment = null
 
 
@@ -1383,6 +1422,7 @@ func tick(delta: float) -> void:
     _tick_noise(delta)
     _tick_search(delta)
     _tick_force_jobs(delta)
+    _tick_story(delta)
     _refresh_zombie_registry()
     _tick_spawns(delta)
     _tick_zombies(delta)
@@ -1498,6 +1538,33 @@ func nearest(player: SpacePlayer3D) -> Dictionary:
             if door_distance <= 2.4 and door_distance < best_distance and _in_view(player, door_point):
                 best_distance = door_distance
                 best = {"kind": "energy_physics_door", "id": "energy_station"}
+        var secret_point: Vector3 = energy_station_interior.call("secret_door_position")
+        var secret_distance := player.global_position.distance_to(secret_point)
+        if secret_distance <= 2.6 and secret_distance < best_distance and _in_view(player, secret_point):
+            best_distance = secret_distance
+            best = {"kind": "energy_secret_door", "id": "shelter"}
+        if energy_station_interior.has_method("task_item_positions"):
+            var energy_tasks: Dictionary = energy_station_interior.call("task_item_positions")
+            for item_id: String in energy_tasks.keys():
+                if quest_items.has(item_id):
+                    continue
+                var core_point: Vector3 = energy_tasks[item_id]
+                var core_distance := player.global_position.distance_to(core_point)
+                if core_distance <= 2.6 and core_distance < best_distance and _in_view(player, core_point):
+                    best_distance = core_distance
+                    best = {"kind": "energy_quest_item", "id": item_id}
+        if story_plan == "doctor" and not bool(story_flags.get("pump_shutdown", false)):
+            var pump_point: Vector3 = energy_station_interior.call("pump_console_position")
+            var pump_distance := player.global_position.distance_to(pump_point)
+            if pump_distance <= 2.6 and pump_distance < best_distance and _in_view(player, pump_point):
+                best_distance = pump_distance
+                best = {"kind": "energy_pump_console", "id": "colony_pump"}
+        if story_plan == "doctor" and bool(story_flags.get("pump_shutdown", false)) and story_ending == "":
+            var reactor_point: Vector3 = energy_station_interior.call("reactor_console_position")
+            var reactor_distance := player.global_position.distance_to(reactor_point)
+            if reactor_distance <= 2.6 and reactor_distance < best_distance and _in_view(player, reactor_point):
+                best_distance = reactor_distance
+                best = {"kind": "energy_reactor_console", "id": "reactor"}
     if school_interior != null and is_inside_school(player.global_position):
         var school_exit := school_exit_position()
         var school_exit_distance := player.global_position.distance_to(school_exit)
@@ -1528,6 +1595,19 @@ func nearest(player: SpacePlayer3D) -> Dictionary:
             if market_item_distance <= 2.5 and market_item_distance < best_distance and _in_view(player, market_item_point):
                 best_distance = market_item_distance
                 best = {"kind": "market_quest_item", "id": item_id}
+    if shelter_interior != null and is_inside_shelter(player.global_position):
+        var shelter_exit := shelter_exit_position()
+        var shelter_distance := player.global_position.distance_to(shelter_exit)
+        if shelter_distance <= 3.0 and shelter_distance < best_distance and _in_view(player, shelter_exit):
+            best_distance = shelter_distance
+            best = {"kind": "shelter_exit", "id": "shelter"}
+        var npcs: Dictionary = shelter_npc_positions()
+        for npc_id: String in npcs.keys():
+            var npc_point: Vector3 = npcs[npc_id]
+            var npc_distance := player.global_position.distance_to(npc_point)
+            if npc_distance <= 2.5 and npc_distance < best_distance and _in_view(player, npc_point):
+                best_distance = npc_distance
+                best = {"kind": "shelter_npc", "id": npc_id}
     # 第一人称下只把"在视野前方"的目标算作可交互；目标在身后时提示会消失，
     # 但玩家一转身就回来，不会出现"隔着人捡东西"的怪异操作。
     var pad_point := pad_position()
@@ -1583,6 +1663,18 @@ func prompt(player: SpacePlayer3D) -> String:
         return "[E] 离开能源站 · 回到大门"
     if String(target.kind) == "energy_physics_door":
         return "[E] 推开重型维护门"
+    if String(target.kind) == "energy_secret_door":
+        return "[E] 打开配电间暗门"
+    if String(target.kind) == "energy_quest_item":
+        return "[E] 取走%s" % quest_item_label(String(target.id))
+    if String(target.kind) == "energy_pump_console":
+        return "[E] 关闭菌群泵"
+    if String(target.kind) == "energy_reactor_console":
+        return "[E] 重启主反应堆"
+    if String(target.kind) == "shelter_exit":
+        return "[E] 离开庇护所 · 回到能源站"
+    if String(target.kind) == "shelter_npc":
+        return "[E] 与%s交谈" % ("老工程师" if String(target.id) == "engineer" else "年轻医生")
     if String(target.kind) == "school_exit":
         return "[E] 离开学校 · 回到大门"
     if String(target.kind) == "school_quest_item":
@@ -1592,6 +1684,12 @@ func prompt(player: SpacePlayer3D) -> String:
     if String(target.kind) == "market_quest_item":
         return "[E] 取走%s" % quest_item_label(String(target.id))
     if String(target.kind) == "pad":
+        if story_plan == "engineer":
+            return "[E] 登艇撤离 · 星球即将毁灭"
+        if story_plan == "leave":
+            return "[E] 隐瞒真相 · 直接离开"
+        if story_plan == "doctor" and story_ending == "":
+            return "还不能走 · 先关闭菌群泵并重启反应堆"
         if extraction_ready():
             if controller.extraction_progress > 0.0:
                 return "撤离中 · 保持 %.1f / %.1f 秒" % [controller.extraction_progress, EXTRACTION_HOLD]
@@ -1668,6 +1766,42 @@ func handle_action(peer_id: int, action: String) -> bool:
         elif controller.is_host:
             controller.push_energy_door(peer_id)
         return true
+    if String(target.kind) == "energy_secret_door":
+        if action == "ruin_force_door":
+            controller.show_feedback_rpc.rpc("暗门不需要撬，靠近按 E 启动配电柜。", Color("#ffbd75"), 1.8)
+        elif controller.is_host:
+            controller.enter_shelter(peer_id)
+        return true
+    if String(target.kind) == "energy_quest_item":
+        if action == "ruin_force_door":
+            controller.show_feedback_rpc.rpc("任务物不用撬，靠近按 E 拿取。", Color("#ffbd75"), 1.8)
+        elif controller.is_host:
+            _collect_energy_core(peer_id)
+        return true
+    if String(target.kind) == "energy_pump_console":
+        if action == "ruin_force_door":
+            controller.show_feedback_rpc.rpc("控制台不需要撬。", Color("#ffbd75"), 1.8)
+        elif controller.is_host:
+            _shutdown_colony_pump(peer_id)
+        return true
+    if String(target.kind) == "energy_reactor_console":
+        if action == "ruin_force_door":
+            controller.show_feedback_rpc.rpc("控制台不需要撬。", Color("#ffbd75"), 1.8)
+        elif controller.is_host:
+            _restart_reactor_after_pump(peer_id)
+        return true
+    if String(target.kind) == "shelter_exit":
+        if action == "ruin_force_door":
+            controller.show_feedback_rpc.rpc("这是出口，不需要撬。", Color("#ffbd75"), 1.6)
+        elif controller.is_host:
+            controller.exit_shelter(peer_id)
+        return true
+    if String(target.kind) == "shelter_npc":
+        if action == "ruin_force_door":
+            controller.show_feedback_rpc.rpc("别拿撬棍对着人。按 E 交谈。", Color("#ffbd75"), 1.8)
+        elif controller.is_host:
+            open_shelter_dialogue(peer_id, String(target.id))
+        return true
     if String(target.kind) == "school_exit":
         if action == "ruin_force_door":
             controller.show_feedback_rpc.rpc("这是出口，不需要撬。", Color("#ffbd75"), 1.6)
@@ -1695,6 +1829,15 @@ func handle_action(peer_id: int, action: String) -> bool:
     if String(target.kind) == "pad":
         if action == "ruin_force_door":
             controller.show_feedback_rpc.rpc("登陆艇上没有需要撬开的门。", Color("#ffbd75"), 1.8)
+            return true
+        if story_plan == "engineer" and story_ending == "":
+            finish_story_ending("engineer")
+            return true
+        if story_plan == "leave" and story_ending == "":
+            finish_story_ending("leave")
+            return true
+        if story_plan == "doctor" and story_ending == "":
+            controller.show_feedback_rpc.rpc("还不能走：先关闭 B1 菌群泵，再重启主反应堆。", Color("#ffbd75"), 2.6)
             return true
         if extraction_ready():
             controller.show_feedback_rpc.rpc("撤离已开放：全员留在登陆艇上，保持 %.0f 秒。" % EXTRACTION_HOLD, Color("#9ff5c9"), 2.0)
@@ -1903,6 +2046,35 @@ func is_inside_market(point: Vector3) -> bool:
     return market_interior != null and bool(market_interior.call("is_inside", point))
 
 
+func shelter_spawn_position() -> Vector3:
+    if shelter_interior == null:
+        return Vector3.ZERO
+    return shelter_interior.call("spawn_position")
+
+
+func shelter_exit_position() -> Vector3:
+    if shelter_interior == null:
+        return Vector3.ZERO
+    return shelter_interior.call("exit_position")
+
+
+func is_inside_shelter(point: Vector3) -> bool:
+    return shelter_interior != null and bool(shelter_interior.call("is_inside", point))
+
+
+func shelter_npc_positions() -> Dictionary:
+    if shelter_interior == null:
+        return {}
+    return shelter_interior.call("npc_positions")
+
+
+func energy_secret_return_position() -> Vector3:
+    if energy_station_interior == null:
+        return Vector3.ZERO
+    var level: Vector3 = energy_station_interior.call("level_position", 2)
+    return level + Vector3(0.0, 0.15, -8.1)
+
+
 func quest_item_label(item_id: String) -> String:
     return String(ALL_QUEST_ITEMS.get(item_id, item_id))
 
@@ -2015,6 +2187,239 @@ func _collect_navigation_quest_item(peer_id: int, item_id: String, interior: Nod
     controller.sync_ruin_progress.rpc(snapshot())
 
 
+func _collect_energy_core(peer_id: int) -> void:
+    if not controller.is_host or energy_station_interior == null or quest_items.has("reactor_core"):
+        return
+    var player := controller.players.get(peer_id) as SpacePlayer3D
+    if player == null or not is_inside_energy_station(player.global_position):
+        return
+    if not has_quest_item("energy_access_card"):
+        controller.show_feedback_rpc.rpc("应急舱锁着 · 需要能源站门禁卡 E-07", Color("#ffbd75"), 2.4)
+        return
+    var points: Dictionary = energy_station_interior.call("task_item_positions")
+    if not points.has("reactor_core") or player.global_position.distance_to(points["reactor_core"]) > 2.8:
+        return
+    quest_items["reactor_core"] = true
+    energy_station_interior.call("collect_task_item", "reactor_core")
+    controller.show_feedback_rpc.rpc("取得任务物 · 反应堆启动核心", Color("#9ff5c9"), 2.2)
+    controller._record_journal("任务物 · 反应堆启动核心", "从 B2 应急弹射舱取出的点火核心。核心本身完好，但没有低温稳定剂就会在重启时过热。")
+    _refresh_story_stage()
+    controller.sync_ruin_progress.rpc(snapshot())
+
+
+func story_ready() -> bool:
+    return has_quest_item("coolant_stabilizer") \
+        and has_quest_item("school_observation_data") \
+        and has_quest_item("market_navigation_module") \
+        and has_quest_item("reactor_core")
+
+
+func story_missing_text() -> String:
+    var missing: Array[String] = []
+    if not has_quest_item("coolant_stabilizer"):
+        missing.append("低温稳定剂（医院 B1）")
+    if not has_quest_item("school_observation_data"):
+        missing.append("天文观测数据（学校 3F）")
+    if not has_quest_item("market_navigation_module"):
+        missing.append("民用导航模块（超市 2F）")
+    if not has_quest_item("reactor_core"):
+        missing.append("反应堆启动核心（能源站 B2）")
+    return "还缺：" + "、".join(missing)
+
+
+func story_objective_text() -> String:
+    if story_ending != "":
+        return string_ending_title(story_ending)
+    if story_plan == "engineer":
+        return "快速重启 · 在 %02d:%02d 前登艇" % [int(story_timer / 60.0), int(story_timer) % 60]
+    if story_plan == "doctor":
+        if not bool(story_flags.get("pump_shutdown", false)):
+            return "医生的方案 · 去能源站 B1 关闭菌群泵"
+        return "菌群泵已关闭 · 回 B2 重启主反应堆"
+    if story_plan == "leave":
+        return "隐瞒真相 · 直接登艇离开"
+    if not bool(story_flags.get("met_engineer", false)) and not bool(story_flags.get("met_doctor", false)):
+        return "进入能源站配电间暗门，寻找地下庇护所"
+    if story_ready():
+        return "三件套已齐 · 回庇护所决定撤离方案"
+    return "搜集撤离三件套 · " + story_missing_text()
+
+
+func story_hud_text() -> String:
+    return "剧情：" + story_objective_text()
+
+
+func string_ending_title(id: String) -> String:
+    match id:
+        "engineer":
+            return "结局 · 快速重启：星球毁灭"
+        "true":
+            return "结局 · 关闭菌群泵：星球保住"
+        "leave":
+            return "结局 · 隐瞒真相：迫降未知星球"
+        "destroyed":
+            return "结局 · 超时：地表彻底沦陷"
+    return "结局 · " + id
+
+
+func _refresh_story_stage() -> void:
+    if story_ending != "":
+        return
+    if story_ready() and story_plan == "":
+        story_stage = "ready"
+
+
+func open_shelter_dialogue(peer_id: int, npc_id: String) -> void:
+    if not controller.is_host or shelter_interior == null:
+        return
+    var player := controller.players.get(peer_id) as SpacePlayer3D
+    if player == null or not is_inside_shelter(player.global_position):
+        return
+    var npcs: Dictionary = shelter_npc_positions()
+    if not npcs.has(npc_id):
+        return
+    if player.global_position.distance_to(npcs[npc_id]) > 3.0:
+        return
+    var engineer := npc_id == "engineer"
+    var met_key := "met_engineer" if engineer else "met_doctor"
+    var met := bool(story_flags.get(met_key, false))
+    var body := ""
+    var options: Array[String] = []
+    if not met:
+        if engineer:
+            body = "你终于从地表下来了。主反应堆撑不了多久，重启需要点火核心、医院的低温稳定剂，还有一套导航密钥。\n核心在能源站 B2 应急舱，用 E-07 门禁卡能开。稳定剂在医院 B1。导航数据在学校和超市。\n别信医生那套‘先关泵’——我们没有时间。"
+        else:
+            body = "别急着听工程师的。反应堆重启会把地下菌群一起激活，三十年前的那次喷发就是这么来的。\n医院病历能证明镇静剂对菌群无效。学校有扩散观测，超市有运输无人机导航模块。\n如果你拿到核心，先来告诉我——关掉 B1 的菌群泵，再重启，星球还有救。"
+        options = ["我会回来"]
+    elif story_ready():
+        if engineer:
+            body = "三件套齐了。现在就能重启。医生会说会激活菌群，但她没有证据。\n你选哪条路？"
+        else:
+            body = "核心、稳定剂、导航密钥都在你手上。先关 B1 菌群泵，再重启，才有真结局。\n工程师的方案更快，但会把整颗星球烧掉。"
+        options = ["按工程师方案：立即重启", "按医生方案：先关菌群泵", "隐瞒真相：直接离开"]
+    else:
+        body = "东西还没齐。\n" + story_missing_text()
+        if engineer and has_quest_item("patient_records"):
+            body += "\n还有那张病历……当年签字同意钻探的人是我。等这次结束，我会给你一个交代。"
+        options = ["继续搜索"]
+    controller.show_ruin_dialogue(peer_id, npc_id, body, options)
+
+
+func choose_shelter_dialogue(peer_id: int, npc_id: String, index: int) -> void:
+    if not controller.is_host:
+        return
+    var met_key := "met_engineer" if npc_id == "engineer" else "met_doctor"
+    if not bool(story_flags.get(met_key, false)):
+        story_flags[met_key] = true
+        if story_stage == "start":
+            story_stage = "explore"
+        if not bool(story_flags.get("met_engineer", false)) or not bool(story_flags.get("met_doctor", false)):
+            controller.show_feedback_rpc.rpc("庇护所已建立联系 · 继续搜集撤离三件套", Color("#9ff5c9"), 2.4)
+        else:
+            controller.show_feedback_rpc.rpc("庇护所已建立联系 · 工程师和医生都在等你带回三件套", Color("#9ff5c9"), 2.4)
+        controller.hide_ruin_dialogue(peer_id)
+        _refresh_story_stage()
+        controller.sync_ruin_progress.rpc(snapshot())
+        return
+    if not story_ready():
+        controller.hide_ruin_dialogue(peer_id)
+        return
+    if index == 2:
+        _apply_story_plan("leave")
+    elif index == 0:
+        _apply_story_plan("engineer" if npc_id == "engineer" else "doctor")
+    elif index == 1:
+        _apply_story_plan("doctor" if npc_id == "engineer" else "engineer")
+    controller.hide_ruin_dialogue(peer_id)
+
+
+func _apply_story_plan(plan: String) -> void:
+    if story_ending != "":
+        return
+    story_plan = plan
+    match plan:
+        "engineer":
+            story_stage = "restart"
+            story_timer = 180.0
+            set_extraction_active(true)
+            controller.show_feedback_rpc.rpc("工程师方案启动 · 反应堆正在重启，180 秒内登艇", Color("#ffbd75"), 4.0)
+            controller._record_journal("方案 · 快速重启", "老工程师坚持立刻重启。主反应堆开始过载，地下菌群被激活；必须在他给出的 180 秒内回到登陆艇。")
+        "doctor":
+            story_stage = "pump"
+            controller.show_feedback_rpc.rpc("医生方案 · 先去 B1 关闭菌群泵，再重启反应堆", Color("#9ff5c9"), 4.0)
+            controller._record_journal("方案 · 先关菌群泵", "医生要求先手动关闭 B1 的菌群泵，阻断菌群随循环系统上涌；然后才允许重启主反应堆。")
+        "leave":
+            story_stage = "leave"
+            set_extraction_active(true)
+            controller.show_feedback_rpc.rpc("隐瞒真相 · 直接登艇离开，不重启反应堆", Color("#ffbd75"), 4.0)
+            controller._record_journal("方案 · 隐瞒真相", "不重启反应堆，也不关闭菌群泵。带着三件套和导航密钥直接离开，飞船能源不足，只能迫降附近星球。")
+    controller.sync_ruin_progress.rpc(snapshot())
+
+
+func _shutdown_colony_pump(peer_id: int) -> void:
+    if story_plan != "doctor" or bool(story_flags.get("pump_shutdown", false)):
+        return
+    var player := controller.players.get(peer_id) as SpacePlayer3D
+    if player == null or not is_inside_energy_station(player.global_position):
+        return
+    story_flags["pump_shutdown"] = true
+    story_stage = "reactor"
+    controller.show_feedback_rpc.rpc("菌群泵已关闭 · 回 B2 重启主反应堆", Color("#9ff5c9"), 3.0)
+    controller._record_journal("菌群泵已关闭", "B1 菌群泵停机。地下菌群暂时停止随循环系统上涌；现在重启反应堆不会引发二次喷发。")
+    controller.sync_ruin_progress.rpc(snapshot())
+
+
+func _restart_reactor_after_pump(peer_id: int) -> void:
+    if story_plan != "doctor" or not bool(story_flags.get("pump_shutdown", false)):
+        controller.show_feedback_rpc.rpc("菌群泵还没关闭，不能重启。", Color("#ffbd75"), 2.4)
+        return
+    var player := controller.players.get(peer_id) as SpacePlayer3D
+    if player == null or not is_inside_energy_station(player.global_position):
+        return
+    finish_story_ending("true")
+
+
+func finish_story_ending(ending_id: String) -> void:
+    if story_ending != "":
+        return
+    story_ending = ending_id
+    story_stage = "ended"
+    story_timer = 0.0
+    _story_return_timer = 6.0
+    controller.ending_choice = ending_id
+    var title := string_ending_title(ending_id)
+    var body := ""
+    match ending_id:
+        "engineer":
+            body = "反应堆粗暴重启，地表在几分钟内被菌群二次喷发吞没。登陆艇在冲击波前升空，腐墟星从星图上消失。"
+        "true":
+            body = "菌群泵停机后反应堆平稳重启。地下菌群退回深层，殖民城保住了。工程师承认了当年的签字，医生把样本留在原地。"
+        "leave":
+            body = "你没有重启反应堆，也没有关泵。登陆艇带着三件套离开，但能源不足，只能迫降附近星球。"
+        "destroyed":
+            body = "倒计时结束，反应堆熔毁引发菌群喷发。登陆艇没能起飞，腐墟星地表彻底沦陷。"
+    controller.show_feedback_rpc.rpc(title, Color("#ffbd75") if ending_id != "true" else Color("#9ff5c9"), 6.0)
+    controller._record_journal(title, body)
+    controller.sync_ruin_progress.rpc(snapshot())
+
+
+func _tick_story(delta: float) -> void:
+    if not controller.is_host:
+        return
+    if story_ending != "":
+        if _story_return_timer > 0.0:
+            _story_return_timer -= delta
+            if _story_return_timer <= 0.0:
+                _story_return_timer = -1.0
+                var title := string_ending_title(story_ending)
+                controller.return_to_ship.rpc("腐墟星 · %s" % title, controller._vitals_snapshot())
+        return
+    if story_plan == "engineer" and story_stage == "restart":
+        story_timer = maxf(0.0, story_timer - delta)
+        if story_timer <= 0.0:
+            finish_story_ending("destroyed")
+
+
 func _finish_search(peer_id: int, site_id: String) -> void:
     if not food_sites.has(site_id) or taken_food.has(site_id):
         return
@@ -2123,11 +2528,15 @@ func map_size() -> Vector2:
 
 ## 一局目标是否完成：翻找 3 处物资并查看 3 栋建筑。
 func extraction_ready() -> bool:
+    if story_plan == "engineer" or story_plan == "leave":
+        return true
+    if story_ending != "":
+        return true
     return taken_food.size() >= OBJECTIVE_FOOD and discovered_buildings.size() >= OBJECTIVE_BUILDINGS
 
 
 func objective_text() -> String:
-    return "翻找 %d/%d · 查看建筑 %d/%d" % [taken_food.size(), OBJECTIVE_FOOD, discovered_buildings.size(), OBJECTIVE_BUILDINGS]
+    return story_objective_text()
 
 
 ## 登陆艇状态：未开放时橙色，开放后青绿灯带 + 灯光转青绿。
@@ -2179,7 +2588,20 @@ func set_visible(value: bool) -> void:
 
 
 func snapshot() -> Dictionary:
-    return {"taken_food": taken_food, "buildings": discovered_buildings, "unlocked": unlocked_buildings, "noise": noise, "quest_items": quest_items.keys()}
+    return {
+        "taken_food": taken_food,
+        "buildings": discovered_buildings,
+        "unlocked": unlocked_buildings,
+        "noise": noise,
+        "quest_items": quest_items.keys(),
+        "story": {
+            "flags": story_flags.duplicate(true),
+            "plan": story_plan,
+            "stage": story_stage,
+            "timer": story_timer,
+            "ending": story_ending,
+        },
+    }
 
 
 func apply_snapshot(data: Dictionary) -> void:
@@ -2197,6 +2619,16 @@ func apply_snapshot(data: Dictionary) -> void:
             school_interior.call("collect_task_item", String(id))
         if market_interior != null:
             market_interior.call("collect_task_item", String(id))
+        if energy_station_interior != null:
+            energy_station_interior.call("collect_task_item", String(id))
+    var story: Dictionary = data.get("story", {})
+    story_flags = (story.get("flags", {}) as Dictionary).duplicate(true)
+    story_plan = String(story.get("plan", ""))
+    story_stage = String(story.get("stage", "start"))
+    story_timer = float(story.get("timer", 0.0))
+    story_ending = String(story.get("ending", ""))
+    if story_ending != "":
+        _story_return_timer = -1.0
     _refresh_locks()
     for id in taken_food:
         if food_sites.has(id):
