@@ -27,6 +27,10 @@ uniform float rough_paint : hint_range(0.02, 1.0) = 0.44;
 uniform float rough_bare : hint_range(0.02, 1.0) = 0.26;
 uniform float rough_rust : hint_range(0.02, 1.0) = 0.86;
 uniform float specular_level : hint_range(0.0, 1.0) = 0.5;
+// 白色/浅色涂装在强光下会整体裁切到 1.0（细节全丢）。这两项沿用 aenv4 的
+// 反过曝做法：spec_cap 限制镜面峰值，hi_rolloff 对 albedo 做一次软膝压缩。
+uniform float spec_cap : hint_range(0.0, 1.0) = 1.0;
+uniform float hi_rolloff : hint_range(0.0, 1.0) = 0.0;
 
 uniform float wear_gain : hint_range(0.0, 3.0) = 1.0;
 uniform float chip_threshold : hint_range(0.0, 1.5) = 0.62;
@@ -61,11 +65,40 @@ uniform bool vertex_mask_valid = true;
 uniform float uv_normal_strength : hint_range(0.0, 2.0) = 1.0;
 uniform float uv_mask_wear : hint_range(0.0, 2.0) = 1.0;
 uniform float uv_mask_cavity : hint_range(0.0, 2.0) = 1.0;
+uniform float uv_curv_threshold : hint_range(0.0, 1.0) = 0.55;
 uniform float uv_micro_scale : hint_range(0.1, 16.0) = 6.0;
 uniform float uv_micro_strength : hint_range(0.0, 1.0) = 0.25;
 
 uniform float ambient_fill : hint_range(0.0, 1.0) = 0.12;
 uniform float world_seed = 0.0;
+
+// ---- M1 增补：给"大平面建筑壳体"用的降噪开关（默认值保持 v2 外观不变）----
+// 2K 分族掩膜原本按世界坐标 p.xz*0.35 采样，对 8 m 的墙板等于每 2.85 m 铺一张
+// 带曲率/AO 的掩膜 —— 在玩家眼里就是"整面墙的斑驳色块"。烘焙过 UV 的资产
+// 打开 `detail_uv_space` 后，掩膜改走 UV（每件资产自己的图集 tile），
+// 磨损/积灰才会贴着真实的折边与缝隙生长。
+uniform bool detail_uv_space = false;
+uniform float detail_uv_scale : hint_range(0.1, 8.0) = 1.0;
+// 2 m 级色块漂移的强度与尺度（建筑壳体调小，机器件维持默认）
+uniform float patch_gain : hint_range(0.0, 0.8) = 0.24;
+uniform float patch_scale : hint_range(0.05, 3.0) = 0.55;
+// 接触阴影（贴地/贴墙的压暗）强度，独立于烘培 AO
+uniform float contact_shade : hint_range(0.0, 1.5) = 1.0;
+// ---- 板缝：给"大平面壳体"补上工艺分块 ----
+// 建筑壳体/柜体/地板/船壳这类大面积单件，光靠噪声永远是"一整块塑料"。
+// `plate_mode` 在 UV 上画 m×n 的板缝（暗线 + 更高的粗糙度），
+// 让 8 m 的墙板读成"若干张钢板拼起来的"。
+uniform bool plate_mode = false;
+uniform float plate_uv_scale : hint_range(1.0, 12.0) = 4.0;
+uniform float plate_seam_width : hint_range(0.005, 0.12) = 0.028;
+uniform float plate_seam_dark : hint_range(0.0, 0.8) = 0.42;
+// 0 = UV 空间（贴图会跟着物体的 UV 走）
+// 1 = **物体空间**三平面：给没有 UV 的网格（矿车舱体、临时拼装件）用。
+//     不能用世界空间——车一开动，板缝会"游"。
+uniform int plate_space = 0;
+
+varying vec3 v_obj;
+varying vec3 v_obj_n;
 
 varying vec3 v_world;
 varying vec3 v_world_n;
@@ -115,9 +148,38 @@ float triplanar_scalar(sampler2D tex, vec3 p, vec3 n, float scale) {
 		 + texture(tex, p.xy * scale).r * w.z;
 }
 
+// 工业钢板网格：长宽比 1.45:1 错缝排布，返回 vec4(接缝, 倒角亮边, 角铆钉, 单板随机偏移)。
+vec4 plate_detail_uv(vec2 raw_uv, float w) {
+	vec2 scaled = vec2(raw_uv.x * 0.70, raw_uv.y * 1.05);
+	float row = floor(scaled.y);
+	scaled.x += mod(row, 2.0) * 0.5;
+	vec2 id = floor(scaled);
+	vec2 f = fract(scaled);
+	vec2 d = min(f, vec2(1.0) - f);
+	float dist = min(d.x * 1.40, d.y);
+	float seam = 1.0 - smoothstep(0.0, max(1e-4, w), dist);
+	float lip = (1.0 - smoothstep(0.0, max(1e-4, w * 2.5), dist)) * (1.0 - seam);
+	// 四角螺栓/铆钉（位于板内 0.065, 0.085 处）
+	vec2 rv = min(abs(f - vec2(0.065, 0.09)), abs(vec2(1.0) - f - vec2(0.065, 0.09)));
+	float rd = length(vec2(rv.x * 1.40, rv.y));
+	float rivet = 1.0 - smoothstep(0.011, 0.021, rd);
+	float tone = hash13(vec3(id, 7.31)) - 0.5;
+	return vec4(seam, lip, rivet, tone);
+}
+
+// 物体空间三平面版：没有 UV 的网格也能拿到"随物体移动"的工业钢板分块与铆钉。
+vec4 plate_detail_obj(vec3 p, vec3 n, float zoom, float w) {
+	vec3 wp = pow(abs(n), vec3(6.0));
+	wp /= max(1e-4, wp.x + wp.y + wp.z);
+	vec3 q = p * zoom;
+	return wp.x * plate_detail_uv(q.zy, w) + wp.y * plate_detail_uv(q.xz, w) + wp.z * plate_detail_uv(q.xy, w);
+}
+
 void vertex() {
 	v_world = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
 	v_world_n = normalize((MODEL_MATRIX * vec4(NORMAL, 0.0)).xyz);
+	v_obj = VERTEX;
+	v_obj_n = normalize(NORMAL);
 }
 
 void fragment() {
@@ -135,21 +197,24 @@ void fragment() {
 	float baked_curv = 0.0;
 	if (use_uv_baked) {
 		vec3 m = texture(uv_mask, uv).rgb;
-		baked_curv = m.r;
-		mask_wear = max(mask_wear, m.r * uv_mask_wear);
+		// Pointiness 在平滑曲面上恒为 ~0.5：必须阈值化，否则整件都会被当成"磨损露金属"
+		float curv_s = smoothstep(uv_curv_threshold, uv_curv_threshold + 0.22, m.r);
+		baked_curv = curv_s;
+		mask_wear = max(mask_wear, curv_s * uv_mask_wear);
 		mask_ao = max(mask_ao, m.g * uv_mask_cavity);
 	}
 
 	// ---- 2K 掩膜 ----
 	if (use_detail_mask) {
-		vec2 tuv = p.xz * 0.35;
+		vec2 tuv = detail_uv_space ? UV * detail_uv_scale : p.xz * 0.35;
 		vec3 dm = texture(detail_mask, tuv).rgb;
 		mask_chip = min(1.0, mask_chip + dm.r * mask_chip_gain * 0.6);
 	}
 
-	// ---- 起皮：噪声团块 + 凸棱加成 ----
+	// ---- 起皮：噪声团块 + 凸棱与几何倒角边缘磨损 ----
+	float geom_edge = clamp(length(fwidth(nw)) * 1.45, 0.0, 0.85);
 	float breakup = fbm3(p * 3.4 + world_seed) * 0.65 + vnoise3(p * 11.0 + world_seed) * 0.35;
-	float wear = clamp(mask_wear * wear_gain, 0.0, 1.0);
+	float wear = clamp(max(mask_wear, geom_edge * 0.65) * wear_gain, 0.0, 1.0);
 	float chip = mask_chip * chip_gain * 0.80 + wear * 0.85 + (breakup - 0.55) * 0.30;
 	float chip_s = smoothstep(chip_threshold, chip_threshold + 0.30, chip);
 
@@ -178,11 +243,11 @@ void fragment() {
 	float down = clamp(0.5 - nw.y * 0.5, 0.0, 1.0);
 	float grime_n = fbm3(p * 2.2 + 31.0 + world_seed);
 	float grime = clamp(grime_n * 0.55 + mask_ao * 0.95 + down * 0.30, 0.0, 1.4);
-	float ground_dirt = smoothstep(1.10, 0.10, p.y) * 0.9;
+	float ground_dirt = smoothstep(1.10, 0.10, p.y) * 0.9 * contact_shade;
 	grime = clamp(grime + ground_dirt * 0.60, 0.0, 1.6);
 	grime = smoothstep(0.35, 1.05, grime) * grime_amount;
-	float patch = fbm3(p * 0.55 + 5.0 + world_seed) - 0.5;
-	col *= 1.0 + patch * 0.24;
+	float patch = fbm3(p * patch_scale + 5.0 + world_seed) - 0.5;
+	col *= 1.0 + patch * 0.24 * (patch_gain / 0.24);
 	col = mix(col, col * vec3(0.48, 0.46, 0.43), grime * 0.85);
 	rough = mix(rough, min(1.0, rough + 0.22), grime * 0.6);
 
@@ -198,6 +263,25 @@ void fragment() {
 	dust *= dust_amount;
 	col = mix(col, dust_color.rgb * (0.75 + 0.35 * dust_n), dust * 0.55);
 	rough = mix(rough, 0.92, dust * 0.45);
+
+	// ---- 板缝与铆钉：大平面壳体按 UV 或物体空间分块 ----
+	if (plate_mode) {
+		vec4 pd = plate_space == 1
+			? plate_detail_obj(v_obj, v_obj_n, plate_uv_scale, plate_seam_width)
+			: plate_detail_uv(UV * plate_uv_scale, plate_seam_width);
+		// 相邻钢板轻微色阶与粗糙度差，打破大平面塑料感
+		col *= 1.0 + pd.w * 0.095;
+		rough = clamp(rough + pd.w * 0.07, 0.04, 1.0);
+		// 缝内：压暗 + 表面积灰（粗糙度抬高）
+		col = mix(col, col * vec3(0.42, 0.43, 0.45), pd.x * plate_seam_dark);
+		rough = mix(rough, min(1.0, rough + 0.18), pd.x);
+		// 缝沿补一道窄亮边，让分块在掠射光下有"压条/折边"厚度感
+		col += bare_color.rgb * pd.y * 0.075 * (0.45 + 0.55 * to_bare);
+		// 角铆钉：微暗环压实 + 中心金属高光点
+		col = mix(col, bare_color.rgb * 0.58, pd.z * 0.55);
+		metal = mix(metal, max(metal, 0.75), pd.z * 0.65);
+		rough = mix(rough, 0.30, pd.z * 0.55);
+	}
 
 	// ---- 自遮挡压暗（接触阴影）----
 	float ao_dark = 1.0 - clamp(mask_ao, 0.0, 1.0) * cavity_amount * 0.85;
@@ -226,7 +310,7 @@ void fragment() {
 
 	// ---- 混凝土模式：骨料色差 + 气孔 + 砂浆脱落 ----
 	if (concrete_mode > 0.5) {
-		vec2 cuv = p.xz * 0.9;
+		vec2 cuv = detail_uv_space ? UV * detail_uv_scale * 2.6 : p.xz * 0.9;
 		vec3 cm = texture(detail_mask, cuv).rgb;
 		// 骨料：中尺度色差（浅色石英 / 深色碎石）
 		float agg = cm.b;
@@ -245,15 +329,26 @@ void fragment() {
 
 	rough = clamp(rough + (fbm3(p * 0.7) - 0.5) * rough_variation, 0.03, 1.0);
 
-	// ---- 边缘棱线 ----
+	// ---- 边缘棱线与冷暖半球环境反弹（WALL-E 金属/旧漆高光与暗部层次）----
 	float fres = pow(1.0 - clamp(dot(NORMAL, VIEW), 0.0, 1.0), 3.2);
-	col += bare_color.rgb * fres * edge_rim * 0.55 * (0.30 + 0.70 * to_bare)
-		 * (0.35 + 0.65 * baked_curv);
+	float edge_catch = max(baked_curv, geom_edge);
+	col += bare_color.rgb * fres * edge_rim * 0.65 * (0.35 + 0.65 * to_bare)
+		 * (0.38 + 0.62 * edge_catch);
 
+	// ---- 软膝：浅色涂装不至于把高光打成一片白 ----
+	// 只压 0.62 以上的高亮区，中低亮度保持原样（上一版用 Reinhard 整体抬亮，
+	// 结果奶油白墙板全部变成发光白）。
+	if (hi_rolloff > 0.001) {
+		vec3 over = max(vec3(0.0), col - vec3(0.62));
+		col -= over * min(1.0, hi_rolloff * 1.15);
+	}
+
+	vec3 hemi_bounce = mix(vec3(1.12, 0.94, 0.76), vec3(0.86, 0.98, 1.14), clamp(nw.y * 0.5 + 0.5, 0.0, 1.0));
 	ALBEDO = col;
 	ROUGHNESS = rough;
 	METALLIC = clamp(metal, 0.0, 1.0);
-	SPECULAR = specular_level;
-	EMISSION = col * ambient_fill * 0.10;
+	SPECULAR = min(specular_level, spec_cap);
+	EMISSION = col * hemi_bounce * ambient_fill * 0.11;
 }
+
 

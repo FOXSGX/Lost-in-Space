@@ -38,6 +38,11 @@ const PACK := Color("#d8cbb3")
 
 const NEST_CENTER := Vector3(1.0, 0.0, -2.5)
 
+## ART-SYNC-001：地面改为世界空间三级尺度的专用 shader（见文件头注释），
+## 贴地接触贴片用 MultiMesh 合并成 1 个 draw call。
+const SHADER_YARD := preload("res://shaders/gulu_yard.gdshader")
+const SHADER_DECAL := preload("res://shaders/gulu_contact_decal.gdshader")
+
 var kit: GuluArtKit
 var mat_ground: ShaderMaterial
 var mat_ground_warm: ShaderMaterial
@@ -71,6 +76,10 @@ var _clamp_arms: Array[Node3D] = []
 var _strip_material: StandardMaterial3D
 var _bay_light: OmniLight3D
 
+# 接触贴片候选（x, z, 半径, 强度）；_flush_decals 合并成 MultiMesh。
+var _decal_spots: Array[Vector4] = []
+var mat_decal: ShaderMaterial
+
 
 func _ready() -> void:
 	_build_materials()
@@ -83,6 +92,8 @@ func _ready() -> void:
 	_build_bay_frame()
 	_build_lights()
 	_build_air_dust()
+	_build_talus()
+	_flush_decals()
 	set_process(true)
 
 
@@ -96,10 +107,16 @@ func _build_imported_dressing() -> void:
 
 func _build_materials() -> void:
 	kit = GuluArtKit.new()
-	mat_ground = kit.concrete(GROUND, 0.90, 11.0)
-	mat_ground_warm = kit.concrete(GROUND_WARM, 0.90, 12.0)
-	mat_ground_cool = kit.concrete(GROUND_COOL, 0.90, 13.0)
+	mat_ground = _yard_material(GROUND, 0.0, 11.0)
+	mat_ground_warm = _yard_material(GROUND_WARM, 0.0, 12.0)
+	mat_ground_cool = _yard_material(Color("#5f6f68"), 1.0, 13.0)
 	mat_concrete = kit.concrete(Color("#9b9384"), 0.92, 14.0)
+	mat_decal = ShaderMaterial.new()
+	mat_decal.shader = SHADER_DECAL
+	mat_decal.set_shader_parameter("tint", Color("#2b2620"))
+	mat_decal.set_shader_parameter("strength", 0.62)
+	mat_decal.set_shader_parameter("inner", 0.08)
+	mat_decal.set_shader_parameter("outer", 0.95)
 	mat_hull = kit.clean_paint(HULL, 0.62)
 	mat_hull_light = kit.clean_paint(HULL_LIGHT, 0.58)
 	mat_bay_cream = kit.clean_paint(Color("#d2c6ae"), 0.56)
@@ -152,6 +169,113 @@ func _process(delta: float) -> void:
 		_strip_material.emission_energy_multiplier = 0.70 + _flash * 2.6
 	if _bay_light != null:
 		_bay_light.light_energy = 0.30 + _flash * 0.60
+
+
+func _yard_material(base: Color, concrete: float, seed: float) -> ShaderMaterial:
+	var m := ShaderMaterial.new()
+	m.shader = SHADER_YARD
+	m.set_shader_parameter("base_color", base)
+	m.set_shader_parameter("warm_color", base.lightened(0.07))
+	m.set_shader_parameter("cool_color", base.darkened(0.14))
+	m.set_shader_parameter("dirt_color", Color("#7a6a52"))
+	m.set_shader_parameter("dust_color", Color("#c9bfa8"))
+	m.set_shader_parameter("compact_color", Color("#6b5f4a"))
+	m.set_shader_parameter("mineral_color", Color("#9aa8a2"))
+	m.set_shader_parameter("crack_color", Color("#3a3228"))
+	m.set_shader_parameter("concrete_mode", concrete)
+	m.set_shader_parameter("path_center_z", 0.0)
+	m.set_shader_parameter("path_half_width", 2.1 if concrete < 0.5 else 3.2)
+	m.set_shader_parameter("wear_gain", 0.70 if concrete < 0.5 else 0.35)
+	m.set_shader_parameter("rut_gain", 0.55 if concrete < 0.5 else 0.0)
+	m.set_shader_parameter("rough_base", 0.86 if concrete < 0.5 else 0.80)
+	m.set_shader_parameter("world_seed", seed)
+	return m
+
+
+## 登记一个贴地接触贴片（x, z, 半径 m, 强度）。
+func _contact(x: float, z: float, radius: float, strength: float = 0.55) -> void:
+	_decal_spots.append(Vector4(x, z, radius, strength))
+
+
+## 把登记的贴片合成一个 MultiMesh：1 个 draw call、不写深度、不投影。
+func _flush_decals() -> void:
+	if _decal_spots.is_empty():
+		return
+	var quad := QuadMesh.new()
+	quad.size = Vector2(2.0, 2.0)  # 单位半径 1 m，由实例均匀缩放
+	var mm := MultiMesh.new()
+	mm.transform_format = MultiMesh.TRANSFORM_3D
+	mm.use_colors = true
+	mm.mesh = quad
+	mm.instance_count = _decal_spots.size()
+	for i in range(_decal_spots.size()):
+		var spot := _decal_spots[i]
+		var basis := Basis(Vector3.RIGHT, -PI * 0.5).scaled(Vector3(spot.z, spot.z, spot.z))
+		mm.set_instance_transform(i, Transform3D(basis, Vector3(spot.x, 0.021, spot.y)))
+		mm.set_instance_color(i, Color(1.0, 1.0, 1.0, spot.w))
+	var node := MultiMeshInstance3D.new()
+	node.name = "ContactDecals"
+	node.multimesh = mm
+	node.material_override = mat_decal
+	node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(node)
+
+
+# ---------------------------------------------------------------- 碎石散布
+
+## 三级碎石围绕中景岩石/灯柱/场边散落（不进入球路 |z| < 3.2，不进装货平台）。
+## 全部走 MultiMesh：每级 1 个 draw call；小碎石不投影。
+func _build_talus() -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 20261124
+	var anchors: Array[Vector3] = [
+		Vector3(-12.2, 0.0, -2.0), Vector3(-13.6, 0.0, 9.8),
+		Vector3(-9.4, 0.0, 8.6), Vector3(6.2, 0.0, -9.4),
+		Vector3(-18.4, 0.0, -12.6), Vector3(-18.2, 0.0, 12.4),
+		Vector3(17.6, 0.0, -12.8), Vector3(17.4, 0.0, 12.6),
+		Vector3(0.8, 0.0, -14.0), Vector3(-6.0, 0.0, 13.8),
+	]
+	var grades := [
+		{"radius": 0.150, "count": 26, "near": 1.6, "far": 4.4, "embed": 0.35, "shadow": true},
+		{"radius": 0.085, "count": 90, "near": 1.2, "far": 5.0, "embed": 0.34, "shadow": false},
+		{"radius": 0.045, "count": 240, "near": 0.9, "far": 5.6, "embed": 0.30, "shadow": false},
+	]
+	for gi in range(grades.size()):
+		var g: Dictionary = grades[gi]
+		var radius: float = g["radius"]
+		var mesh := kit.rock_mesh(41.0 + float(gi) * 7.3,
+			Vector3(radius * 2.0, radius * 1.3, radius * 1.8), 1)
+		var mm := MultiMesh.new()
+		mm.transform_format = MultiMesh.TRANSFORM_3D
+		mm.mesh = mesh
+		mm.instance_count = int(g["count"])
+		for i in range(int(g["count"])):
+			var pos := Vector3.ZERO
+			var ok := false
+			for _try in range(4):
+				var anchor: Vector3 = anchors[rng.randi() % anchors.size()]
+				var angle := rng.randf() * TAU
+				var dist := rng.randf_range(float(g["near"]), float(g["far"]))
+				pos = anchor + Vector3(cos(angle) * dist, 0.0, sin(angle) * dist)
+				if absf(pos.z) < 3.2:
+					continue
+				if pos.x > 10.4 or pos.x < -19.2 or absf(pos.z) > 14.2:
+					continue
+				ok = true
+				break
+			if not ok:
+				continue
+			var s := rng.randf_range(0.62, 1.30)
+			pos.y = -radius * 1.3 * float(g["embed"]) * s
+			var basis := Basis(Vector3.UP, rng.randf() * TAU).scaled(Vector3(s, s, s))
+			mm.set_instance_transform(i, Transform3D(basis, pos))
+		var node := MultiMeshInstance3D.new()
+		node.name = "Talus%d" % gi
+		node.multimesh = mm
+		node.material_override = mat_rock_b if gi % 2 == 0 else mat_rock_c
+		node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON if bool(g["shadow"]) \
+			else GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		add_child(node)
 
 
 # ---------------------------------------------------------------- 地面
@@ -245,6 +369,7 @@ func _rock(at: Vector3, size: Vector3, spin: float) -> void:
 	_rock_mesh(at + Vector3(-size.x * 0.12, 0.0, size.z * 0.10),
 		size * Vector3(0.52, 0.44, 0.48), spin - 0.2, mat_rock_c)
 	_box_collider(size * 0.92, at + Vector3.UP * (size.y * 0.40))
+	_contact(at.x, at.z, size.x * 0.85, 0.60)
 
 
 func _ridge(at: Vector3, size: Vector3, spin: float) -> void:
@@ -331,6 +456,7 @@ func _crate(at: Vector3, size: float, yaw: float, tilt: float = 0.0) -> void:
 		Vector3(0.0, 0.04 * size, size * 0.505), HULL_LIGHT, mat_pack)
 	_child(node, _bevel(Vector3(size * 0.24, size * 0.10, 0.012), 0.004),
 		Vector3(-0.18 * size, 0.04 * size, size * 0.518), AMBER, mat_amber)
+	_contact(at.x, at.z, size * 0.95, 0.58)
 
 
 func _cargo_gantry(at: Vector3) -> void:
@@ -338,6 +464,7 @@ func _cargo_gantry(at: Vector3) -> void:
 	for side in [-1.0, 1.0]:
 		_box(Vector3(0.24, 3.2, 0.24), at + Vector3(0.0, 1.6, side * 1.05), Color.WHITE, false, 0.0, Vector3.ZERO, mat_trim_dark)
 		_box(Vector3(0.55, 0.12, 0.55), at + Vector3(0.0, 0.06, side * 1.05), Color.WHITE, false, 0.0, Vector3.ZERO, mat_bare)
+		_contact(at.x, at.z + side * 1.05, 0.50, 0.45)
 	_box(Vector3(0.28, 0.28, 2.5), at + Vector3.UP * 3.15, Color.WHITE, false, 0.0, Vector3.ZERO, mat_trim)
 	for side in [-1.0, 1.0]:
 		_box(Vector3(0.10, 0.10, 1.35), at + Vector3(0.0, 2.72, side * 0.50), Color.WHITE,
@@ -363,6 +490,7 @@ func _container(at: Vector3, size: Vector3, yaw: float, body_color: Color, frame
 	for z in [-0.16, 0.16]:
 		_child(body, _bevel(Vector3(0.035, size.y * 0.82, 0.06), 0.008), Vector3(door_x, 0.0, z * size.z), AMBER, mat_amber)
 	_child(body, _bevel(Vector3(0.02, 0.26, 0.9), 0.006), Vector3(door_x + 0.01, 0.16 * size.y, 0.0), HULL_LIGHT, kit.clean_paint(HULL_LIGHT, 0.5))
+	_contact(at.x, at.z, maxf(size.x, size.z) * 0.72, 0.50)
 
 
 func _yard_gantry(at: Vector3) -> void:
@@ -372,6 +500,7 @@ func _yard_gantry(at: Vector3) -> void:
 	for side in [-1.0, 1.0]:
 		_box(Vector3(0.55, 6.8, 0.55), at + Vector3(0.0, 3.4, side * 10.8), Color.WHITE, true, 0.0, Vector3.ZERO, frame)
 		_box(Vector3(0.95, 0.20, 0.95), at + Vector3(0.0, 0.10, side * 10.8), Color.WHITE, false, 0.0, Vector3.ZERO, cream)
+		_contact(at.x, at.z + side * 10.8, 0.95, 0.55)
 		for y in [2.2, 4.8]:
 			_box(Vector3(0.12, 0.35, 0.85), at + Vector3(0.0, y, side * 10.8), Color.WHITE, false, 0.0, Vector3.ZERO, mat_amber)
 	_box(Vector3(0.62, 0.70, 21.4), at + Vector3.UP * 6.65, Color.WHITE, false, 0.0, Vector3.ZERO, cream)
@@ -404,6 +533,7 @@ func _lamp_post(at: Vector3) -> void:
 	light.light_energy = 0.42
 	light.omni_range = 7.5
 	add_child(light)
+	_contact(at.x, at.z, 0.42, 0.50)
 
 
 # ---------------------------------------------------------------- 生物窝
@@ -478,7 +608,7 @@ func _crushed_can(at: Vector3, yaw: float) -> void:
 func _build_bay_frame() -> void:
 	# 门框碰撞：与旧版逐值一致（立柱 0.70×3.80×0.55 @ x13.92 z±3.02；横梁 0.64×0.46×6.30 @ y3.60）。
 	for side in [-1.0, 1.0]:
-		_box(Vector3(0.70, 3.80, 0.55), Vector3(13.92, 1.90, side * 3.02), HULL, true, 0.0, Vector3.ZERO, mat_hull)
+		_box(Vector3(0.70, 3.80, 0.55), Vector3(13.92, 1.90, side * 3.02), HULL, true, 0.0, Vector3.ZERO, mat_hull, true)
 		_box(Vector3(0.74, 0.18, 0.60), Vector3(13.90, 3.82, side * 3.02), TRIM, false, 0.0, Vector3.ZERO, mat_trim)
 		# 立柱外侧的检修面板 + 四颗螺栓，说明“这块可以拆”。
 		_panel(Vector3(0.02, 1.05, 0.44), Vector3(13.555, 2.25, side * 3.02), TRIM, 0.0)
@@ -495,7 +625,7 @@ func _build_bay_frame() -> void:
 		bumper.rings = 4
 		_add(bumper, Vector3(13.24, 1.62, side * 3.40), Color.WHITE, 0.0, Vector3.ZERO, Vector3.ONE, mat_rubber)
 	# 横梁
-	_box(Vector3(0.64, 0.46, 6.30), Vector3(13.90, 3.60, 0.0), HULL, true, 0.0, Vector3.ZERO, mat_hull)
+	_box(Vector3(0.64, 0.46, 6.30), Vector3(13.90, 3.60, 0.0), HULL, true, 0.0, Vector3.ZERO, mat_hull, true)
 	# 横梁与船体之间的连接座（承力路径）
 	_box(Vector3(0.50, 0.92, 4.20), Vector3(14.15, 4.10, 0.0), Color.WHITE, false, 0.0, Vector3.ZERO, mat_hull_light)
 	for z in [-2.0, 0.0, 2.0]:
@@ -730,11 +860,11 @@ func _bevel(size: Vector3, bevel: float = 0.025) -> ArrayMesh:
 
 func _box(size: Vector3, at: Vector3, color: Color, solid: bool = false,
 		emission: float = 0.0, rot: Vector3 = Vector3.ZERO,
-		material: Material = null) -> MeshInstance3D:
+		material: Material = null, metal_frame: bool = false) -> MeshInstance3D:
 	var mesh: Mesh = kit.beveled_box(size, minf(0.04, minf(size.x, minf(size.y, size.z)) * 0.18))
 	var node := _add(mesh, at, color, emission, rot, Vector3.ONE, material)
 	if solid:
-		_box_collider(size, at, rot)
+		_box_collider(size, at, rot, metal_frame)
 	return node
 
 
@@ -796,8 +926,10 @@ func _bolt(at: Vector3, yaw: float, radius: float = 0.04) -> void:
 	add_child(w)
 
 
-func _box_collider(size: Vector3, at: Vector3, rot: Vector3 = Vector3.ZERO) -> void:
+func _box_collider(size: Vector3, at: Vector3, rot: Vector3 = Vector3.ZERO, metal_frame: bool = false) -> void:
 	var body := StaticBody3D.new()
+	if metal_frame:
+		body.add_to_group("goal_metal")
 	body.position = at
 	body.rotation = rot
 	body.collision_layer = 2

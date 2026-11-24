@@ -13,9 +13,9 @@
 ## 单人原型：玩家不是写死的唯一对象（`actors` 字典 + peer_id），但没有联网代码。
 
 const SOURCE_COMMIT := "42519ff403241bf5ac968edb9ae326c6fdbc74fe"
-const SPAWN := Vector3(-11.0, 0.02, 5.0)
+const SPAWN := Vector3(1.0, 0.02, 0.0)
 const SPAWN_YAW := -PI * 0.5
-const BALL_HOME := Vector3(-4.6, 0.0, 1.4)
+const BALL_HOME := Vector3(2.68, 0.0, 0.0)
 const DRAGON_HOME := Vector3(10.3, 0.0, 0.0)
 
 ## 踢球：必须足够近、方向合理、且中间无遮挡（没有远程踢球）。
@@ -257,7 +257,7 @@ func _open_pause() -> void:
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	get_tree().paused = true
 	if _presentation != null:
-		_presentation.call("show_pause", _muted)
+		_presentation.call("show_pause", _muted, shots_this_round > 0 or score > 0)
 
 
 func _close_pause(recapture: bool = true) -> void:
@@ -336,6 +336,11 @@ func _register_input() -> void:
 
 
 func _input(event: InputEvent) -> void:
+	if completed and arcade:
+		if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_R:
+			_on_restart_requested()
+			get_viewport().set_input_as_handled()
+		return
 	# 标题屏 / 倒计时阶段：不处理踢球，把输入留给开场 UI。
 	if not _round_active:
 		if event is InputEventKey and event.pressed and not event.echo \
@@ -405,16 +410,14 @@ func _build_environment() -> void:
 	env.fog_density = 0.0045
 	env.fog_sky_affect = 0.12
 	env.tonemap_mode = Environment.TONE_MAPPER_ACES
+	# 备注：共振星的 "AgX" 是烘焙进静态贴图的显示 LUT（static_surface 走 unshaded），
+	# 不是运行时 tonemap；这里保持 ACES 基线与 11-23 画面一致，不跟风切换。
 	env.tonemap_exposure = 1.0
 
-	# --- 2026-11-23 画面质感：环境光遮蔽 + 辉光 + 色调 ---
-	# SSAO 主要给货箱/门框/岩体的接触面压暗，让物体不再“飘”在均匀亮度里。
-	env.ssao_enabled = true
-	env.ssao_radius = 1.35
-	env.ssao_intensity = 1.7
-	env.ssao_power = 1.4
-	env.ssao_detail = 0.6
-	env.ssao_light_affect = 0.12
+	# --- ART-SYNC-001：接触面压暗改由 shader AO + 贴地贴片负责 ---
+	# gl_compatibility 不支持 SSAO/SSIL/SDFGI（这里原来的开关是空转的）。
+	# 参考共振星的做法：岩面在片元里做接触遮蔽，道具用径向贴片。
+	env.ssao_enabled = false
 	# 辉光只抬自发光（燃料罐/球/晶簇/门带），阈值高于 1.0 以免整体发糊。
 	env.glow_enabled = true
 	env.glow_intensity = 0.55
@@ -468,6 +471,19 @@ func _build_environment() -> void:
 	yard_fill.shadow_enabled = false
 	add_child(yard_fill)
 
+	# 掠射光（graze）：低角度暖光扫过地面颗粒与碎石，让三级尺度细节在画面上
+	# 读得出来（参考共振星的 graze 灯位做法）；不投影、不抬整体曝光。
+	var graze := SpotLight3D.new()
+	graze.position = Vector3(-16.0, 2.4, -9.0)
+	graze.rotation_degrees = Vector3(-8.0, 118.0, 0.0)
+	graze.light_color = Color("#ffd9a8")
+	graze.light_energy = 0.55
+	graze.spot_range = 30.0
+	graze.spot_angle = 52.0
+	graze.spot_attenuation = 1.1
+	graze.shadow_enabled = false
+	add_child(graze)
+
 
 func _build_field() -> void:
 	env_art = load("res://scripts/nailong_environment.gd").new() as Node3D
@@ -503,6 +519,9 @@ func _spawn_ball() -> void:
 	add_child(ball)
 	collector.call("watch_ball", ball)
 	ball.connect("out_of_bounds", _on_ball_out_of_bounds)
+	ball.body_entered.connect(func(body: Node) -> void:
+		if _sfx != null and body.is_in_group("goal_metal") and _ball_speed() > 1.0:
+			_sfx.call("play", "metal"))
 
 
 func _build_dragon() -> void:
@@ -623,7 +642,7 @@ func _build_hud() -> void:
 	if arcade:
 		title.text = "奶龙星 · 90 秒装卸挑战"
 		_objective_label.text = "90 秒内尽可能多进球 · 每球 +4 秒 · 被拦下连击清零"
-		_hint_label.text = "左键点一下 = 普通射门；按住蓄力 = 抽射。R 重开。"
+		_hint_label.text = "左键按住蓄力，松手射门 · R 重开"
 
 	_mode_label = Label.new()
 	_mode_label.position = Vector2(1080, 22)
@@ -944,7 +963,7 @@ func _update_prompt() -> void:
 			var pct := int(round(100.0 * clampf((_charge - CHARGE_MIN_TIME) / (CHARGE_MAX_TIME - CHARGE_MIN_TIME), 0.0, 1.0)))
 			_set_prompt("蓄力 %d%%　松手踢出" % pct, Color("#ffd479"))
 		else:
-			_set_prompt("左键点一下＝普通射门；按住蓄力＝抽射", Color("#7dffd4"))
+			_set_prompt("左键按住蓄力，松手射门", Color("#7dffd4"))
 	else:
 		_set_prompt("", Color("#8fa6b2"))
 
@@ -1139,6 +1158,8 @@ func _end_round() -> void:
 		best_score = score
 		_save_best()
 	if _presentation != null and arcade:
+		_hud.hide()
+		_set_play_enabled(false)
 		_presentation.call("show_result", score, best_score, goals_this_round, best_combo_this_round,
 			is_record, shots_this_round, saves_this_round)
 	else:
@@ -1192,13 +1213,16 @@ func _on_ball_out_of_bounds(_point: Vector3) -> void:
 func reset_round() -> void:
 	if player == null:
 		return
+	_hud.show()
+	if _round_active:
+		_set_play_enabled(true)
 	player.global_position = SPAWN
 	player.velocity = Vector3.ZERO
 	player.rotation.y = SPAWN_YAW
 	player.set("_camera_yaw", SPAWN_YAW)
 	player.set("_camera_yaw_target", SPAWN_YAW)
-	player.set("_camera_pitch", 0.0)
-	player.set("_camera_pitch_target", 0.0)
+	player.set("_camera_pitch", 0.27)
+	player.set("_camera_pitch_target", 0.27)
 	player.set("use_first_person", true)
 	(player.get("visual") as Node3D).visible = false
 	player.call("update_camera", 1.0, true)
@@ -1424,6 +1448,7 @@ func _run_pause_test() -> void:
 	# 先让球动起来，确认暂停真的冻结物理。
 	ball.call("kick", Vector3(1.0, 0.0, 0.0), 14.0)
 	await _wait(0.2)
+	shots_this_round = 1
 	var paused_time := round_time_left
 	var paused_speed := _ball_speed()
 	_check(paused_speed > 1.0, "ball is moving before pause (%.1f m/s)" % paused_speed, passes, failures)
@@ -1432,6 +1457,8 @@ func _run_pause_test() -> void:
 	_check(_paused and get_tree().paused, "pause freezes the tree", passes, failures)
 	_check(bool(_presentation.call("pause_visible")), "pause menu shows", passes, failures)
 	_check(not player.can_process(), "player stops processing while paused", passes, failures)
+	_check(_presentation.call("restart_confirmation_text") == "重新开始",
+		"restart initially shows its normal label", passes, failures)
 
 	await _wait(0.6)
 	_check(is_equal_approx(round_time_left, paused_time), "round timer frozen while paused", passes, failures)
@@ -1459,7 +1486,9 @@ func _run_pause_test() -> void:
 	score = 250
 	round_time_left = 12.0
 	_open_pause()
-	_presentation.emit_signal("restart_requested")
+	_presentation.call("request_pause_restart")
+	_check(_paused and score == 250 and _presentation.call("restart_confirmation_text") == "确认放弃本局并重开", "first restart click asks for confirmation", passes, failures)
+	_presentation.call("request_pause_restart")
 	_check(not _paused and not get_tree().paused, "restart leaves pause", passes, failures)
 	_check(score == 0 and is_equal_approx(round_time_left, ROUND_SECONDS), "restart resets the round", passes, failures)
 	_check(shots_this_round == 0 and saves_this_round == 0, "restart clears the shot stats", passes, failures)
@@ -1599,6 +1628,8 @@ func _run_flow_test() -> void:
 
 
 func _run_ui_shots() -> void:
+	_shot_dir = "res://docs/ui_review"
+	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(_shot_dir))
 	await _wait(0.8)
 	reset_round()
 	await _wait(0.3)
@@ -1609,16 +1640,24 @@ func _run_ui_shots() -> void:
 	if _presentation != null:
 		_presentation.call("hide_title")
 		_presentation.call("play_countdown")
-	await _wait(0.30)
+	await _wait(0.65)
 	await _shot("21_countdown.png")
-	await _wait(2.6)
+	await _wait(2.8)
 	if _presentation != null:
-		_presentation.call("show_pause", _muted)
-	await _wait(0.5)
+		_presentation.call("show_pause", _muted, true)
+	await _wait(0.7)
 	await _shot("23_pause.png")
 	if _presentation != null:
 		_presentation.call("hide_pause")
-		_presentation.call("show_result", 940, 1240, 5, 4, false, 12, 4)
+	# 走真实结算入口，确保截图中的 HUD、输入和结算状态一致。
+	score = 940
+	best_score = 1240
+	goals_this_round = 5
+	best_combo_this_round = 4
+	shots_this_round = 12
+	saves_this_round = 4
+	_end_round()
+	await get_tree().process_frame
 	await _wait(0.7)
 	await _shot("22_result.png")
 	print("GULU UI SHOTS done")
@@ -1691,6 +1730,8 @@ func _run_selftest() -> void:
 	_check(ball_screen.x > 0 and ball_screen.x < view.x and ball_screen.y > 0 and ball_screen.y < view.y, "ball visible on entry", passes, failures)
 	_check(dragon_screen.x > 0 and dragon_screen.x < view.x and dragon_screen.y > 0 and dragon_screen.y < view.y, "dragon visible on entry", passes, failures)
 	_check(bay_screen.x > 0 and bay_screen.x < view.x and bay_screen.y > 0 and bay_screen.y < view.y, "goal visible on entry", passes, failures)
+	_check(_try_kick(), "opening shot works without moving or turning", passes, failures)
+	reset_round()
 
 	# --- 旧玩法已移除 ---
 	_check(not InputMap.has_action("provoke"), "old provoke action removed", passes, failures)
@@ -1890,7 +1931,7 @@ func _run_selftest() -> void:
 
 	# --- 资源与模型 ---
 	var sfx_players := _sfx.get("_players") as Dictionary
-	_check(sfx_players != null and sfx_players.size() == 3, "kick/block/loaded sfx imported (%d/3)" % (sfx_players.size() if sfx_players != null else 0), passes, failures)
+	_check(sfx_players.has_all(["kick", "block", "loaded", "metal"]), "four gameplay sounds imported", passes, failures)
 	var visual := dragon.get("visual") as Node3D
 	var model_meshes := visual.find_children("*", "MeshInstance3D", true, false)
 	_check(model_meshes.size() > 0, "dragon model meshes present (%d)" % model_meshes.size(), passes, failures)
