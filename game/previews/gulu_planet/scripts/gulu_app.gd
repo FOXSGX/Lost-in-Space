@@ -1802,7 +1802,7 @@ func _run_selftest() -> void:
 
 	# --- 墙面反弹 ---
 	reset_round()
-	ball.call("reset_to", Vector3(14.0, 0.0, 12.0))
+	ball.call("reset_to", Vector3(14.0, 0.0, 26.0))
 	await _wait(0.4)
 	ball.call("kick", Vector3(0.0, 0.0, 1.0), 12.0)
 	var bounced := false
@@ -2109,6 +2109,19 @@ func _run_shots() -> void:
 	_place_player(Vector3(-0.6, 0.02, -9.2), Vector3(-3.5, -1.2, -18.4))
 	await _wait(0.6)
 	await _shot("20_south_pit.png")
+
+	# 2026-11-25 地图 96×64：西侧堆料区 / 东侧场站 / 从货台回看全场
+	_place_player(Vector3(-24.0, 0.02, 2.0), Vector3(-35.0, 1.2, 0.0))
+	await _wait(0.6)
+	await _shot("21_west_yard.png")
+
+	_place_player(Vector3(24.0, 0.02, 9.0), Vector3(37.0, 1.6, 12.0))
+	await _wait(0.6)
+	await _shot("22_east_station.png")
+
+	_place_player(Vector3(-10.0, 1.04, 20.0), Vector3(10.0, 0.2, -6.0))
+	await _wait(0.6)
+	await _shot("23_terrace_overview.png")
 
 	print("GULU SHOTS dir=%s" % ProjectSettings.globalize_path(_shot_dir))
 	get_tree().quit(0)

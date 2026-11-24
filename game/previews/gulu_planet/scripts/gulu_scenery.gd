@@ -67,6 +67,8 @@ func _ready() -> void:
 	_build_observation_deck()
 	_build_pipeline_corridors()
 	_build_terrace_props()
+	_build_west_yard()
+	_build_east_station()
 	_build_far_landmarks()
 	_flush_decals()
 
@@ -365,6 +367,69 @@ func _build_terrace_props() -> void:
 	_contact(-7.5, -19.0, 2.2, 0.45)
 
 
+# ---------------------------------------------------------------- 西侧堆料区
+
+## 地图扩到 96×64 后的西侧可漫游区域：矿堆 + 料箱 + 小型门架 + 工作灯。
+func _build_west_yard() -> void:
+	var rock_specs := [
+		[Vector3(-33.0, 0.0, -6.0), Vector3(4.2, 2.4, 3.6), 0.0],
+		[Vector3(-37.5, 0.0, 2.5), Vector3(3.4, 1.9, 3.0), 1.1],
+		[Vector3(-31.5, 0.0, 7.0), Vector3(2.8, 1.6, 2.4), 2.2],
+	]
+	for spec in rock_specs:
+		var node := MeshInstance3D.new()
+		node.mesh = _kit.rock_mesh(float(spec[2]) * 3.7 + 9.0, spec[1], 2)
+		node.material_override = _mat_rock
+		node.position = spec[0]
+		node.rotation.y = spec[2]
+		node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
+		add_child(node)
+		_contact(spec[0].x, spec[0].z, spec[1].x * 0.8, 0.5)
+	# 料箱两排
+	for i in range(4):
+		_box(Vector3(1.1, 0.9, 1.0), Vector3(-29.5 + float(i) * 1.25, 0.45, -1.6), _mat_paint, 0.1 * float(i), true)
+	_box(Vector3(1.2, 1.3, 1.0), Vector3(-28.4, 0.65, 0.2), _mat_paint_light, -0.2, true)
+	# 小门架（两根柱 + 横梁）
+	for dx in [-1.4, 1.4]:
+		_box(Vector3(0.18, 3.4, 0.18), Vector3(-35.5 + dx, 1.7, -1.0), _mat_frame_dark, 0.0, true)
+	_box(Vector3(3.2, 0.16, 0.16), Vector3(-35.5, 3.3, -1.0), _mat_frame, 0.0, true)
+	# 工作灯
+	_box(Vector3(0.10, 0.9, 0.10), Vector3(-30.2, 0.45, 4.2), _mat_frame_dark, 0.0, false)
+	_box(Vector3(0.18, 0.18, 0.18), Vector3(-30.2, 0.98, 4.2), _mat_amber, 0.0, false)
+	var lamp := OmniLight3D.new()
+	lamp.position = Vector3(-30.2, 1.1, 4.2)
+	lamp.light_color = Color("#ffe0b8")
+	lamp.light_energy = 0.5
+	lamp.omni_range = 8.0
+	add_child(lamp)
+
+
+# ---------------------------------------------------------------- 东侧场站
+
+## 东侧可漫游区域：集装箱堆 + 天线塔 + 油桶，给“往东走”一个目的地。
+func _build_east_station() -> void:
+	_box(Vector3(3.4, 2.5, 1.4), Vector3(34.0, 1.25, 12.0), _mat_paint, 0.0, true)
+	_box(Vector3(3.0, 2.2, 1.3), Vector3(36.2, 1.10, 14.0), _mat_paint_light, 0.08, true)
+	_box(Vector3(2.6, 2.0, 1.2), Vector3(33.4, 1.00, 15.6), _mat_paint, -0.12, true)
+	_contact(34.0, 12.0, 2.4, 0.45)
+	_contact(33.4, 15.6, 2.0, 0.45)
+	# 天线塔：三根立柱 + 两道横撑 + 信标（与远处信号塔区分：更矮、有舱体）
+	var at := Vector3(38.5, 0.0, 6.0)
+	for dx in [-0.45, 0.45]:
+		for dz in [-0.45, 0.45]:
+			_box(Vector3(0.12, 5.2, 0.12), at + Vector3(dx, 2.6, dz), _mat_frame_dark, 0.0, true)
+	for y in [2.0, 4.0]:
+		_box(Vector3(1.0, 0.08, 0.08), at + Vector3(0.0, y, 0.0), _mat_frame_dark, 0.0, false)
+		_box(Vector3(0.08, 0.08, 1.0), at + Vector3(0.0, y, 0.0), _mat_frame_dark, 0.0, false)
+	_box(Vector3(0.6, 0.5, 0.6), at + Vector3(0.0, 5.4, 0.0), _mat_paint_light, 0.0, true)
+	_box(Vector3(0.16, 0.16, 0.16), at + Vector3(0.0, 5.85, 0.0), _mat_amber, 0.0, false)
+	# 油桶三只
+	for i in range(3):
+		var barrel := _cyl(0.26, 0.82, Vector3(31.6 + float(i) * 0.62, 0.41, 9.4), _mat_paint_light, true, 14)
+		barrel.rotation.y = float(i) * 0.5
+	_contact(32.2, 9.4, 1.2, 0.45)
+
+
 # ---------------------------------------------------------------- 远景地标
 
 func _build_far_landmarks() -> void:
@@ -374,7 +439,7 @@ func _build_far_landmarks() -> void:
 	_box(Vector3(5.6, 0.9, 1.9), Vector3(14.7, 5.1, 18.7), _mat_rock, 0.0, false)
 
 	# 两座信号塔（格构感：三根立柱 + 两道横撑 + 信标）
-	for spec in [[Vector3(-23.0, 0.0, -13.0), 8.6], [Vector3(25.0, 0.0, 11.0), 7.4]]:
+	for spec in [[Vector3(-44.0, 0.0, -27.0), 8.6], [Vector3(44.0, 0.0, 25.0), 7.4]]:
 		var at: Vector3 = spec[0]
 		var h: float = spec[1]
 		for dx in [-0.5, 0.5]:

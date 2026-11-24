@@ -131,8 +131,9 @@ func _physics_process(delta: float) -> void:
 	if wind != Vector3.ZERO and not collected and not sleeping:
 		apply_central_force(wind)
 	# 只有“真的掉出世界”才算需要救援；正常停球/门边停球一律不动它。
+	# ART-SYNC-002：随地图扩到 96×64，安全边界从 ±28/±22 放宽到 ±46/±30。
 	var p := global_position
-	if p.y < -8.0 or absf(p.x) > 28.0 or absf(p.z) > 22.0:
+	if p.y < -8.0 or absf(p.x) > 50.0 or absf(p.z) > 34.0:
 		out_of_bounds.emit(p)
 
 

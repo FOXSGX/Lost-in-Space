@@ -38,9 +38,10 @@ const PACK := Color("#d8cbb3")
 
 const NEST_CENTER := Vector3(1.0, 0.0, -2.5)
 
-## ART-SYNC-002：地图扩大（40×30 → 64×44），球路与装货口位置完全不变。
-const YARD_HALF_X := 32.0
-const YARD_HALF_Z := 22.0
+## ART-SYNC-002：地图扩大（40×30 → 64×44 → 96×64），球路与装货口位置完全不变。
+## 目标：像共振星那样“可以在地图上随意走动”，不再是一个小院。
+const YARD_HALF_X := 48.0
+const YARD_HALF_Z := 32.0
 
 ## ART-SYNC-001：地面改为世界空间三级尺度的专用 shader（见文件头注释），
 ## 贴地接触贴片用 MultiMesh 合并成 1 个 draw call。
@@ -252,6 +253,10 @@ func _build_talus() -> void:
 		Vector3(-26.0, 0.0, -18.0), Vector3(26.0, 0.0, -17.0),
 		Vector3(28.0, 0.0, 12.0), Vector3(-27.0, 0.0, 5.0),
 		Vector3(18.0, 0.0, -20.0), Vector3(-20.5, 0.0, 20.0),
+		# ART-SYNC-002b：96×64 外圈
+		Vector3(-40.0, 0.0, -12.0), Vector3(-42.0, 0.0, 14.0),
+		Vector3(41.0, 0.0, -14.0), Vector3(43.0, 0.0, 20.0),
+		Vector3(-12.0, 0.0, 28.0), Vector3(14.0, 0.0, 29.0),
 	]
 	var grades := [
 		{"radius": 0.150, "count": 26, "near": 1.6, "far": 4.4, "embed": 0.35, "shadow": true},
@@ -334,11 +339,11 @@ func _build_terraces() -> void:
 
 func _build_ground() -> void:
 	# ART-SYNC-002：底板扩大到 64×44；南侧下沉坑位置留洞（四块拼合，不要盖住坑口）。
-	# 坑口：x -12..6，z -21..-15。
-	_box(Vector3(YARD_HALF_X * 2.0, 0.5, 37.0), Vector3(0.0, -0.25, 3.5), GROUND, true, 0.0, Vector3.ZERO, mat_ground)
-	_box(Vector3(YARD_HALF_X * 2.0, 0.5, 1.0), Vector3(0.0, -0.25, -21.5), GROUND, true, 0.0, Vector3.ZERO, mat_ground)
-	_box(Vector3(20.0, 0.5, 6.0), Vector3(-22.0, -0.25, -18.0), GROUND, true, 0.0, Vector3.ZERO, mat_ground)
-	_box(Vector3(26.0, 0.5, 6.0), Vector3(19.0, -0.25, -18.0), GROUND, true, 0.0, Vector3.ZERO, mat_ground)
+	# 坑口：x -12..6，z -21..-15。其余四块拼成完整地面。
+	_box(Vector3(YARD_HALF_X * 2.0, 0.5, YARD_HALF_Z + 15.0), Vector3(0.0, -0.25, (YARD_HALF_Z - 15.0) * 0.5), GROUND, true, 0.0, Vector3.ZERO, mat_ground)
+	_box(Vector3(YARD_HALF_X * 2.0, 0.5, YARD_HALF_Z - 21.0), Vector3(0.0, -0.25, -21.0 - (YARD_HALF_Z - 21.0) * 0.5), GROUND, true, 0.0, Vector3.ZERO, mat_ground)
+	_box(Vector3(YARD_HALF_X - 12.0, 0.5, 6.0), Vector3(-12.0 - (YARD_HALF_X - 12.0) * 0.5, -0.25, -18.0), GROUND, true, 0.0, Vector3.ZERO, mat_ground)
+	_box(Vector3(YARD_HALF_X - 6.0, 0.5, 6.0), Vector3(6.0 + (YARD_HALF_X - 6.0) * 0.5, -0.25, -18.0), GROUND, true, 0.0, Vector3.ZERO, mat_ground)
 
 	# 只保留两块大色差：暖色球场 + 深色装货平台。不再铺小砖、环线、灯带。
 	_box(Vector3(24.0, 0.012, 15.0), Vector3(0.0, 0.008, 0.0), Color("#b8ab92"), false, 0.0, Vector3.ZERO, mat_ground_warm)
