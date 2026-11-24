@@ -1,0 +1,66 @@
+{
+  "rock_wall_a": {
+    "triangles": 11180,
+    "kind": "wall"
+  },
+  "rock_wall_b": {
+    "triangles": 12752,
+    "kind": "wall"
+  },
+  "rock_wall_c": {
+    "triangles": 11914,
+    "kind": "wall"
+  },
+  "rock_wall_d": {
+    "triangles": 11808,
+    "kind": "wall"
+  },
+  "rock_vault_a": {
+    "triangles": 6036,
+    "kind": "vault"
+  },
+  "rock_vault_b": {
+    "triangles": 6468,
+    "kind": "vault"
+  },
+  "rock_vault_c": {
+    "triangles": 6036,
+    "kind": "vault"
+  },
+  "rock_shoulder_a": {
+    "triangles": 4390,
+    "kind": "shoulder"
+  },
+  "rock_shoulder_b": {
+    "triangles": 4488,
+    "kind": "shoulder"
+  },
+  "rock_outcrop_a": {
+    "triangles": 4524,
+    "kind": "outcrop"
+  },
+  "rock_outcrop_b": {
+    "triangles": 4638,
+    "kind": "outcrop"
+  },
+  "rock_outcrop_c": {
+    "triangles": 4454,
+    "kind": "outcrop"
+  },
+  "rock_rubble_a": {
+    "triangles": 2492,
+    "kind": "rubble"
+  },
+  "rock_rubble_b": {
+    "triangles": 2652,
+    "kind": "rubble"
+  },
+  "rock_rubble_c": {
+    "triangles": 2588,
+    "kind": "rubble"
+  },
+  "crystal_cluster_a": {
+    "triangles": 2538,
+    "kind": "crystal"
+  }
+}

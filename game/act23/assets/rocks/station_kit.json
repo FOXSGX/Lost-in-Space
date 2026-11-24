@@ -1,0 +1,510 @@
+{
+ "blend": "C:\\Users\\ASUS\\Desktop\\迷失太空\\art-source\\editable\\resonance\\codex_mining_station_prototype_01_1\\mining_station_01_1_baked.blend",
+ "modules": [
+  {
+   "name": "schist_shell_a",
+   "kind": "rock",
+   "source": "STATIC_east__ENV02 · pressure schist",
+   "tris": 9000,
+   "dims": [
+    12.616,
+    17.142,
+    6.211
+   ],
+   "facing": [
+    -0.9996,
+    -0.0291,
+    -0.0037
+   ],
+   "file": "schist_shell_a.glb",
+   "bytes": 908948
+  },
+  {
+   "name": "schist_shell_b",
+   "kind": "rock",
+   "source": "STATIC_west__ENV02 · pressure schist",
+   "tris": 9000,
+   "dims": [
+    12.384,
+    15.271,
+    6.289
+   ],
+   "facing": [
+    0.9995,
+    -0.0271,
+    0.0181
+   ],
+   "file": "schist_shell_b.glb",
+   "bytes": 909012
+  },
+  {
+   "name": "schist_shell_c",
+   "kind": "rock",
+   "source": "STATIC_middle__ENV02 · pressure schist",
+   "tris": 7000,
+   "dims": [
+    9.904,
+    15.268,
+    5.212
+   ],
+   "facing": [
+    -0.2193,
+    -0.2554,
+    -0.9416
+   ],
+   "file": "schist_shell_c.glb",
+   "bytes": 711476
+  },
+  {
+   "name": "thrust_a",
+   "kind": "rock",
+   "source": "R01 · oblique primary thrust",
+   "tris": 6000,
+   "dims": [
+    3.611,
+    2.445,
+    4.948
+   ],
+   "facing": [
+    0.132,
+    0.003,
+    -0.9912
+   ],
+   "file": "thrust_a.glb",
+   "bytes": 147652
+  },
+  {
+   "name": "shelf_a",
+   "kind": "rock",
+   "source": "R02 · low forward erosion shelf",
+   "tris": 5500,
+   "dims": [
+    4.235,
+    2.83,
+    2.803
+   ],
+   "facing": [
+    0.6735,
+    0.0551,
+    0.7371
+   ],
+   "file": "shelf_a.glb",
+   "bytes": 137620
+  },
+  {
+   "name": "cap_a",
+   "kind": "rock",
+   "source": "R03 · hanging cap, cleaved return",
+   "tris": 5500,
+   "dims": [
+    5.112,
+    2.261,
+    2.329
+   ],
+   "facing": [
+    0.9085,
+    0.0425,
+    -0.4156
+   ],
+   "file": "cap_a.glb",
+   "bytes": 136400
+  },
+  {
+   "name": "knuckle_a",
+   "kind": "rock",
+   "source": "R04 · fractured right knuckle",
+   "tris": 5000,
+   "dims": [
+    2.761,
+    2.15,
+    3.928
+   ],
+   "facing": [
+    -0.5117,
+    -0.0216,
+    0.8589
+   ],
+   "file": "knuckle_a.glb",
+   "bytes": 124252
+  },
+  {
+   "name": "apron_a",
+   "kind": "rock",
+   "source": "R05 · weathered apron",
+   "tris": 3000,
+   "dims": [
+    2.311,
+    2.07,
+    1.316
+   ],
+   "facing": [
+    0.0,
+    1.0,
+    0.0
+   ],
+   "file": "apron_a.glb",
+   "bytes": 77772
+  },
+  {
+   "name": "tongue_a",
+   "kind": "rock",
+   "source": "R06 · split exfoliation tongue",
+   "tris": 2800,
+   "dims": [
+    1.23,
+    0.694,
+    0.543
+   ],
+   "facing": [
+    0.0,
+    1.0,
+    0.0
+   ],
+   "file": "tongue_a.glb",
+   "bytes": 77000
+  },
+  {
+   "name": "lip_a",
+   "kind": "rock",
+   "source": "R07 · sheared mineral lip",
+   "tris": 2600,
+   "dims": [
+    1.171,
+    0.743,
+    0.615
+   ],
+   "facing": [
+    0.0,
+    1.0,
+    0.0
+   ],
+   "file": "lip_a.glb",
+   "bytes": 67984
+  },
+  {
+   "name": "shale_fold_a",
+   "kind": "rock",
+   "source": "STATIC_east__ST01 · deep folded shale",
+   "tris": 5000,
+   "dims": [
+    18.753,
+    8.744,
+    7.665
+   ],
+   "facing": [
+    0.0725,
+    -0.9255,
+    -0.3716
+   ],
+   "file": "shale_fold_a.glb",
+   "bytes": 495252
+  },
+  {
+   "name": "vault_slab_a",
+   "kind": "rock",
+   "source": "VAULT · interlocked cleaved slab 0",
+   "tris": 5000,
+   "dims": [
+    5.664,
+    2.611,
+    1.682
+   ],
+   "facing": [
+    -0.5698,
+    0.8169,
+    -0.0893
+   ],
+   "file": "vault_slab_a.glb",
+   "bytes": 122816
+  },
+  {
+   "name": "vault_slab_b",
+   "kind": "rock",
+   "source": "VAULT · interlocked cleaved slab 2",
+   "tris": 5000,
+   "dims": [
+    6.374,
+    3.05,
+    2.754
+   ],
+   "facing": [
+    0.1542,
+    0.8975,
+    0.4132
+   ],
+   "file": "vault_slab_b.glb",
+   "bytes": 123036
+  },
+  {
+   "name": "folded_vault_a",
+   "kind": "rock",
+   "source": "CAVE · continuous folded vault",
+   "tris": 3998,
+   "dims": [
+    22.4,
+    15.125,
+    6.935
+   ],
+   "facing": [
+    -0.0125,
+    0.9999,
+    -0.0
+   ],
+   "file": "folded_vault_a.glb",
+   "bytes": 98496
+  },
+  {
+   "name": "fissure_host_a",
+   "kind": "rock",
+   "source": "H01 · raised fissure host",
+   "tris": 4500,
+   "dims": [
+    2.496,
+    2.002,
+    1.191
+   ],
+   "facing": [
+    0.0,
+    1.0,
+    0.0
+   ],
+   "file": "fissure_host_a.glb",
+   "bytes": 115492
+  },
+  {
+   "name": "bedrock_slab_a",
+   "kind": "rock",
+   "source": "STATIC_middle__ST01 · worn granular bedrock",
+   "tris": 4000,
+   "dims": [
+    43.044,
+    19.056,
+    1.362
+   ],
+   "facing": [
+    0.0008,
+    1.0,
+    -0.0044
+   ],
+   "file": "bedrock_slab_a.glb",
+   "bytes": 407280
+  },
+  {
+   "name": "crystal_cyan_a",
+   "kind": "crystal",
+   "source": "STATIC_west__ENV02 · cyan resonant mineral",
+   "tris": 4900,
+   "dims": [
+    0.721,
+    0.521,
+    0.766
+   ],
+   "facing": [
+    -0.0942,
+    -0.236,
+    -0.9672
+   ],
+   "file": "crystal_cyan_a.glb",
+   "bytes": 348860
+  },
+  {
+   "name": "crystal_cyan_b",
+   "kind": "crystal",
+   "source": "STATIC_middle__ENV02 · cyan resonant mineral",
+   "tris": 1650,
+   "dims": [
+    0.936,
+    0.366,
+    0.537
+   ],
+   "facing": [
+    -0.2752,
+    -0.3735,
+    0.8859
+   ],
+   "file": "crystal_cyan_b.glb",
+   "bytes": 122576
+  },
+  {
+   "name": "crystal_violet_a",
+   "kind": "crystal",
+   "source": "STATIC_west__ENV02 · violet resonant mineral",
+   "tris": 4500,
+   "dims": [
+    0.716,
+    0.538,
+    0.481
+   ],
+   "facing": [
+    -0.3817,
+    -0.3216,
+    0.8665
+   ],
+   "file": "crystal_violet_a.glb",
+   "bytes": 319588
+  },
+  {
+   "name": "crystal_violet_b",
+   "kind": "crystal",
+   "source": "STATIC_middle__ENV02 · violet resonant mineral",
+   "tris": 1100,
+   "dims": [
+    0.975,
+    0.792,
+    1.572
+   ],
+   "facing": [
+    0.3087,
+    -0.0004,
+    0.9512
+   ],
+   "file": "crystal_violet_b.glb",
+   "bytes": 84644
+  },
+  {
+   "name": "crystal_shard_a",
+   "kind": "crystal",
+   "source": "STATIC_middle__ENV02 · cyan deep cleavage",
+   "tris": 540,
+   "dims": [
+    0.936,
+    0.335,
+    0.537
+   ],
+   "facing": [
+    0.3303,
+    0.4514,
+    -0.8289
+   ],
+   "file": "crystal_shard_a.glb",
+   "bytes": 45572
+  },
+  {
+   "name": "crystal_shoulder_a",
+   "kind": "crystal",
+   "source": "C06 · rear crystalline shoulder",
+   "tris": 190,
+   "dims": [
+    0.312,
+    0.458,
+    0.933
+   ],
+   "facing": [
+    0.0,
+    1.0,
+    0.0
+   ],
+   "file": "crystal_shoulder_a.glb",
+   "bytes": 16316
+  },
+  {
+   "name": "crystal_axial_a",
+   "kind": "crystal",
+   "source": "STATIC_west__ENV02 · exposed axial resonance",
+   "tris": 510,
+   "dims": [
+    0.757,
+    0.561,
+    0.644
+   ],
+   "facing": [
+    0.6246,
+    -0.7796,
+    0.0461
+   ],
+   "file": "crystal_axial_a.glb",
+   "bytes": 43660
+  },
+  {
+   "name": "vein_cyan_a",
+   "kind": "vein",
+   "source": "STATIC_east__ENV02 · cyan resonant mineral",
+   "tris": 5000,
+   "dims": [
+    10.418,
+    3.344,
+    3.069
+   ],
+   "facing": [
+    -0.7223,
+    -0.2223,
+    -0.6548
+   ],
+   "file": "vein_cyan_a.glb",
+   "bytes": 356620
+  },
+  {
+   "name": "vein_violet_a",
+   "kind": "vein",
+   "source": "STATIC_east__ENV02 · violet resonant mineral",
+   "tris": 5000,
+   "dims": [
+    10.498,
+    3.818,
+    1.919
+   ],
+   "facing": [
+    0.2907,
+    -0.7391,
+    0.6077
+   ],
+   "file": "vein_violet_a.glb",
+   "bytes": 358352
+  },
+  {
+   "name": "vein_shard_a",
+   "kind": "vein",
+   "source": "STATIC_east__ENV02 · cyan deep cleavage",
+   "tris": 2000,
+   "dims": [
+    10.335,
+    3.343,
+    3.069
+   ],
+   "facing": [
+    0.644,
+    0.2839,
+    0.7104
+   ],
+   "file": "vein_shard_a.glb",
+   "bytes": 149108
+  },
+  {
+   "name": "vein_axial_a",
+   "kind": "vein",
+   "source": "STATIC_east__ENV02 · exposed axial resonance",
+   "tris": 880,
+   "dims": [
+    10.415,
+    3.888,
+    2.688
+   ],
+   "facing": [
+    0.7287,
+    -0.5951,
+    -0.339
+   ],
+   "file": "vein_axial_a.glb",
+   "bytes": 69428
+  },
+  {
+   "name": "vein_fissure_a",
+   "kind": "vein",
+   "source": "STATIC_east__ENV02 · hydrothermal mineralised fissure",
+   "tris": 1000,
+   "dims": [
+    11.381,
+    3.085,
+    1.241
+   ],
+   "facing": [
+    0.0727,
+    0.9972,
+    0.0146
+   ],
+   "file": "vein_fissure_a.glb",
+   "bytes": 96464
+  }
+ ],
+ "failures": []
+}

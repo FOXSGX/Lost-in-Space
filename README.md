@@ -89,3 +89,11 @@ F3 才显示角度等调试数据。**尚未接入正式共振星关卡**，等 
 - Windows 导出预设：`game/export_presets.cfg`
 
 用 Godot 4.3+ 导入 `game/project.godot` 后运行。一个实例点击“创建主机”，其他实例输入主机局域网 IP 并点击“加入主机”。
+
+## 2026-11-24 共振星同步
+
+- 已从 GitHub `main`（`b119d864`）接入共振星 Act1/Act23 完整工程、共享核心资源和美术指南；腐墟星内容保持隔离，未被覆盖。
+- Act1 场景：`game/act1/act01.tscn`；Act23 场景：`game/act23/act23_entry.tscn`。
+- 同步记录：[docs/remote-sync-20261124.md](docs/remote-sync-20261124.md)
+- 美术风格学习与应用：[docs/handoff/ART-STYLE-SYNC-20261124.md](docs/handoff/ART-STYLE-SYNC-20261124.md)
+- 共振星美术指南：[docs/resonance/美术制作与AI协作指南.md](docs/resonance/美术制作与AI协作指南.md)
