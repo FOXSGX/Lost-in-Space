@@ -19,6 +19,8 @@ class_name GuluScenery
 ## - 重复件（油桶 / 栏杆柱 / 枕木）走 MultiMesh，控制 draw call。
 
 const SHADER_DECAL := preload("res://shaders/gulu_contact_decal.gdshader")
+const LOADING_FRAME := preload("res://assets/models/nailong/loading_frame.glb")
+const ATM := preload("res://scripts/core/art_atmosphere_kit.gd")
 
 const HULL := Color("#7f8e86")
 const HULL_LIGHT := Color("#b4c1b7")
@@ -41,6 +43,7 @@ var _mat_rubber: StandardMaterial3D
 var _mat_amber: StandardMaterial3D
 var _mat_decal: ShaderMaterial
 var _decal_spots: Array[Vector4] = []
+var _glb_mats: Dictionary = {}
 
 
 func _ready() -> void:
@@ -111,6 +114,45 @@ func _contact(x: float, z: float, radius: float, strength: float = 0.5) -> void:
 	_decal_spots.append(Vector4(x, z, radius, strength))
 
 
+## GLB 材质：按 GLB 里的 M_ 材质名映射到项目的 paint/mach 家族，
+## 并打开 vertex_mask_valid（Blender 已烘焙 R/G/B/A 四通道）。
+func _glb_materials() -> Dictionary:
+	if not _glb_mats.is_empty():
+		return _glb_mats
+	var cream := (_kit.paint(HULL_LIGHT, 0.50, 0.10, 1.05, 301.0) as ShaderMaterial).duplicate() as ShaderMaterial
+	var yellow := (_kit.paint(Color("#cc8f17"), 0.48, 0.08, 1.15, 302.0) as ShaderMaterial).duplicate() as ShaderMaterial
+	var orange := (_kit.paint(Color("#b24510"), 0.48, 0.10, 1.15, 303.0) as ShaderMaterial).duplicate() as ShaderMaterial
+	var deep := (_kit.dark_metal(TRIM_DARK, 0.58, 304.0) as ShaderMaterial).duplicate() as ShaderMaterial
+	var bare := (_kit.bare_metal(Color("#666f72"), 0.34, 305.0) as ShaderMaterial).duplicate() as ShaderMaterial
+	for m in [cream, yellow, orange, deep, bare]:
+		(m as ShaderMaterial).set_shader_parameter("vertex_mask_valid", true)
+	_glb_mats = {
+		"M_PaintCream": cream, "M_PaintYellow": yellow, "M_PaintOrange": orange,
+		"M_SteelDeep": deep, "M_BareSteel": bare,
+	}
+	return _glb_mats
+
+
+## 实例化一个 GLB 并按材质名覆盖。
+func _add_glb(res: PackedScene, at: Vector3, yaw: float, mats: Dictionary,
+		shadow: bool = true) -> Node3D:
+	var root := res.instantiate() as Node3D
+	root.position = at
+	root.rotation.y = yaw
+	add_child(root)
+	for node in root.find_children("*", "MeshInstance3D", true, false):
+		var mi := node as MeshInstance3D
+		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON if shadow \
+			else GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		if mi.mesh == null:
+			continue
+		for s in range(mi.mesh.get_surface_count()):
+			var src := mi.mesh.surface_get_material(s)
+			if src != null and mats.has(src.resource_name):
+				mi.set_surface_override_material(s, mats[src.resource_name])
+	return root
+
+
 func _flush_decals() -> void:
 	if _decal_spots.is_empty():
 		return
@@ -137,21 +179,19 @@ func _flush_decals() -> void:
 # ---------------------------------------------------------------- 北侧装卸场
 
 func _build_loading_yard() -> void:
-	# 货架：两组立柱 + 三层横梁，x -2.4..2.4，z = 10.4（球路之外）
-	for x in [-2.4, -0.8, 0.8, 2.4]:
-		for z in [10.4]:
-			_box(Vector3(0.16, 3.2, 0.16), Vector3(x, 1.6, z), _mat_frame, 0.0, true)
-	for y in [0.9, 1.9, 2.9]:
-		_box(Vector3(5.0, 0.12, 0.12), Vector3(0.0, y, 10.4), _mat_frame_dark, 0.0, true)
-	# 托盘与箱：上层两件、地面三件
+	# 工字钢门架：Blender 九步流水线资产（10,152 tri，底板+地脚螺栓+加强肋+节点板+焊道+吊钩）
+	_add_glb(LOADING_FRAME, Vector3(-1.0, 0.0, 11.2), 0.0, _glb_materials(), true)
+	ATM.build_ground_skirt(self, "SkirtFrame", Vector3(-1.0, 0.0, 11.2), Vector2(6.4, 2.6))
+	ATM.build_gravel_cluster(self, "GravelFrame", Vector3(-1.0, 0.0, 11.2), 2.9, 20, 77)
+	# 托盘与箱：上层两件、地面两件（避开立柱）
 	_box(Vector3(1.10, 0.12, 1.00), Vector3(-1.4, 0.98, 10.4), _mat_paint, 0.06)
 	_box(Vector3(0.95, 0.85, 0.90), Vector3(-1.4, 1.47, 10.4), _mat_paint, 0.06)
 	_box(Vector3(1.05, 0.70, 0.95), Vector3(1.1, 1.30, 10.4), _mat_paint, -0.10)
-	_box(Vector3(1.20, 1.00, 1.00), Vector3(-2.9, 0.50, 11.6), _mat_paint, 0.18)
-	_box(Vector3(0.90, 0.90, 0.90), Vector3(-2.9, 1.45, 11.6), _mat_paint, 0.42)
+	_box(Vector3(1.20, 1.00, 1.00), Vector3(-5.2, 0.50, 11.6), _mat_paint, 0.18)
+	_box(Vector3(0.90, 0.90, 0.90), Vector3(-5.2, 1.45, 11.6), _mat_paint, 0.42)
 	_box(Vector3(1.10, 0.75, 0.80), Vector3(3.4, 0.38, 11.8), _mat_paint, -0.22)
 	_contact(-1.4, 10.4, 1.5, 0.5)
-	_contact(-2.9, 11.6, 1.5, 0.5)
+	_contact(-5.2, 11.6, 1.5, 0.5)
 	_contact(3.4, 11.8, 1.2, 0.45)
 
 	# 拖车：低平板 + 四轮 + 牵引杆
@@ -226,6 +266,8 @@ func _build_service_shed() -> void:
 		var tyre := _cyl(0.42, 0.24, Vector3(3.9, 0.12 + float(i) * 0.25, z + 1.1), _mat_rubber, true, 16)
 		tyre.rotation = Vector3(0.0, float(i) * 0.8, PI * 0.5)
 	_contact(3.9, z + 1.1, 0.9, 0.5)
+	ATM.build_ground_skirt(self, "SkirtShed", Vector3(0.4, 0.0, z), Vector2(6.8, 3.2))
+	ATM.build_gravel_cluster(self, "GravelShed", Vector3(-2.2, 0.0, z + 0.9), 2.0, 12, 91)
 
 
 # ---------------------------------------------------------------- 西侧废轨与矿车
@@ -312,6 +354,8 @@ func _build_observation_deck() -> void:
 	_box(Vector3(0.16, 0.16, 0.16), Vector3(cx + 1.6, deck_y + 1.80, cz + 0.9), _mat_amber, 0.0, false)
 	_contact(cx, cz, 2.6, 0.5)
 	_contact(cx - 3.4, cz, 1.2, 0.4)
+	ATM.build_ground_skirt(self, "SkirtDeck", Vector3(cx, 0.0, cz), Vector2(4.6, 2.9))
+	ATM.build_gravel_cluster(self, "GravelDeck", Vector3(cx - 3.2, 0.0, cz), 1.8, 14, 93)
 
 
 # ---------------------------------------------------------------- 管线走廊
@@ -428,6 +472,8 @@ func _build_east_station() -> void:
 		var barrel := _cyl(0.26, 0.82, Vector3(31.6 + float(i) * 0.62, 0.41, 9.4), _mat_paint_light, true, 14)
 		barrel.rotation.y = float(i) * 0.5
 	_contact(32.2, 9.4, 1.2, 0.45)
+	ATM.build_ground_skirt(self, "SkirtEast", Vector3(34.4, 0.0, 13.2), Vector2(6.0, 6.4))
+	ATM.build_gravel_cluster(self, "GravelEast", Vector3(37.0, 0.0, 8.0), 2.4, 16, 95)
 
 
 # ---------------------------------------------------------------- 远景地标
