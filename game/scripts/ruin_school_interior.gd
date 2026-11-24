@@ -226,6 +226,7 @@ func _lights(y: float, level: int) -> void:
 	for point: Vector2 in [Vector2(-3.5, 5.0), Vector2(4.0, 5.0), Vector2(-3.5, -5.0), Vector2(4.0, -5.0), Vector2(0.0, 0.0)]:
 		_light_panel(Vector3(point.x, y + 2.86, point.y), Color("#d9ddd0"), 1.80, 9.0)
 	_light_panel(Vector3(0.0, y + 2.86, 7.9), TEAL, 1.10, 5.0)
+	_key_light(Vector3(0.0, y + 2.92, 0.0), Color("#ffe4bd"), 2.1, 13.5)
 	_exit_sign(Vector3(0.0, y + 2.45, HALF_D - 0.15))
 	if level == 2:
 		var red_light := OmniLight3D.new()
@@ -247,6 +248,22 @@ func _light_panel(at: Vector3, color: Color, energy: float, range_value: float) 
 	light.omni_range = range_value
 	light.position = at + Vector3(0.0, -0.28, 0.0)
 	light.shadow_enabled = false
+	add_child(light)
+
+
+func _key_light(at: Vector3, color: Color, energy: float, range_value: float) -> void:
+	# 单一投影主光：只让学校中庭/走廊有明确的明暗交界，其余都是无阴影补光。
+	var light := SpotLight3D.new()
+	light.name = "SchoolKeyLight"
+	light.light_color = color
+	light.light_energy = energy
+	light.spot_range = range_value
+	light.spot_angle = 48.0
+	light.spot_angle_attenuation = 1.35
+	light.shadow_enabled = true
+	light.shadow_bias = 0.08
+	light.position = at
+	light.rotation_degrees.x = -90.0
 	add_child(light)
 
 
