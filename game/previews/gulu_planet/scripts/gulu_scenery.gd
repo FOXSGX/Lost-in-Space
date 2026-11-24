@@ -66,6 +66,7 @@ func _ready() -> void:
 	_build_derelict_cart()
 	_build_observation_deck()
 	_build_pipeline_corridors()
+	_build_terrace_props()
 	_build_far_landmarks()
 	_flush_decals()
 
@@ -314,8 +315,8 @@ func _build_observation_deck() -> void:
 # ---------------------------------------------------------------- 管线走廊
 
 func _build_pipeline_corridors() -> void:
-	# 南北各一条：立柱 + 两根横管 + 阀门
-	for z in [13.2, -13.2]:
+	# 南侧地面管线（维修棚前）。北侧改到货台顶面（见 _build_terrace_props）。
+	for z in [-13.2]:
 		var post_mesh := BoxMesh.new()
 		post_mesh.size = Vector3(0.14, 1.30, 0.14)
 		var mm := MultiMesh.new()
@@ -334,19 +335,43 @@ func _build_pipeline_corridors() -> void:
 		for i in range(2):
 			var pipe := _cyl(0.17 - float(i) * 0.03, 30.0, Vector3(0.5, 1.18 - float(i) * 0.30, z), _mat_bare, false, 10)
 			pipe.rotation.z = PI * 0.5
-		# 阀门轮两只
 		for x in [-7.0, 4.0]:
 			var valve := _cyl(0.22, 0.08, Vector3(x, 1.55, z), _mat_frame, false, 14)
 			valve.rotation.x = PI * 0.5
 
 
+# ---------------------------------------------------------------- 北台与坑内道具
+
+## 北侧货台（顶面 y=1.0）上的集装箱/托盘，以及下沉坑里的管线架。
+func _build_terrace_props() -> void:
+	var deck := 1.0
+	_box(Vector3(3.0, 2.4, 1.3), Vector3(-13.4, deck + 1.20, 18.4), _mat_paint, 0.0, true)
+	_box(Vector3(2.6, 2.2, 1.2), Vector3(-9.6, deck + 1.10, 19.4), _mat_paint_light, 0.06, true)
+	_box(Vector3(1.1, 0.14, 1.0), Vector3(-6.6, deck + 0.07, 18.2), _mat_frame_dark, 0.0, true)
+	_box(Vector3(0.95, 0.8, 0.9), Vector3(-6.6, deck + 0.54, 18.2), _mat_paint, 0.18, true)
+	for x in [-17.0, -14.0, -11.0, -8.0, -5.0]:
+		_box(Vector3(0.12, 0.9, 0.12), Vector3(x, deck + 0.45, 20.6), _mat_frame_dark, 0.0, false)
+	var pipe := _cyl(0.16, 12.6, Vector3(-11.0, deck + 0.98, 20.6), _mat_bare, false, 10)
+	pipe.rotation.z = PI * 0.5
+	_contact(-13.4, 18.4, 2.0, 0.4)
+	_contact(-6.6, 18.2, 1.2, 0.4)
+
+	# 坑内：两根架管 + 一只工具箱（y 基准 -1.3）
+	for x in [-9.0, -6.0]:
+		_box(Vector3(0.12, 0.9, 0.12), Vector3(x, -0.85, -19.4), _mat_frame_dark, 0.0, false)
+	var pit_pipe := _cyl(0.14, 3.6, Vector3(-7.5, -0.40, -19.4), _mat_bare, false, 10)
+	pit_pipe.rotation.z = PI * 0.5
+	_box(Vector3(0.7, 0.4, 0.45), Vector3(-4.6, -1.10, -18.2), _mat_amber, 0.0, false)
+	_contact(-7.5, -19.0, 2.2, 0.45)
+
+
 # ---------------------------------------------------------------- 远景地标
 
 func _build_far_landmarks() -> void:
-	# 风蚀拱门：两柱 + 顶板（岩材质，纯剪影）
-	_box(Vector3(1.4, 5.2, 1.6), Vector3(-10.6, 2.6, 17.6), _mat_rock, 0.0, false)
-	_box(Vector3(1.3, 4.4, 1.5), Vector3(-6.4, 2.2, 18.0), _mat_rock, 0.0, false)
-	_box(Vector3(5.6, 0.9, 1.9), Vector3(-8.5, 5.1, 17.8), _mat_rock, 0.0, false)
+	# 风蚀拱门：两柱 + 顶板（岩材质，纯剪影）；放在北台东侧，避免与货台重叠
+	_box(Vector3(1.4, 5.2, 1.6), Vector3(12.6, 2.6, 18.5), _mat_rock, 0.0, false)
+	_box(Vector3(1.3, 4.4, 1.5), Vector3(16.8, 2.2, 18.9), _mat_rock, 0.0, false)
+	_box(Vector3(5.6, 0.9, 1.9), Vector3(14.7, 5.1, 18.7), _mat_rock, 0.0, false)
 
 	# 两座信号塔（格构感：三根立柱 + 两道横撑 + 信标）
 	for spec in [[Vector3(-23.0, 0.0, -13.0), 8.6], [Vector3(25.0, 0.0, 11.0), 7.4]]:

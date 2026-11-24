@@ -66,6 +66,10 @@ var goals_this_round := 0
 var best_combo_this_round := 1
 var _combo_timer := 0.0
 var _respawn_timer := -1.0
+
+# ART-SYNC-002：高低差射门。站在北侧货台 / 南侧坑底踢出的球，进球得分 ×1.5。
+var _kick_elev_bonus := false
+var _zone_hint := 0
 var _charging := false
 var _charge := 0.0
 ## --- 侧风（只在真实游玩时开）---
@@ -834,6 +838,19 @@ func _process(delta: float) -> void:
 func _update_arcade(delta: float) -> void:
 	if _charging:
 		_charge = minf(_charge + delta, CHARGE_MAX_TIME)
+	# ART-SYNC-002：走到高低差区域时给一次提示（进入/退出一区只提示一次）
+	if arcade and _round_active and player != null:
+		var zone := 0
+		if player.global_position.y > 0.8:
+			zone = 1
+		elif player.global_position.y < -0.6:
+			zone = 2
+		if zone != _zone_hint:
+			_zone_hint = zone
+			if zone == 1:
+				_flash("北侧货台 · 从这里射门得分 ×1.5", 1.8)
+			elif zone == 2:
+				_flash("下沉维修坑 · 从这里射门得分 ×1.5", 1.8)
 	if _respawn_timer > 0.0:
 		_respawn_timer -= delta
 		if _respawn_timer <= 0.0:
@@ -1011,10 +1028,14 @@ func _try_kick(power: float = 1.0) -> bool:
 
 	shots_this_round += 1
 	ball.call("kick", forward, KICK_IMPULSE * power)
+	# 高低差：货台（y>0.8）/ 坑底（y<-0.6）射门算“高台/坑底射门”，进球 ×1.5
+	_kick_elev_bonus = player.global_position.y > 0.8 or player.global_position.y < -0.6
 	if _sfx != null:
 		_sfx.call("play", "kick")
 	_spawn_kick_pulse(ball.global_position)
-	if power > 1.25:
+	if _kick_elev_bonus and arcade:
+		_flash("%s射门 · 进球得分 ×1.5" % ("高台" if player.global_position.y > 0.0 else "坑底"), 1.2)
+	elif power > 1.25:
 		_flash("全力抽射！", 0.9)
 	elif power < 0.85:
 		_flash("轻推", 0.7)
@@ -1082,6 +1103,8 @@ func _on_goal_scored(total: int, target: int) -> void:
 	if arcade:
 		goals_this_round += 1
 		var points := SCORE_PER_GOAL * combo
+		if _kick_elev_bonus:
+			points = int(round(float(points) * 1.5))
 		score += points
 		round_time_left = minf(round_time_left + TIME_BONUS_PER_GOAL, ROUND_SECONDS + 30.0)
 		combo = mini(combo + 1, COMBO_MAX)
@@ -1128,13 +1151,17 @@ func _restore_difficulty() -> void:
 		dragon.set(key, _dragon_defaults[key])
 
 
-## 进球后把球重新放到场内几个固定点，玩家必须重新走位。
+## 进球后把球重新放到场上几个固定点，玩家必须重新走位。
+## ART-SYNC-002：新增北侧货台（y=1.0）与南侧坑底（y=-1.3）两个高低差重生点——
+## 这两个区域因此是真有用的：你得爬台阶 / 走坡道下去才能把球捡回来，且那些位置射门有加成。
 const BALL_SPOTS := [
 	Vector3(-4.6, 0.0, 1.4),
 	Vector3(-1.6, 0.0, -3.4),
 	Vector3(-7.8, 0.0, -4.4),
 	Vector3(0.9, 0.0, 4.3),
 	Vector3(-8.6, 0.0, 5.2),
+	Vector3(-10.2, 1.0, 15.8),
+	Vector3(-4.0, -1.3, -18.0),
 ]
 
 
@@ -1142,6 +1169,7 @@ func _respawn_ball() -> void:
 	_respawn_timer = -1.0
 	if ball == null:
 		return
+	_kick_elev_bonus = false
 	var spot: Vector3 = BALL_SPOTS[randi() % BALL_SPOTS.size()]
 	ball.call("reset_to", spot)
 
@@ -2072,6 +2100,15 @@ func _run_shots() -> void:
 	_place_player(Vector3(-9.6, 0.02, 3.2), Vector3(-17.1, 0.9, 6.4))
 	await _wait(0.6)
 	await _shot("18_derelict_cart.png")
+
+	# 2026-11-25 地图扩展：北侧高台与南侧下沉坑
+	_place_player(Vector3(1.6, 0.02, 7.6), Vector3(-8.0, 1.8, 18.2))
+	await _wait(0.6)
+	await _shot("19_north_terrace.png")
+
+	_place_player(Vector3(-0.6, 0.02, -9.2), Vector3(-3.5, -1.2, -18.4))
+	await _wait(0.6)
+	await _shot("20_south_pit.png")
 
 	print("GULU SHOTS dir=%s" % ProjectSettings.globalize_path(_shot_dir))
 	get_tree().quit(0)

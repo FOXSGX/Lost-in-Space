@@ -14,8 +14,8 @@ class_name EnergyBall
 signal kicked(speed: float)
 signal out_of_bounds(position: Vector3)
 
-## 半径 0.34 m：比真实足球大一点，第一人称容易看见、容易踢中。
-const RADIUS := 0.34
+## 半径 0.27 m：略大于足球，近景不遮挡守门员与舱口。
+const RADIUS := 0.27
 ## 单击固定力度：冲量 = 质量 × 目标初速。质量 1.2 kg → 16.0 N·s 约 13.3 m/s。
 const KICK_IMPULSE := 19.0
 
@@ -102,6 +102,7 @@ func collect() -> void:
 
 
 func reset_to(at: Vector3) -> void:
+	_pending_impulse = Vector3.ZERO
 	var old_tween: Variant = get_meta("intake_tween") if has_meta("intake_tween") else null
 	if old_tween != null and old_tween is Tween and (old_tween as Tween).is_valid():
 		(old_tween as Tween).kill()
@@ -111,7 +112,9 @@ func reset_to(at: Vector3) -> void:
 	sleeping = false
 	linear_velocity = Vector3.ZERO
 	angular_velocity = Vector3.ZERO
-	global_position = Vector3(at.x, RADIUS + 0.05, at.z)
+	# ART-SYNC-002：支持高低差重生点（at.y 就是地面高度；0 仍是旧行为）。
+	var floor_y: float = at.y if absf(at.y) > 0.001 else 0.0
+	global_position = Vector3(at.x, floor_y + RADIUS + 0.05, at.z)
 	rotation = Vector3.ZERO
 	visible = true
 	scale = Vector3.ONE
@@ -161,7 +164,7 @@ func _build_visual() -> void:
 	core_material.albedo_color = Color("#ffb347")
 	core_material.emission_enabled = true
 	core_material.emission = Color("#ffb347")
-	core_material.emission_energy_multiplier = 1.15
+	core_material.emission_energy_multiplier = 0.55
 	var core := SphereMesh.new()
 	core.radius = RADIUS * 0.62
 	core.height = RADIUS * 1.24
@@ -200,7 +203,7 @@ func _build_visual() -> void:
 	band_material.albedo_color = Color("#ffb347")
 	band_material.emission_enabled = true
 	band_material.emission = Color("#ffb347")
-	band_material.emission_energy_multiplier = 0.95
+	band_material.emission_energy_multiplier = 0.55
 	var band_node := MeshInstance3D.new()
 	band_node.mesh = band
 	band_node.material_override = band_material
@@ -208,8 +211,8 @@ func _build_visual() -> void:
 
 	var glow := OmniLight3D.new()
 	glow.light_color = Color("#ffb347")
-	glow.light_energy = 0.22
-	glow.omni_range = 2.0
+	glow.light_energy = 0.10
+	glow.omni_range = 1.4
 	add_child(glow)
 
 

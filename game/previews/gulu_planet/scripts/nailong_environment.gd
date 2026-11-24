@@ -38,6 +38,10 @@ const PACK := Color("#d8cbb3")
 
 const NEST_CENTER := Vector3(1.0, 0.0, -2.5)
 
+## ART-SYNC-002：地图扩大（40×30 → 64×44），球路与装货口位置完全不变。
+const YARD_HALF_X := 32.0
+const YARD_HALF_Z := 22.0
+
 ## ART-SYNC-001：地面改为世界空间三级尺度的专用 shader（见文件头注释），
 ## 贴地接触贴片用 MultiMesh 合并成 1 个 draw call。
 const SHADER_YARD := preload("res://shaders/gulu_yard.gdshader")
@@ -86,6 +90,7 @@ func _ready() -> void:
 	_build_ground()
 	_build_ground_detail()
 	_build_perimeter()
+	_build_terraces()
 	_build_yard()
 	_build_imported_dressing()
 	_build_scenery()
@@ -243,6 +248,10 @@ func _build_talus() -> void:
 		Vector3(-18.4, 0.0, -12.6), Vector3(-18.2, 0.0, 12.4),
 		Vector3(17.6, 0.0, -12.8), Vector3(17.4, 0.0, 12.6),
 		Vector3(0.8, 0.0, -14.0), Vector3(-6.0, 0.0, 13.8),
+		# ART-SYNC-002：地图外圈的新锚点（避开北台、下沉坑与球路）
+		Vector3(-26.0, 0.0, -18.0), Vector3(26.0, 0.0, -17.0),
+		Vector3(28.0, 0.0, 12.0), Vector3(-27.0, 0.0, 5.0),
+		Vector3(18.0, 0.0, -20.0), Vector3(-20.5, 0.0, 20.0),
 	]
 	var grades := [
 		{"radius": 0.150, "count": 26, "near": 1.6, "far": 4.4, "embed": 0.35, "shadow": true},
@@ -287,11 +296,49 @@ func _build_talus() -> void:
 		add_child(node)
 
 
+# ---------------------------------------------------------------- 纵向层次
+
+## ART-SYNC-002：地图扩大后的第二、第三空间。
+## 北侧 1 m 货台（四级台阶可上）、南侧下沉维修坑（东侧坡道可下）。
+## 球路 z∈[-3,3] 不经过这里；台阶 0.25 m 在玩家 step assist（0.36）范围内。
+func _build_terraces() -> void:
+	# --- 北侧货台：16×8，顶面 y=1.0，位于 z 13.5..21.5
+	_box(Vector3(16.0, 1.0, 8.0), Vector3(-10.0, 0.50, 17.5), Color.WHITE, true, 0.0, Vector3.ZERO, mat_concrete)
+	_box(Vector3(15.6, 0.02, 7.6), Vector3(-10.0, 1.02, 17.5), Color.WHITE, false, 0.0, Vector3.ZERO, mat_ground_warm)
+	for i in range(4):
+		_box(Vector3(3.2, 0.25, 0.40), Vector3(-6.2, 0.125 + float(i) * 0.25, 13.3 + float(i) * 0.40),
+			Color.WHITE, true, 0.0, Vector3.ZERO, mat_concrete)
+	# 台沿护栏（细杆，不参与碰撞）
+	for x in [-17.6, -2.4]:
+		_box(Vector3(0.08, 1.0, 0.08), Vector3(x, 1.5, 13.6), Color.WHITE, false, 0.0, Vector3.ZERO, mat_trim_dark)
+	_box(Vector3(15.4, 0.08, 0.08), Vector3(-10.0, 2.0, 13.6), Color.WHITE, false, 0.0, Vector3.ZERO, mat_trim_dark)
+
+	# --- 南侧下沉维修坑：18×6，底面 y=-1.3，位于 z -15..-21
+	_box(Vector3(18.0, 0.5, 6.0), Vector3(-3.0, -1.55, -18.0), Color.WHITE, true, 0.0, Vector3.ZERO, mat_concrete)
+	# 北内壁留坡道口：x -12..2.4 一段
+	_box(Vector3(14.4, 1.3, 0.30), Vector3(-4.8, -0.65, -15.05), Color.WHITE, true, 0.0, Vector3.ZERO, mat_rock_b)
+	_box(Vector3(0.30, 1.3, 6.2), Vector3(-12.0, -0.65, -18.0), Color.WHITE, true, 0.0, Vector3.ZERO, mat_rock_b)
+	_box(Vector3(0.30, 1.3, 6.2), Vector3(6.0, -0.65, -18.0), Color.WHITE, true, 0.0, Vector3.ZERO, mat_rock_b)
+	_box(Vector3(18.0, 1.3, 0.30), Vector3(-3.0, -0.65, -20.95), Color.WHITE, true, 0.0, Vector3.ZERO, mat_rock_b)
+	# 坡道：从地面 z=-14.5 下到坑底 z=-19.5（坡度 15°）
+	var ramp := _box(Vector3(3.0, 0.16, 5.1), Vector3(4.0, -0.65, -17.0), Color.WHITE, true, 0.0,
+		Vector3(deg_to_rad(15.2), 0.0, 0.0), mat_concrete)
+	ramp.name = "PitRamp"
+	# 坑口围栏（留出坡道口）
+	for x in [-11.6, -1.0]:
+		_box(Vector3(0.07, 1.0, 0.07), Vector3(x, 0.5, -14.9), Color.WHITE, false, 0.0, Vector3.ZERO, mat_trim_dark)
+	_box(Vector3(10.6, 0.07, 0.07), Vector3(-6.3, 1.0, -14.9), Color.WHITE, false, 0.0, Vector3.ZERO, mat_trim_dark)
+
+
 # ---------------------------------------------------------------- 地面
 
 func _build_ground() -> void:
-	# 40×30 的场地底板；碰撞与旧版完全一致。
-	_box(Vector3(40.0, 0.5, 30.0), Vector3(0.0, -0.25, 0.0), GROUND, true, 0.0, Vector3.ZERO, mat_ground)
+	# ART-SYNC-002：底板扩大到 64×44；南侧下沉坑位置留洞（四块拼合，不要盖住坑口）。
+	# 坑口：x -12..6，z -21..-15。
+	_box(Vector3(YARD_HALF_X * 2.0, 0.5, 37.0), Vector3(0.0, -0.25, 3.5), GROUND, true, 0.0, Vector3.ZERO, mat_ground)
+	_box(Vector3(YARD_HALF_X * 2.0, 0.5, 1.0), Vector3(0.0, -0.25, -21.5), GROUND, true, 0.0, Vector3.ZERO, mat_ground)
+	_box(Vector3(20.0, 0.5, 6.0), Vector3(-22.0, -0.25, -18.0), GROUND, true, 0.0, Vector3.ZERO, mat_ground)
+	_box(Vector3(26.0, 0.5, 6.0), Vector3(19.0, -0.25, -18.0), GROUND, true, 0.0, Vector3.ZERO, mat_ground)
 
 	# 只保留两块大色差：暖色球场 + 深色装货平台。不再铺小砖、环线、灯带。
 	_box(Vector3(24.0, 0.012, 15.0), Vector3(0.0, 0.008, 0.0), Color("#b8ab92"), false, 0.0, Vector3.ZERO, mat_ground_warm)
@@ -331,11 +378,11 @@ func _build_ground_detail() -> void:
 # ---------------------------------------------------------------- 边界与地形
 
 func _build_perimeter() -> void:
-	# 碰撞仍是原来的四面隐形墙（位置/尺寸完全一致）。
-	_solid_only(Vector3(40.0, 6.0, 0.8), Vector3(0.0, 3.0, -15.0))
-	_solid_only(Vector3(40.0, 6.0, 0.8), Vector3(0.0, 3.0, 15.0))
-	_solid_only(Vector3(0.8, 6.0, 30.0), Vector3(-20.0, 3.0, 0.0))
-	_solid_only(Vector3(0.8, 6.0, 30.0), Vector3(20.0, 3.0, 0.0))
+	# 碰撞仍是四面隐形墙，只是随地图一起外扩（40×30 → 64×44）。
+	_solid_only(Vector3(YARD_HALF_X * 2.0, 6.0, 0.8), Vector3(0.0, 3.0, -YARD_HALF_Z))
+	_solid_only(Vector3(YARD_HALF_X * 2.0, 6.0, 0.8), Vector3(0.0, 3.0, YARD_HALF_Z))
+	_solid_only(Vector3(0.8, 6.0, YARD_HALF_Z * 2.0), Vector3(-YARD_HALF_X, 3.0, 0.0))
+	_solid_only(Vector3(0.8, 6.0, YARD_HALF_Z * 2.0), Vector3(YARD_HALF_X, 3.0, 0.0))
 
 	# 土坡底座：低、缓，不挡视线；上方交给岩脊。
 	_box(Vector3(39.4, 0.9, 2.5), Vector3(0.0, 0.42, -14.0), Color.WHITE, false, 0.0, Vector3.ZERO, mat_ground_cool)

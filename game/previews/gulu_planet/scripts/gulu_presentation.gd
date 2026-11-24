@@ -29,6 +29,9 @@ var _result_label: Label
 var _pause_root: Control
 var _pause_visible := false
 var _mute_button: Button
+var _resume: Button
+var _restart: Button
+var _confirm_restart := false
 var _flash: ColorRect
 var _float_root: Control
 var _vignette: ColorRect
@@ -113,7 +116,7 @@ func _build_title() -> void:
 	spacer.custom_minimum_size = Vector2(0, 18)
 	box.add_child(spacer)
 
-	var keys := _label("WASD 移动    左键 点射 / 按住蓄力    R 重开\nP 暂停    M 静音    Esc 松开鼠标", 16, Color("#9fb8b4"))
+	var keys := _label("WASD 移动 · 鼠标瞄准\n左键按住蓄力，松手射门 · P 暂停 · R 重开", 16, Color("#9fb8b4"))
 	keys.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	box.add_child(keys)
 
@@ -204,13 +207,19 @@ func _build_pause() -> void:
 	gap.custom_minimum_size = Vector2(0, 6)
 	column.add_child(gap)
 
-	var resume := _button("继续比赛")
-	resume.pressed.connect(func() -> void: resume_requested.emit())
-	column.add_child(resume)
+	_resume = _button("继续比赛")
+	_resume.add_theme_color_override("font_color", ACCENT)
+	_resume.pressed.connect(func() -> void: resume_requested.emit())
+	column.add_child(_resume)
 
-	var restart := _button("重新开始")
-	restart.pressed.connect(func() -> void: restart_requested.emit())
-	column.add_child(restart)
+	_restart = _button("重新开始")
+	_restart.pressed.connect(func() -> void:
+		if not _confirm_restart:
+			restart_requested.emit()
+		else:
+			_confirm_restart = false
+			_restart.text = "确认放弃本局并重开")
+	column.add_child(_restart)
 
 	_mute_button = _button("音效：开")
 	_mute_button.pressed.connect(func() -> void: mute_toggled.emit())
@@ -218,12 +227,15 @@ func _build_pause() -> void:
 
 
 ## 暂停菜单：显示时释放鼠标，按钮用鼠标点；键盘 P/Esc 也能继续。
-func show_pause(muted: bool) -> void:
+func show_pause(muted: bool, has_progress: bool = false) -> void:
+	_confirm_restart = has_progress
 	if _pause_root == null:
 		return
 	_pause_visible = true
 	set_mute_state(muted)
 	_pause_root.visible = true
+	_restart.text = "重新开始"
+	_resume.grab_focus()
 	_pause_root.modulate.a = 0.0
 	var tween := create_tween()
 	tween.tween_property(_pause_root, "modulate:a", 1.0, 0.16)
@@ -237,6 +249,15 @@ func hide_pause() -> void:
 
 func pause_visible() -> bool:
 	return _pause_visible
+
+
+func restart_confirmation_text() -> String:
+	return _restart.text if _restart != null else ""
+
+
+func request_pause_restart() -> void:
+	if _restart != null:
+		_restart.pressed.emit()
 
 
 func set_mute_state(muted: bool) -> void:
@@ -338,7 +359,9 @@ func show_result(score: int, best: int, goals: int, best_combo: int, is_record: 
 	_result_root.add_child(dim)
 
 	var panel := PanelContainer.new()
-	panel.position = Vector2(400, 210)
+	var center := CenterContainer.new()
+	center.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_result_root.add_child(center)
 	panel.custom_minimum_size = Vector2(480, 0)
 	var style := StyleBoxFlat.new()
 	style.bg_color = Color(0.05, 0.10, 0.11, 0.94)
@@ -347,7 +370,7 @@ func show_result(score: int, best: int, goals: int, best_combo: int, is_record: 
 	style.set_corner_radius_all(16)
 	style.set_content_margin_all(26)
 	panel.add_theme_stylebox_override("panel", style)
-	_result_root.add_child(panel)
+	center.add_child(panel)
 
 	var column := VBoxContainer.new()
 	column.add_theme_constant_override("separation", 10)
@@ -380,8 +403,11 @@ func show_result(score: int, best: int, goals: int, best_combo: int, is_record: 
 	spacer.custom_minimum_size = Vector2(0, 10)
 	column.add_child(spacer)
 
-	var again := _label("按 R 再来一局", 22, Color("#ffe9bd"))
-	again.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	var again := _button("再来一局　[R]")
+	again.name = "ResultRestartButton"
+	again.focus_mode = Control.FOCUS_ALL
+	again.add_theme_color_override("font_color", AMBER)
+	again.pressed.connect(func() -> void: restart_requested.emit())
 	column.add_child(again)
 
 	_result_root.modulate.a = 0.0
@@ -429,6 +455,7 @@ func _button(text: String) -> Button:
 	button.add_theme_color_override("font_color", Color("#eaf7f4"))
 	button.add_theme_color_override("font_hover_color", Color("#0b1416"))
 	button.add_theme_color_override("font_pressed_color", Color("#0b1416"))
+	button.add_theme_color_override("font_focus_color", INK)
 	var normal := StyleBoxFlat.new()
 	normal.bg_color = Color(0.10, 0.20, 0.21, 0.92)
 	normal.border_color = Color(0.30, 0.62, 0.58, 0.75)

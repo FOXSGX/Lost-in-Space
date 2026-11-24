@@ -5,6 +5,7 @@ class_name GuluSfx
 ## 每种音有最短间隔，避免连续触发时变成噪音。
 
 const STREAMS := {
+	"metal": "res://assets/audio/goal_frame.wav",
 	"kick": "res://assets/audio/ball_kick.wav",
 	"block": "res://assets/audio/dragon_block.wav",
 	"loaded": "res://assets/audio/fuel_loaded.wav",
@@ -14,15 +15,18 @@ const MIN_INTERVAL := {
 	"kick": 0.12,
 	"block": 0.35,
 	"loaded": 0.25,
+	"metal": 0.10,
 }
 
 const VOLUME_DB := {
 	"kick": -6.0,
 	"block": -8.0,
 	"loaded": -6.0,
+	"metal": -10.0,
 }
 
 var _players: Dictionary = {}
+
 var _last_ms: Dictionary = {}
 var _duck_until := 0
 ## 静音：只挡播放，不销毁播放器；设置会被 gulu_app 写进 user://gulu_record.cfg。
