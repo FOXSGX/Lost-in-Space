@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://addons/lis_physics/tools/lis_perf_bench.gd" id="1_perf"]
+
+[node name="LISPerfBench" type="Node3D"]
+script = ExtResource("1_perf")

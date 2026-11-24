@@ -12,6 +12,11 @@ const VISUAL := preload("res://scripts/ruin_infected_visual.gd")
 # 取值见 RuinInfectedVisual.Form。
 var form := 0
 var _spec: Dictionary = {}
+var _visual_node: Node3D
+var _dying := false
+var _last_anim_position := Vector3.ZERO
+var _has_anim_position := false
+var _remote_attack := 0.0
 
 
 ## 必须在 setup() 之前调用：setup() 里会按形态生成网格。
@@ -33,27 +38,15 @@ func setup(id: int, player_count: int = 1) -> void:
 
 
 ## 覆盖父类的默认造型（红色胶囊 + 触角）。
+## 腐墟星第一人称不再给感染体加悬浮名牌：
+## 近身后玩家能直接看清造型，名字和"空格攻击"提示交给 HUD。
 func _build_visual() -> void:
     var visual := VISUAL.new() as Node3D
     visual.name = "InfectedVisual"
     add_child(visual)
+    _visual_node = visual
     visual.configure(form, true)
     _spec = visual.stat_specs()
-    # 头顶标签保留，但整体上抬。
-    # _spec.label_y 是「模型顶端 + 0.30」，而这个标签是两行 billboard，
-    # 总高接近 1 米，中心放在顶端上方 0.3 米时下半截会压住头部和肩膀。
-    # 上抬 0.85 米后标签下沿才真正离开模型。
-    _name_label = Label3D.new()
-    _name_label.text = "【%s】\n%s" % [display_name, hint_text]
-    _name_label.position = Vector3(0.0, float(_spec.label_y) + 0.85, 0.0)
-    _name_label.font_size = 46
-    _name_label.pixel_size = 0.011
-    _name_label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-    _name_label.modulate = Color("#ffe8a6")
-    _name_label.outline_size = 10
-    _name_label.outline_modulate = Color("#4a0a0f")
-    _name_label.shaded = false
-    add_child(_name_label)
     _rebuild_collision()
 
 
@@ -69,6 +62,44 @@ func _ready() -> void:
         _rebuild_collision()
 
 
+## 父类负责远端位置插值；这里只把"实际移动速度"和"攻击前摇"喂给分件动画。
+## 客户端 velocity 通常为 0，所以用位置差补速度，远端感染体不会滑步。
+func _process(delta: float) -> void:
+    super._process(delta)
+    if _visual_node == null or _dying:
+        return
+    if not _has_anim_position:
+        _last_anim_position = global_position
+        _has_anim_position = true
+    var planar := Vector2(velocity.x, velocity.z).length()
+    if not multiplayer.is_server():
+        var moved := global_position.distance_to(_last_anim_position)
+        planar = maxf(planar, moved / maxf(delta, 0.001))
+    _last_anim_position = global_position
+    var attack := 0.0
+    if attack_timer > 0.55:
+        attack = clampf((attack_timer - 0.55) / 0.45, 0.0, 1.0)
+    if _remote_attack > 0.0:
+        attack = maxf(attack, _remote_attack)
+        _remote_attack = maxf(_remote_attack - delta * 2.4, 0.0)
+    _visual_node.call("animate", delta, planar, attack)
+
+
+## 主机在攻击窗口内额外发一次前扑信号；客户端没有 attack_timer，
+## 只靠它也能看到感染体抬臂前扑，而不是站着滑过来。
+func server_tick(delta: float, players: Dictionary, lure_position := Vector3.ZERO, lure_active := false, storm_active := false, goofy_lures: Array = [], frost_combat := false) -> Dictionary:
+    var before := attack_timer
+    var result: Dictionary = super.server_tick(delta, players, lure_position, lure_active, storm_active, goofy_lures, frost_combat)
+    if attack_timer > before + 0.05:
+        sync_ruin_attack.rpc()
+    return result
+
+
+@rpc("authority", "call_remote", "reliable")
+func sync_ruin_attack() -> void:
+    _remote_attack = 1.0
+
+
 func _rebuild_collision() -> void:
     for child in get_children():
         if child is CollisionShape3D:
@@ -82,3 +113,26 @@ func _rebuild_collision() -> void:
     shape.shape = capsule
     shape.position.y = float(_spec.get("collision_y", height * 0.5))
     add_child(shape)
+
+
+func flinch() -> void:
+    if _visual_node != null and _visual_node.has_method("flinch"):
+        _visual_node.call("flinch")
+
+
+## 死亡不立刻 queue_free：先倒向一侧并压扁，让第一人称近战能看到"打倒了"，
+## 再由 RuinPlanet 的注册表把它从可攻击列表里移除。
+func play_death() -> void:
+    if _dying:
+        return
+    _dying = true
+    set_physics_process(false)
+    collision_layer = 0
+    collision_mask = 0
+    if _visual_node != null and _visual_node.has_method("die"):
+        _visual_node.call("die")
+    var tween := create_tween()
+    tween.set_parallel(true)
+    tween.tween_property(self, "rotation:z", 1.30, 0.30)
+    tween.tween_property(self, "scale", Vector3(1.0, 0.22, 1.0), 0.30)
+    tween.tween_property(self, "position:y", position.y - 0.15, 0.30)

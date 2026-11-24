@@ -17,22 +17,22 @@ extends RefCounted
 
 var controller: Node3D
 var root: Node3D
-var accent := Color("#c9a35a")
+var accent := Color("#a38143")
 var entry_ring: MeshInstance3D
 
-const SHELL := Color("#7d8794")
-const SHELL_DARK := Color("#6e7783")
-const PLINTH := Color("#4e5561")
-const ROOF := Color("#454c59")
-const RIM := Color("#96a4b6")
-const METAL := Color("#555d6b")
-const METAL_LIGHT := Color("#8e9aab")
-const FRAME := Color("#8b95a3")
-const GLASS := Color("#1b2531")
-const HOLE := Color("#20262b")
-const AWNING := Color("#7d4038")
-const RUST := Color("#7a5140")
-const WOOD := Color("#5a4a3a")
+const SHELL := Color("#b19b7e")
+const SHELL_DARK := Color("#998266")
+const PLINTH := Color("#80684a")
+const ROOF := Color("#8a4f3e")
+const RIM := Color("#c3ad90")
+const METAL := Color("#33595f")
+const METAL_LIGHT := Color("#5e8584")
+const FRAME := Color("#244850")
+const GLASS := Color("#4d7c7f")
+const HOLE := Color("#1a2f35")
+const AWNING := Color("#9b5a2c")
+const RUST := Color("#83503d")
+const WOOD := Color("#735034")
 
 
 func build(building_root: Node3D, size: Vector3, accent_color: Color, owner: Node3D) -> void:
@@ -47,8 +47,8 @@ func build(building_root: Node3D, size: Vector3, accent_color: Color, owner: Nod
     _build_entrance(half_z)
     _build_roofs()
     _build_wall_details()
-    _build_surface_age()
-    _build_stains(half_z)
+    # 卡通改版不再铺整面做旧层和血污层：保留体块、破洞、碎石和招牌，
+    # 用干净墙面 + 倒角边 + 暖橙雨棚来读"废弃"，而不是靠脏和暗。
     _build_damage(half_z)
     _build_side_props(half_z)
     _build_parking_lot()
@@ -105,9 +105,11 @@ func _build_main_hall() -> void:
 
 # ── 正立面：玻璃店面 ──
 func _build_storefront(half_z: float) -> void:
-    var z: float = half_z + 0.04
+    # 墙面在 half_z；整组店面往前挪 12cm，玻璃/框架/门洞各自留出深度差，
+    # 避免与墙体或彼此共面后在移动时出现光栅。
+    var z: float = half_z + 0.12
     # 店面底色带
-    _box("ShopBand", Vector3(13.0, 3.6, 0.14), Vector3(3.6, 2.2, z - 0.02), HOLE)
+    _box("ShopBand", Vector3(13.0, 3.6, 0.06), Vector3(3.6, 2.2, z - 0.08), HOLE)
     # 玻璃分格：右侧四格，左边靠门一格
     var panels := [
         Vector3(2.9, 2.4, z),
@@ -125,30 +127,39 @@ func _build_storefront(half_z: float) -> void:
             continue
         # 第二格只剩上半截，下缘挂着一片歪掉的玻璃
         if index == 1:
-            _box("ShopGlassStub", Vector3(1.8, 1.5, 0.08), at + Vector3(0.0, 0.95, 0.0), GLASS)
-            _box("ShopGlassShard", Vector3(0.55, 1.0, 0.05), at + Vector3(-0.3, -0.1, 0.02), Color("#5f707c")).rotation_degrees = Vector3(0.0, 0.0, 16.0)
+            _box("ShopGlassStub", Vector3(1.8, 1.5, 0.05), at + Vector3(0.0, 0.95, 0.0), GLASS)
+            _box("ShopGlassShard", Vector3(0.55, 1.0, 0.04), at + Vector3(-0.3, -0.1, 0.03), Color("#5f707c")).rotation_degrees = Vector3(0.0, 0.0, 16.0)
             continue
         # 门左边那格整块没了，只剩一个黑框
         if index == 4:
             continue
-        _box("ShopGlass%d" % index, Vector3(1.8, 2.8, 0.08), at + Vector3(0.0, 0.15, 0.0), GLASS)
+        _box("ShopGlass%d" % index, Vector3(1.8, 2.8, 0.05), at + Vector3(0.0, 0.15, 0.0), GLASS)
     # 竖框与窗台
     for index in 6:
         var x := 1.9 + float(index) * 2.0
-        _box("ShopMullion%d" % index, Vector3(0.12, 3.4, 0.12), Vector3(x, 2.2, z + 0.06), FRAME)
-    _box("ShopSill", Vector3(1.9, 0.16, 0.2), Vector3(-3.0, 0.95, z + 0.05), FRAME)
-    _box("ShopSillMain", Vector3(9.2, 0.16, 0.2), Vector3(5.9, 0.95, z + 0.05), FRAME)
+        _box("ShopMullion%d" % index, Vector3(0.12, 3.4, 0.08), Vector3(x, 2.2, z + 0.04), FRAME)
+    _box("ShopSill", Vector3(1.9, 0.16, 0.2), Vector3(-3.0, 0.95, z + 0.02), FRAME)
+    _box("ShopSillMain", Vector3(9.2, 0.16, 0.2), Vector3(5.9, 0.95, z + 0.02), FRAME)
 
 
 # ── 入口、雨棚、招牌 ──
 func _build_entrance(half_z: float) -> void:
     var z: float = half_z + 0.04
     # 门洞
-    _box("DoorRecess", Vector3(3.4, 3.2, 0.45), Vector3(0.0, 1.6, z + 0.12), HOLE)
+    _box("DoorRecess", Vector3(3.4, 3.2, 0.10), Vector3(0.0, 1.6, z + 0.02), HOLE)
     _box("DoorFrameL", Vector3(0.14, 3.3, 0.22), Vector3(-1.75, 1.65, z + 0.24), FRAME)
     _box("DoorFrameR", Vector3(0.14, 3.3, 0.22), Vector3(1.75, 1.65, z + 0.24), FRAME)
     _box("DoorFrameT", Vector3(3.64, 0.16, 0.22), Vector3(0.0, 3.34, z + 0.24), FRAME)
     _build_doors(half_z)
+    # 所有门先默认同一把二级弹子锁：右扇门上的黄铜锁板 + 锁芯 + 锁孔。
+    var lock := Node3D.new()
+    lock.name = "DoorLock"
+    lock.position = Vector3(1.22, 1.18, half_z + 0.34 + 0.10)
+    root.add_child(lock)
+    _box_to(lock, "LockPlate", Vector3(0.26, 0.34, 0.07), Vector3.ZERO, Color("#c9a15b"))
+    _box_to(lock, "LockCylinder", Vector3(0.16, 0.16, 0.05), Vector3(0.0, -0.02, 0.05), Color("#8a5a2b"))
+    _box_to(lock, "LockKeyhole", Vector3(0.05, 0.11, 0.025), Vector3(0.0, -0.02, 0.08), HOLE)
+    _box_to(lock, "LockLED", Vector3(0.05, 0.05, 0.02), Vector3(0.0, 0.12, 0.06), AWNING, true)
 
     # 雨棚：断成两截，右侧那截塌得更厉害，边缘还挂着一片撕下来的布
     var canopy_a := _box("CanopyA", Vector3(4.6, 0.28, 3.2), Vector3(-0.9, 3.98, half_z + 1.9), AWNING)
@@ -654,11 +665,13 @@ func _mesh(parent: Node3D, node_name: String, mesh: Mesh, at: Vector3, color: Co
 ## 普通件 roughness 0.72，发光件加 0.85 的自发光。
 func _make_material(color: Color, glow: bool) -> StandardMaterial3D:
     var material := StandardMaterial3D.new()
-    material.albedo_color = color
+    # 与 ruin_cartoon_art.gd 一致：十六进制色按 sRGB 书写，材质里转成线性。
+    var linear := color.srgb_to_linear()
+    material.albedo_color = Color(linear.r, linear.g, linear.b, color.a)
     material.roughness = 0.72
     if glow:
         material.emission_enabled = true
-        material.emission = color
+        material.emission = linear
         # 0.85 的发光在 ACES 下会把金色招牌烧成白色，招牌就废了
         material.emission_energy_multiplier = 0.30
         material.roughness = 0.4

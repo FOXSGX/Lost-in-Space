@@ -6,7 +6,7 @@ const EQUIPMENT_CAPACITY: int = 2
 const JET_REFILL_DELAY: float = 0.3
 const JET_REFILL_RATE: float = 1.0
 const JET_OXYGEN_COST: float = 2.0
-const NAMES: Dictionary = {"medical": "医疗包", "oxygen": "氧气瓶", "battery": "热能电池", "sample": "异常冰样", "penguin": "回声企鹅", "bubble": "反重力泡", "board": "雪地滑板", "hologram": "全息替身", "smoke": "彩色信号烟", "thermal_suit": "恒温外套", "wide_scanner": "广域扫描器", "signal_stabilizer": "信号稳压器"}
+const NAMES: Dictionary = {"medical": "医疗包", "oxygen": "氧气瓶", "battery": "热能电池", "sample": "异常冰样", "penguin": "回声企鹅", "bubble": "反重力泡", "board": "雪地滑板", "hologram": "全息替身", "smoke": "彩色信号烟", "thermal_suit": "恒温外套", "wide_scanner": "广域扫描器", "signal_stabilizer": "信号稳压器", "lockpick": "撬锁工具"}
 const EQUIPPABLE: Array[String] = ["oxygen", "thermal_suit", "wide_scanner", "signal_stabilizer"]
 const SUPPLIES: Array[String] = ["medical", "oxygen"]
 const CARGO: Array[String] = ["battery", "sample"]
@@ -27,6 +27,7 @@ const ICONS: Dictionary = {
     "thermal_suit": preload("res://assets/ship-hub/computer-icons/thermal_suit.svg"),
     "wide_scanner": preload("res://assets/ship-hub/computer-icons/wide_scanner.svg"),
     "signal_stabilizer": preload("res://assets/ship-hub/computer-icons/signal_stabilizer.svg"),
+    "lockpick": preload("res://assets/ship-hub/computer-icons/repair.svg"),
 }
 const TRAINING_POSITIONS: Dictionary = {"oxygen": Vector3(-7.0, 0.96, 3.8)}
 

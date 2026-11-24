@@ -1,0 +1,29 @@
+[gd_resource type="Environment" format=3]
+
+; ART-SAMPLE-002 · 英雄区演示环境（Compatibility 调平后的参数）
+; 与正式工程 resources/aqs002_hero_environment.tres 同源。
+
+[resource]
+background_mode = 1
+background_color = Color(0.012, 0.015, 0.021, 1)
+background_energy_multiplier = 1.0
+ambient_light_source = 2
+ambient_light_color = Color(0.300, 0.340, 0.420, 1)
+ambient_light_energy = 2.35
+tonemap_mode = 2
+tonemap_exposure = 1.14
+tonemap_white = 6.0
+glow_enabled = true
+glow_intensity = 0.32
+glow_strength = 0.92
+glow_bloom = 0.045
+glow_blend_mode = 1
+glow_hdr_threshold = 1.05
+fog_enabled = true
+fog_light_color = Color(0.085, 0.120, 0.185, 1)
+fog_light_energy = 0.45
+fog_density = 0.004
+adjustment_enabled = true
+adjustment_brightness = 1.0
+adjustment_contrast = 1.06
+adjustment_saturation = 1.04

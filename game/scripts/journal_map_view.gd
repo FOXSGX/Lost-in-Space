@@ -8,6 +8,8 @@ var landmarks: Array = []
 var player_position := Vector2.ZERO
 var safehouse := Vector2.ZERO
 var extraction := Vector2.ZERO
+var extraction_label := "撤离"
+var legend_text := "黄：信标   绿：电池   金：地标   青方框：现场设备   青圈：自由活动   橙圈：热源   叉：我的标记   白：你"
 var discovered_regions: Array[String] = []
 var beacon_positions: Array = []
 var crate_positions: Array = []
@@ -81,7 +83,7 @@ func _draw() -> void:
     draw_circle(_project(safehouse, origin, scale), 5.0, Color("#ffbd61"))
     draw_string(ThemeDB.fallback_font, _project(safehouse, origin, scale) + Vector2(8.0, 4.0), "安全屋", HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color("#ffe1a3"))
     draw_circle(_project(extraction, origin, scale), 5.0, Color("#68deff"))
-    draw_string(ThemeDB.fallback_font, _project(extraction, origin, scale) + Vector2(8.0, 4.0), "撤离", HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color("#a9f3ff"))
+    draw_string(ThemeDB.fallback_font, _project(extraction, origin, scale) + Vector2(8.0, 4.0), extraction_label, HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color("#a9f3ff"))
     for landmark in landmarks:
         var point := Vector2(landmark.get("position", Vector2.ZERO))
         var color := Color("#8a98a4")
@@ -98,9 +100,11 @@ func _draw() -> void:
     for site in field_sites:
         var point := Vector2(site.get("position", Vector2.ZERO))
         var projected := _project(point, origin, scale)
-        var color := Color("#b2e3cc") if bool(site.get("used", false)) else Color("#8ce7e1")
-        draw_rect(Rect2(projected - Vector2(3.0, 3.0), Vector2(6.0, 6.0)), color, false, 1.5)
-        if point.distance_to(player_position) <= 32.0:
+        var is_building := String(site.get("kind", "")) == "building"
+        var color := Color("#f2d19a") if is_building else (Color("#b2e3cc") if bool(site.get("used", false)) else Color("#8ce7e1"))
+        var half := 5.0 if is_building else 3.0
+        draw_rect(Rect2(projected - Vector2(half, half), Vector2(half * 2.0, half * 2.0)), color, false, 1.8 if is_building else 1.5)
+        if is_building or point.distance_to(player_position) <= 32.0:
             draw_string(ThemeDB.fallback_font, projected + Vector2(7.0, -7.0), String(site.get("label", "现场设备")), HORIZONTAL_ALIGNMENT_LEFT, -1, 11, color)
     for site in side_quest_sites:
         var point := Vector2(site.get("position", Vector2.ZERO))
@@ -133,7 +137,7 @@ func _draw() -> void:
         draw_line(projected - Vector2(8.0, 8.0), projected + Vector2(8.0, 8.0), marker_color, 2.0, true)
         draw_line(projected + Vector2(8.0, -8.0), projected - Vector2(8.0, -8.0), marker_color, 2.0, true)
         draw_string(ThemeDB.fallback_font, projected + Vector2(10.0, -5.0), String(marker.get("label", "标记")), HORIZONTAL_ALIGNMENT_LEFT, -1, 11, marker_color)
-    draw_string(ThemeDB.fallback_font, rect.position + Vector2(18.0, rect.size.y - 10.0), "黄：信标   绿：电池   金：地标   青方框：现场设备   青圈：自由活动   橙圈：热源   叉：我的标记   白：你", HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color("#8fb4c4"))
+    draw_string(ThemeDB.fallback_font, rect.position + Vector2(18.0, rect.size.y - 10.0), legend_text, HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color("#8fb4c4"))
     if show_player:
         draw_circle(_project(player_position, origin, scale), 4.5, Color("#e9fbff"))
         draw_arc(_project(player_position, origin, scale), 8.0, 0.0, TAU, 24, Color("#62e8dc"), 1.5)

@@ -183,10 +183,23 @@ item_use={
 ]
 }
 
+[physics]
+
+3d/physics_engine="Jolt Physics"
+common/physics_ticks_per_second=60
+
+[editor_plugins]
+
+enabled=PackedStringArray("res://addons/lis_physics/plugin.cfg")
+
 [layer_names]
 
 2d_physics/layer_1="Players"
 2d_physics/layer_2="World"
+3d_physics/layer_1="Players"
+3d_physics/layer_2="World"
+3d_physics/layer_3="interactable"
+3d_physics/layer_4="machines"
 
 [rendering]
 

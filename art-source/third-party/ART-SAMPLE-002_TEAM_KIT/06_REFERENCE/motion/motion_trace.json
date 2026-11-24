@@ -1,0 +1,9 @@
+{
+  "driver": "_update_swing(dt) called from test harness (product integrator)",
+  "frames": 150,
+  "max_angular_velocity": 1.631,
+  "mode": "swing",
+  "rest_angle_deg": -4.52,
+  "strike_count": 1,
+  "struck_at_frame": 92
+}

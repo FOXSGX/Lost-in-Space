@@ -38,7 +38,7 @@ static func options_for(device: Dictionary) -> Array:
             return result
         _: return [device.duplicate()]
     for value: String in items:
-        var title: String = String({"demo": "霜烬星", "electromagnetic": "共振星", "ruin": "废墟星"}.get(value, ShipSession3D.ITEM_NAMES.get(value, ShipSession3D.GEAR_NAMES.get(value, CrewItems3D.NAMES.get(value, value)))))
+        var title: String = String({"demo": "霜烬星", "electromagnetic": "共振星", "ruin": "腐墟星"}.get(value, ShipSession3D.ITEM_NAMES.get(value, ShipSession3D.GEAR_NAMES.get(value, CrewItems3D.NAMES.get(value, value)))))
         result.append({"id": kind + "_" + value, "kind": kind, "item": value, "title": title})
     return result
 

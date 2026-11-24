@@ -1,0 +1,71 @@
+[gd_resource type="Environment" format=3]
+
+; ART-SAMPLE-002 · 英雄区环境（Compatibility 为首要目标）
+;
+; 这是**样例工程专用**的环境资源（`resources/cave_environment.tres` 是历史文件，未改动）。
+; 与上一版的差别（都是为了近景的物质可信度）：
+;   1. 环境光从 0.95 降到 0.55，并把钥匙光交给机装工作灯——上一轮已证明
+;      "近景偏软"的瓶颈是环境光主导（ART-QUALITY-002 §15.11）；
+;   2. 打开 SSAO / SSIL / SSR（Forward+）：接触阴影、间接光、金属反射；
+;      Compatibility 下这些自动失效，靠 Blender 烘焙的顶点 AO 兜底；
+;   3. ACES 色调映射 + 轻微辉光，把晶体与灯泡的高光收进胶片曲线；
+;   4. 极淡的体积雾，给洞厅纵深与灯光的可见光锥。
+
+[resource]
+background_mode = 1
+background_color = Color(0.0105, 0.0135, 0.0195, 1)
+background_energy_multiplier = 1.0
+ambient_light_source = 2
+ambient_light_color = Color(0.315, 0.325, 0.355, 1)
+ambient_light_energy = 1.45
+tonemap_mode = 3
+tonemap_exposure = 1.14
+tonemap_white = 6.0
+ssr_enabled = true
+ssr_max_steps = 48
+ssr_fade_in = 0.12
+ssr_fade_out = 2.0
+ssr_depth_tolerance = 0.22
+ssao_enabled = true
+ssao_radius = 1.15
+ssao_intensity = 1.65
+ssao_power = 1.45
+ssao_detail = 0.62
+ssao_horizon = 0.06
+ssao_sharpness = 0.98
+ssao_light_affect = 0.18
+ssil_enabled = true
+ssil_radius = 5.5
+ssil_intensity = 1.15
+ssil_sharpness = 0.96
+ssil_normal_rejection = 1.0
+glow_enabled = true
+glow_intensity = 0.32
+glow_strength = 0.92
+glow_bloom = 0.045
+glow_blend_mode = 1
+glow_hdr_threshold = 1.05
+glow_hdr_scale = 2.0
+fog_enabled = true
+fog_light_color = Color(0.085, 0.120, 0.185, 1)
+fog_light_energy = 0.45
+fog_density = 0.0040
+fog_aerial_perspective = 0.0
+volumetric_fog_enabled = true
+volumetric_fog_density = 0.0075
+volumetric_fog_albedo = Color(0.62, 0.68, 0.78, 1)
+volumetric_fog_emission = Color(0.02, 0.03, 0.045, 1)
+volumetric_fog_emission_energy = 1.0
+volumetric_fog_anisotropy = 0.32
+volumetric_fog_length = 64.0
+volumetric_fog_gi_inject = 0.35
+volumetric_fog_ambient_inject = 0.25
+adjustment_enabled = true
+adjustment_brightness = 1.0
+adjustment_contrast = 1.06
+adjustment_saturation = 1.04
+
+
+
+
+

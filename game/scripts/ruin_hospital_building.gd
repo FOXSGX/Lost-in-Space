@@ -12,25 +12,25 @@ extends RefCounted
 
 var controller: Node3D
 var root: Node3D
-var accent := Color("#c76b6b")
+var accent := Color("#a34f4f")
 var entry_ring: MeshInstance3D
 
-const WALL := Color("#a89c80")
-const WALL_DARK := Color("#94886d")
-const PLINTH := Color("#6b6450")
-const ROOF := Color("#585244")
-const RIM := Color("#b5ab92")
-const METAL := Color("#5f5949")
-const METAL_LIGHT := Color("#9b9380")
-const FRAME := Color("#b1a890")
-const GLASS := Color("#242a2e")
-const HOLE := Color("#1c1a16")
-const RED := Color("#a83f3f")
-const WHITE := Color("#ded6c0")
-const RUST := Color("#7a5140")
-const WOOD := Color("#5a4a3a")
-const WOOD_DOOR := Color("#6b5140")
-const WOOD_DARK := Color("#4a3628")
+const WALL := Color("#b4b5ae")
+const WALL_DARK := Color("#969991")
+const PLINTH := Color("#70756f")
+const ROOF := Color("#8a4f3e")
+const RIM := Color("#c6c7c0")
+const METAL := Color("#33565c")
+const METAL_LIGHT := Color("#5d8585")
+const FRAME := Color("#244850")
+const GLASS := Color("#4d7c7f")
+const HOLE := Color("#1a2f35")
+const RED := Color("#93453b")
+const WHITE := Color("#c7c9c2")
+const RUST := Color("#83503d")
+const WOOD := Color("#735034")
+const WOOD_DOOR := Color("#855a3a")
+const WOOD_DARK := Color("#553c2a")
 
 # 体块
 const TOWER_X := -4.0
@@ -55,8 +55,8 @@ func build(building_root: Node3D, size: Vector3, accent_color: Color, owner: Nod
     _build_entrance()
     _build_ambulance_bay()
     _build_roofs()
-    _build_surface_age()
-    _build_wall_stains()
+    # 卡通改版保留建筑体块、破洞和担架，去掉整面做旧与水渍层；
+    # 血迹改成低饱和珊瑚色，读作"这里出过事"，但不把画面压回暗紫恐怖片。
     _build_damage()
     _build_collision(size)
     var half_z: float = size.z * 0.5
@@ -98,26 +98,26 @@ func _build_windows() -> void:
             # 顶层右侧两格在塌掉的墙洞里，跟着一起没了
             if floor == 3 and x > 0.0 and x < 4.2:
                 continue
-            _window(Vector3(x, y, DEPTH * 0.5 + 0.05), Vector2(1.25, 1.6), Vector3(0, 0, 0))
+            _window(Vector3(x, y, DEPTH * 0.5 + 0.12), Vector2(1.25, 1.6), Vector3(0, 0, 0))
     # 病房楼西侧
     for floor in 4:
         var y := 1.9 + float(floor) * FLOOR
         for index in 6:
-            _window_side(Vector3(-TOWER_W * 0.5 + TOWER_X - 0.05, y, -7.6 + float(index) * 3.0), Vector2(1.2, 1.6))
+            _window_side(Vector3(-TOWER_W * 0.5 + TOWER_X - 0.12, y, -7.6 + float(index) * 3.0), Vector2(1.2, 1.6))
     # 病房楼背面
     for floor in 4:
         var y := 1.9 + float(floor) * FLOOR
         for index in 6:
-            _window(Vector3(-10.8 + float(index) * 2.9, y, -DEPTH * 0.5 - 0.05), Vector2(1.25, 1.6), Vector3(0, 180, 0))
+            _window(Vector3(-10.8 + float(index) * 2.9, y, -DEPTH * 0.5 - 0.12), Vector2(1.25, 1.6), Vector3(0, 180, 0))
     # 门诊翼：正面两层三扇、东侧两层三扇
     for floor in 2:
         var y := 1.9 + float(floor) * 3.4
         for index in 3:
-            _window(Vector3(6.2 + float(index) * 2.4, y, WING_Z1 + 0.05), Vector2(1.3, 1.7), Vector3.ZERO)
+            _window(Vector3(6.2 + float(index) * 2.4, y, WING_Z1 + 0.12), Vector2(1.3, 1.7), Vector3.ZERO)
     for floor in 2:
         var y := 1.9 + float(floor) * 3.4
         for index in 3:
-            _window_side(Vector3(WING_X + WING_W * 0.5 + 0.05, y, -7.0 + float(index) * 3.4), Vector2(1.3, 1.7))
+            _window_side(Vector3(WING_X + WING_W * 0.5 + 0.12, y, -7.0 + float(index) * 3.4), Vector2(1.3, 1.7))
 
 
 func _window(at: Vector3, size: Vector2, rotation: Vector3) -> void:
@@ -138,17 +138,28 @@ func _build_entrance() -> void:
     # 门洞：做成带门套的老式双开门，不是玻璃自动门
     # 门洞内部只用一块很薄的暗面当背景，别做成实心盒子，
     # 否则门和门套会被整个吞进去，正面看只剩一个黑洞。
-    _box("EntranceRecess", Vector3(3.7, 3.3, 0.12), Vector3(-4.0, 1.65, z - 0.06), HOLE)
+    # 暗面必须离开墙面几厘米：直接贴在 z=DEPTH/2 会和墙体完全共面，
+    # 移动时整块门洞出现横向 z-fighting 光栅。
+    _box("EntranceRecess", Vector3(3.7, 3.3, 0.02), Vector3(-4.0, 1.65, z + 0.02), HOLE)
     _box("EntranceFrameL", Vector3(0.22, 3.45, 0.30), Vector3(-5.95, 1.72, z + 0.08), PLINTH)
     _box("EntranceFrameR", Vector3(0.22, 3.45, 0.30), Vector3(-2.05, 1.72, z + 0.08), PLINTH)
     _box("EntranceFrameT", Vector3(4.12, 0.24, 0.30), Vector3(-4.0, 3.44, z + 0.08), PLINTH)
     # 门槛石
     _box("EntranceStep", Vector3(4.4, 0.14, 0.9), Vector3(-4.0, 0.07, z + 0.55), PLINTH)
     # 两扇木门：左扇关着，右扇虚掩着往里开
-    _wood_door("DoorL", Vector3(-5.75, 1.52, z + 0.02), 0.0, 1.0)
-    _wood_door("DoorR", Vector3(-2.25, 1.52, z + 0.02), -19.0, -1.0)
+    _wood_door("DoorL", Vector3(-5.75, 1.52, z + 0.10), 0.0, 1.0)
+    _wood_door("DoorR", Vector3(-2.25, 1.52, z + 0.10), -19.0, -1.0)
+    # 所有门先默认同一把二级弹子锁：右扇门上的黄铜锁板 + 锁芯 + 锁孔。
+    var lock := Node3D.new()
+    lock.name = "DoorLock"
+    lock.position = Vector3(-2.55, 1.18, z + 0.17)
+    root.add_child(lock)
+    _box_to(lock, "LockPlate", Vector3(0.26, 0.34, 0.07), Vector3.ZERO, Color("#c9a15b"))
+    _box_to(lock, "LockCylinder", Vector3(0.16, 0.16, 0.05), Vector3(0.0, -0.02, 0.05), Color("#8a5a2b"))
+    _box_to(lock, "LockKeyhole", Vector3(0.05, 0.11, 0.025), Vector3(0.0, -0.02, 0.08), HOLE)
+    _box_to(lock, "LockLED", Vector3(0.05, 0.05, 0.02), Vector3(0.0, 0.12, 0.06), RED, true)
     # 门楣上的旧灯罩（早就没电了）
-    _box("DoorLamp", Vector3(0.55, 0.22, 0.28), Vector3(-4.0, 3.72, z + 0.24), METAL)
+    _box("DoorLamp", Vector3(0.55, 0.22, 0.28), Vector3(-4.0, 3.72, z + 0.30), METAL)
 
     # 雨棚
     _box("HospitalCanopy", Vector3(7.2, 0.30, 3.6), Vector3(-4.0, 4.05, z + 1.7), WALL_DARK)
@@ -434,9 +445,9 @@ func _build_damage() -> void:
     for index in 4:
         _box_to(gurney, "Wheel", Vector3(0.14, 0.14, 0.14), Vector3(-0.6 + float(index % 2) * 1.2, -0.10, -0.22 + float(index / 2) * 0.44), Color("#2b3036"))
 
-    # 门口的血迹与拖痕
-    var dry := Color("#3a1013")
-    var blood := Color("#4e1519")
+    # 门口的血迹与拖痕：卡通化后改成珊瑚红，保留"这里出过事"的叙事但不做恐怖片。
+    var dry := Color("#8f4a45")
+    var blood := Color("#c25b52")
     _cyl("BloodPool", 1.15, 0.014, Vector3(-3.2, 0.02, z + 2.3), dry)
     _cyl("BloodPool2", 0.6, 0.014, Vector3(-5.4, 0.02, z + 1.2), blood)
     for index in 4:
@@ -522,11 +533,13 @@ func _mesh(parent: Node3D, node_name: String, mesh: Mesh, at: Vector3, color: Co
 
 func _make_material(color: Color, glow: bool) -> StandardMaterial3D:
     var material := StandardMaterial3D.new()
-    material.albedo_color = color
+    # 与 ruin_cartoon_art.gd 一致：十六进制色按 sRGB 书写，材质里转成线性。
+    var linear := color.srgb_to_linear()
+    material.albedo_color = Color(linear.r, linear.g, linear.b, color.a)
     material.roughness = 0.72
     if glow:
         material.emission_enabled = true
-        material.emission = color
+        material.emission = linear
         material.emission_energy_multiplier = 0.12
         material.roughness = 0.4
     return material

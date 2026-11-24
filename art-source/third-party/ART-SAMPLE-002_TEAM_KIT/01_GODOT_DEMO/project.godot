@@ -1,0 +1,21 @@
+; ART-SAMPLE-002 · 英雄区独立演示工程（Godot 4.7.2）
+; 只要用 Godot 4.7.2 打开这个目录，按 F5 运行即可（Compatibility 渲染器）
+
+config_version=5
+
+[application]
+
+config/name="ART-SAMPLE-002 Hero Demo"
+run/main_scene="res://scenes/hero_demo.tscn"
+config/features=PackedStringArray("4.7", "GL Compatibility")
+
+[display]
+
+window/size/viewport_width=1600
+window/size/viewport_height=900
+
+[rendering]
+
+renderer/rendering_method="gl_compatibility"
+renderer/rendering_method.mobile="gl_compatibility"
+textures/default_filters/anisotropic_filtering_level=2
