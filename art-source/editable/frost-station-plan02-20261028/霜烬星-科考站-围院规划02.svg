@@ -1,0 +1,369 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="2340" height="2100" viewBox="0 0 2340 2100">
+<rect width="2340" height="2100" fill="#e9eff0"/>
+<text x="64" y="105.78" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="61" font-weight="700" text-anchor="start" fill="#173e49">霜烬星 · 科考站</text>
+<text x="66" y="162.4" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="30" font-weight="400" text-anchor="start" fill="#66818a">围院规划 02  /  收紧作业院 · 强化地标视线</text>
+<rect x="1820" y="62" width="452" height="63" rx="10" fill="#245c69" stroke="none" stroke-width="1"/>
+<text x="2046" y="98.48" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="26" font-weight="700" text-anchor="middle" fill="#ffffff">第 1、4 项修订 · 规划图</text>
+<polyline points="65.0,205.0 2275.0,205.0" fill="none" stroke="#a7bfbd" stroke-width="2" stroke-linejoin="round"/>
+<rect x="50" y="245" width="1655" height="1670" rx="18" fill="#f6f8f5" stroke="#a7bfbd" stroke-width="2"/>
+<rect x="1740" y="245" width="550" height="1670" rx="18" fill="#f6f8f5" stroke="#a7bfbd" stroke-width="2"/>
+<text x="81" y="292.5" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="25" font-weight="700" text-anchor="start" fill="#173e49">总平面 / 顶视</text>
+<text x="1668" y="293.52" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="24" font-weight="400" text-anchor="end" fill="#66818a">北 ↑ · 遗迹方向</text>
+<polyline points="143.0,345.0 143.0,1840.2" fill="none" stroke="#e0e8e7" stroke-width="1" stroke-linejoin="round"/>
+<text x="143.0" y="338.52000000000004" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="17" font-weight="400" text-anchor="middle" fill="#66818a">0</text>
+<polyline points="321.0,345.0 321.0,1840.2" fill="none" stroke="#e0e8e7" stroke-width="1" stroke-linejoin="round"/>
+<text x="321.0" y="338.52000000000004" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="17" font-weight="400" text-anchor="middle" fill="#66818a">20</text>
+<polyline points="499.0,345.0 499.0,1840.2" fill="none" stroke="#e0e8e7" stroke-width="1" stroke-linejoin="round"/>
+<text x="499.0" y="338.52000000000004" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="17" font-weight="400" text-anchor="middle" fill="#66818a">40</text>
+<polyline points="677.0,345.0 677.0,1840.2" fill="none" stroke="#e0e8e7" stroke-width="1" stroke-linejoin="round"/>
+<text x="677.0" y="338.52000000000004" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="17" font-weight="400" text-anchor="middle" fill="#66818a">60</text>
+<polyline points="855.0,345.0 855.0,1840.2" fill="none" stroke="#e0e8e7" stroke-width="1" stroke-linejoin="round"/>
+<text x="855.0" y="338.52000000000004" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="17" font-weight="400" text-anchor="middle" fill="#66818a">80</text>
+<polyline points="1033.0,345.0 1033.0,1840.2" fill="none" stroke="#e0e8e7" stroke-width="1" stroke-linejoin="round"/>
+<text x="1033.0" y="338.52000000000004" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="17" font-weight="400" text-anchor="middle" fill="#66818a">100</text>
+<polyline points="1211.0,345.0 1211.0,1840.2" fill="none" stroke="#e0e8e7" stroke-width="1" stroke-linejoin="round"/>
+<text x="1211.0" y="338.52000000000004" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="17" font-weight="400" text-anchor="middle" fill="#66818a">120</text>
+<polyline points="1389.0,345.0 1389.0,1840.2" fill="none" stroke="#e0e8e7" stroke-width="1" stroke-linejoin="round"/>
+<text x="1389.0" y="338.52000000000004" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="17" font-weight="400" text-anchor="middle" fill="#66818a">140</text>
+<polyline points="143.0,345.0 1522.5,345.0" fill="none" stroke="#e0e8e7" stroke-width="1" stroke-linejoin="round"/>
+<text x="118" y="351.66" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="17" font-weight="400" text-anchor="end" fill="#66818a">0</text>
+<polyline points="143.0,523.0 1522.5,523.0" fill="none" stroke="#e0e8e7" stroke-width="1" stroke-linejoin="round"/>
+<text x="118" y="529.66" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="17" font-weight="400" text-anchor="end" fill="#66818a">20</text>
+<polyline points="143.0,701.0 1522.5,701.0" fill="none" stroke="#e0e8e7" stroke-width="1" stroke-linejoin="round"/>
+<text x="118" y="707.66" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="17" font-weight="400" text-anchor="end" fill="#66818a">40</text>
+<polyline points="143.0,879.0 1522.5,879.0" fill="none" stroke="#e0e8e7" stroke-width="1" stroke-linejoin="round"/>
+<text x="118" y="885.66" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="17" font-weight="400" text-anchor="end" fill="#66818a">60</text>
+<polyline points="143.0,1057.0 1522.5,1057.0" fill="none" stroke="#e0e8e7" stroke-width="1" stroke-linejoin="round"/>
+<text x="118" y="1063.66" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="17" font-weight="400" text-anchor="end" fill="#66818a">80</text>
+<polyline points="143.0,1235.0 1522.5,1235.0" fill="none" stroke="#e0e8e7" stroke-width="1" stroke-linejoin="round"/>
+<text x="118" y="1241.66" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="17" font-weight="400" text-anchor="end" fill="#66818a">100</text>
+<polyline points="143.0,1413.0 1522.5,1413.0" fill="none" stroke="#e0e8e7" stroke-width="1" stroke-linejoin="round"/>
+<text x="118" y="1419.66" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="17" font-weight="400" text-anchor="end" fill="#66818a">120</text>
+<polyline points="143.0,1591.0 1522.5,1591.0" fill="none" stroke="#e0e8e7" stroke-width="1" stroke-linejoin="round"/>
+<text x="118" y="1597.66" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="17" font-weight="400" text-anchor="end" fill="#66818a">140</text>
+<polyline points="143.0,1769.0 1522.5,1769.0" fill="none" stroke="#e0e8e7" stroke-width="1" stroke-linejoin="round"/>
+<text x="118" y="1775.66" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="17" font-weight="400" text-anchor="end" fill="#66818a">160</text>
+<polygon points="143.0,505.20000000000005 205.3,460.7 276.5,549.7 240.9,754.4000000000001 143.0,790.0" fill="#dce8eb" stroke="none" stroke-width="2"/>
+<polygon points="1478.0,451.8 1522.5,398.4 1522.5,887.9 1478.0,852.3" fill="#dce8eb" stroke="none" stroke-width="2"/>
+<polygon points="143.0,1332.9 205.3,1306.2 223.10000000000002,1564.3 143.0,1671.1000000000001" fill="#dce8eb" stroke="none" stroke-width="2"/>
+<polygon points="1478.0,1359.6 1522.5,1297.3000000000002 1522.5,1840.2 1469.1000000000001,1760.1000000000001" fill="#dce8eb" stroke="none" stroke-width="2"/>
+<rect x="178.6" y="612.0" width="35.6" height="26.700000000000003" rx="0" fill="#9cb3bb" stroke="none" stroke-width="2"/>
+<rect x="1486.9" y="736.6" width="26.700000000000003" height="44.5" rx="0" fill="#9cb3bb" stroke="none" stroke-width="2"/>
+<rect x="178.6" y="1448.6000000000001" width="26.700000000000003" height="35.6" rx="0" fill="#9cb3bb" stroke="none" stroke-width="2"/>
+<rect x="1486.9" y="1688.9" width="26.700000000000003" height="35.6" rx="0" fill="#9cb3bb" stroke="none" stroke-width="2"/>
+<rect x="588.0" y="923.5" width="356.0" height="311.5" rx="0" fill="#dce7dc" stroke="#9ab69f" stroke-width="3"/>
+<rect x="641.4000000000001" y="1226.1" width="338.2" height="382.7" rx="0" fill="#e3e8df" stroke="none" stroke-width="2"/>
+<rect x="303.20000000000005" y="1270.6" width="996.8000000000001" height="71.2" rx="0" fill="#e1e6df" stroke="none" stroke-width="2"/>
+<rect x="1068.6" y="398.4" width="133.5" height="507.3" rx="0" fill="#e0e7e1" stroke="none" stroke-width="2"/>
+<rect x="935.1" y="887.9" width="222.5" height="80.10000000000001" rx="0" fill="#e0e7e1" stroke="none" stroke-width="2"/>
+<rect x="1193.2" y="843.4000000000001" width="275.90000000000003" height="62.300000000000004" rx="0" fill="#e0e7e1" stroke="none" stroke-width="2"/>
+<polyline points="499.0,879.0 499.0,923.5" fill="none" stroke="#b4c8c4" stroke-width="55" stroke-linejoin="round"/>
+<polyline points="499.0,879.0 499.0,923.5" fill="none" stroke="#f6f8f5" stroke-width="45" stroke-linejoin="round"/>
+<polyline points="476.75,892.35 521.25,892.35" fill="none" stroke="#bbccc5" stroke-width="2" stroke-linejoin="round"/>
+<polyline points="476.75,910.15 521.25,910.15" fill="none" stroke="#bbccc5" stroke-width="2" stroke-linejoin="round"/>
+<polyline points="1033.0,879.0 1033.0,923.5" fill="none" stroke="#b4c8c4" stroke-width="55" stroke-linejoin="round"/>
+<polyline points="1033.0,879.0 1033.0,923.5" fill="none" stroke="#f6f8f5" stroke-width="45" stroke-linejoin="round"/>
+<polyline points="1010.75,892.35 1055.25,892.35" fill="none" stroke="#bbccc5" stroke-width="2" stroke-linejoin="round"/>
+<polyline points="1010.75,910.15 1055.25,910.15" fill="none" stroke="#bbccc5" stroke-width="2" stroke-linejoin="round"/>
+<rect x="460.73" y="584.41" width="623.0" height="302.6" rx="0" fill="#cad5d2" stroke="none" stroke-width="2"/>
+<rect x="454.5" y="576.4" width="623.0" height="302.6" rx="0" fill="#245c69" stroke="#245c69" stroke-width="5"/>
+<rect x="454.5" y="576.4" width="186.9" height="124.60000000000001" rx="0" fill="none" stroke="#7ba2a8" stroke-width="2"/>
+<text x="547.95" y="647.8" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="22" font-weight="400" text-anchor="middle" fill="#e5f0ed">档案 / 指挥</text>
+<rect x="641.4000000000001" y="576.4" width="195.8" height="124.60000000000001" rx="0" fill="none" stroke="#7ba2a8" stroke-width="2"/>
+<text x="739.3000000000001" y="685.9800000000001" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="21" font-weight="400" text-anchor="middle" fill="#e5f0ed">能源保管室</text>
+<rect x="685.9" y="603.1" width="89.0" height="44.5" rx="0" fill="#b98b45" stroke="#f3d59c" stroke-width="2"/>
+<text x="730.4" y="626.9699999999999" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="18" font-weight="700" text-anchor="middle" fill="#ffffff">保险柜</text>
+<rect x="837.2" y="576.4" width="240.3" height="124.60000000000001" rx="0" fill="none" stroke="#7ba2a8" stroke-width="2"/>
+<text x="957.35" y="647.8" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="22" font-weight="400" text-anchor="middle" fill="#e5f0ed">研究 / 通讯</text>
+<rect x="454.5" y="745.5" width="204.70000000000002" height="133.5" rx="0" fill="none" stroke="#7ba2a8" stroke-width="2"/>
+<text x="556.85" y="821.3499999999999" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="22" font-weight="400" text-anchor="middle" fill="#e5f0ed">基础实验室</text>
+<rect x="881.7" y="745.5" width="195.8" height="133.5" rx="0" fill="none" stroke="#7ba2a8" stroke-width="2"/>
+<text x="979.6" y="821.3499999999999" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="22" font-weight="400" text-anchor="middle" fill="#e5f0ed">办公 / 会议</text>
+<polyline points="454.5,701.0 1077.5,701.0" fill="none" stroke="#7ba2a8" stroke-width="2" stroke-linejoin="round"/>
+<text x="766.0" y="797.6800000000001" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="26" font-weight="700" text-anchor="middle" fill="#ffffff">接待大厅</text>
+<text x="766.0" y="845.2" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="20" font-weight="400" text-anchor="middle" fill="#b9d6d6">主要入口</text>
+<polyline points="721.5,879.0 810.5,879.0" fill="none" stroke="#245c69" stroke-width="10" stroke-linejoin="round"/>
+<polyline points="721.5,879.0 810.5,879.0" fill="none" stroke="#f3c678" stroke-width="4" stroke-linejoin="round"/>
+<polyline points="721.5,872.77 721.5,885.23" fill="none" stroke="#f3c678" stroke-width="3" stroke-linejoin="round"/>
+<polyline points="810.5,872.77 810.5,885.23" fill="none" stroke="#f3c678" stroke-width="3" stroke-linejoin="round"/>
+<polyline points="476.75,879.0 521.25,879.0" fill="none" stroke="#245c69" stroke-width="10" stroke-linejoin="round"/>
+<polyline points="476.75,879.0 521.25,879.0" fill="none" stroke="#b8d6cf" stroke-width="4" stroke-linejoin="round"/>
+<polyline points="476.75,872.77 476.75,885.23" fill="none" stroke="#b8d6cf" stroke-width="3" stroke-linejoin="round"/>
+<polyline points="521.25,872.77 521.25,885.23" fill="none" stroke="#b8d6cf" stroke-width="3" stroke-linejoin="round"/>
+<polyline points="1010.75,879.0 1055.25,879.0" fill="none" stroke="#245c69" stroke-width="10" stroke-linejoin="round"/>
+<polyline points="1010.75,879.0 1055.25,879.0" fill="none" stroke="#b8d6cf" stroke-width="4" stroke-linejoin="round"/>
+<polyline points="1010.75,872.77 1010.75,885.23" fill="none" stroke="#b8d6cf" stroke-width="3" stroke-linejoin="round"/>
+<polyline points="1055.25,872.77 1055.25,885.23" fill="none" stroke="#b8d6cf" stroke-width="3" stroke-linejoin="round"/>
+<rect x="677.0" y="879.0" width="178.0" height="26.700000000000003" rx="0" fill="#cddbd4" stroke="#8ba8a2" stroke-width="2"/>
+<polyline points="685.9,886.12 846.1,886.12" fill="none" stroke="#8da9a2" stroke-width="1" stroke-linejoin="round"/>
+<polyline points="685.9,895.02 846.1,895.02" fill="none" stroke="#8da9a2" stroke-width="1" stroke-linejoin="round"/>
+<polyline points="499.0,576.4 534.6,576.4" fill="none" stroke="#bad6d6" stroke-width="6" stroke-linejoin="round"/>
+<polyline points="570.2,576.4 605.8,576.4" fill="none" stroke="#bad6d6" stroke-width="6" stroke-linejoin="round"/>
+<polyline points="650.3,576.4 685.9,576.4" fill="none" stroke="#bad6d6" stroke-width="6" stroke-linejoin="round"/>
+<polyline points="739.3000000000001,576.4 774.9,576.4" fill="none" stroke="#bad6d6" stroke-width="6" stroke-linejoin="round"/>
+<polyline points="872.8000000000001,576.4 908.4,576.4" fill="none" stroke="#bad6d6" stroke-width="6" stroke-linejoin="round"/>
+<polyline points="988.5,576.4 1024.1,576.4" fill="none" stroke="#bad6d6" stroke-width="6" stroke-linejoin="round"/>
+<circle cx="454.5" cy="576.4" r="24" fill="#c88936" stroke="none" stroke-width="2"/>
+<text x="454.5" y="583.9" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="25" font-weight="700" text-anchor="middle" fill="#ffffff">01</text>
+<text x="614.7" y="531.58" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="36" font-weight="700" text-anchor="middle" fill="#245c69">主科研楼</text>
+<text x="614.7" y="560.4" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="20" font-weight="400" text-anchor="middle" fill="#66818a">主楼体量保持最大</text>
+<rect x="730.4" y="496.3" width="80.10000000000001" height="80.10000000000001" rx="0" fill="#a2bfbd" stroke="#245c69" stroke-width="3"/>
+<circle cx="770.45" cy="536.35" r="28.480000000000004" fill="none" stroke="#245c69" stroke-width="3"/>
+<circle cx="770.45" cy="536.35" r="9.790000000000001" fill="#245c69" stroke="none" stroke-width="2"/>
+<polyline points="770.45,507.87 770.45,564.83" fill="none" stroke="#245c69" stroke-width="2" stroke-linejoin="round"/>
+<polyline points="741.97,536.35 798.9300000000001,536.35" fill="none" stroke="#245c69" stroke-width="2" stroke-linejoin="round"/>
+<text x="828.3000000000001" y="536.64" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="23" font-weight="700" text-anchor="start" fill="#245c69">通讯塔</text>
+<text x="828.3000000000001" y="567.34" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="18" font-weight="400" text-anchor="start" fill="#66818a">塔顶约 +22m</text>
+<rect x="229.32999999999998" y="931.5100000000001" width="302.6" height="338.2" rx="0" fill="#cad5d2" stroke="none" stroke-width="2"/>
+<rect x="223.10000000000002" y="923.5" width="302.6" height="338.2" rx="0" fill="#bfd7d4" stroke="#638884" stroke-width="4"/>
+<rect x="240.9" y="950.2" width="133.5" height="186.9" rx="0" fill="#b0c9c8" stroke="#83a5a4" stroke-width="2"/>
+<rect x="383.3" y="950.2" width="124.60000000000001" height="186.9" rx="0" fill="#aec4cf" stroke="#83a5a4" stroke-width="2"/>
+<text x="307.65" y="989.56" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="22" font-weight="700" text-anchor="middle" fill="#173e49">骨骼标本</text>
+<text x="445.6" y="989.56" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="22" font-weight="700" text-anchor="middle" fill="#173e49">隔离观察</text>
+<polyline points="258.7,1074.8000000000002 347.70000000000005,1074.8000000000002" fill="none" stroke="#eee7cb" stroke-width="10" stroke-linejoin="round"/>
+<polyline points="267.6,1039.2 267.6,1110.4" fill="none" stroke="#eee7cb" stroke-width="5" stroke-linejoin="round"/>
+<polyline points="294.3,1039.2 294.3,1110.4" fill="none" stroke="#eee7cb" stroke-width="5" stroke-linejoin="round"/>
+<polyline points="321.0,1039.2 321.0,1110.4" fill="none" stroke="#eee7cb" stroke-width="5" stroke-linejoin="round"/>
+<polyline points="338.8,1039.2 338.8,1110.4" fill="none" stroke="#eee7cb" stroke-width="5" stroke-linejoin="round"/>
+<circle cx="418.90000000000003" cy="1048.1" r="18.69" fill="#b78bb0" stroke="#856a8a" stroke-width="2"/>
+<circle cx="472.3" cy="1092.6" r="18.69" fill="#b78bb0" stroke="#856a8a" stroke-width="2"/>
+<polyline points="240.9,1163.8000000000002 507.90000000000003,1163.8000000000002" fill="none" stroke="#83a5a4" stroke-width="2" stroke-linejoin="round"/>
+<text x="374.4" y="1219.98" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="21" font-weight="400" text-anchor="middle" fill="#173e49">样本交接 / 冷藏</text>
+<polyline points="525.7,1074.8000000000002 525.7,1146.0" fill="none" stroke="#f6f8f5" stroke-width="10" stroke-linejoin="round"/>
+<polyline points="525.7,1074.8000000000002 525.7,1146.0" fill="none" stroke="#287d91" stroke-width="4" stroke-linejoin="round"/>
+<polyline points="519.47,1074.8000000000002 531.9300000000001,1074.8000000000002" fill="none" stroke="#287d91" stroke-width="3" stroke-linejoin="round"/>
+<polyline points="519.47,1146.0 531.9300000000001,1146.0" fill="none" stroke="#287d91" stroke-width="3" stroke-linejoin="round"/>
+<polyline points="476.75,923.5 521.25,923.5" fill="none" stroke="#f6f8f5" stroke-width="10" stroke-linejoin="round"/>
+<polyline points="476.75,923.5 521.25,923.5" fill="none" stroke="#287d91" stroke-width="4" stroke-linejoin="round"/>
+<polyline points="476.75,917.27 476.75,929.73" fill="none" stroke="#287d91" stroke-width="3" stroke-linejoin="round"/>
+<polyline points="521.25,917.27 521.25,929.73" fill="none" stroke="#287d91" stroke-width="3" stroke-linejoin="round"/>
+<circle cx="223.10000000000002" cy="923.5" r="24" fill="#245c69" stroke="none" stroke-width="2"/>
+<text x="223.10000000000002" y="931.0" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="25" font-weight="700" text-anchor="middle" fill="#ffffff">02</text>
+<text x="347.70000000000005" y="884.28" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="29" font-weight="700" text-anchor="middle" fill="#245c69">标本保存与隔离馆</text>
+<text x="347.70000000000005" y="914.44" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="18" font-weight="400" text-anchor="middle" fill="#66818a">辅助探索</text>
+<rect x="1030.33" y="931.5100000000001" width="302.6" height="338.2" rx="0" fill="#cad5d2" stroke="none" stroke-width="2"/>
+<rect x="1024.1" y="923.5" width="302.6" height="338.2" rx="0" fill="#bfd7d4" stroke="#638884" stroke-width="4"/>
+<rect x="1024.1" y="923.5" width="151.3" height="89.0" rx="0" fill="none" stroke="#91adaa" stroke-width="2"/>
+<text x="1099.75" y="1001.84" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="20" font-weight="400" text-anchor="middle" fill="#315a60">宿舍</text>
+<rect x="1024.1" y="1012.5" width="151.3" height="89.0" rx="0" fill="none" stroke="#91adaa" stroke-width="2"/>
+<text x="1099.75" y="1066.1" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="22" font-weight="400" text-anchor="middle" fill="#315a60">医务室</text>
+<rect x="1175.4" y="923.5" width="151.3" height="89.0" rx="0" fill="none" stroke="#91adaa" stroke-width="2"/>
+<text x="1251.05" y="1001.84" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="20" font-weight="400" text-anchor="middle" fill="#315a60">宿舍</text>
+<rect x="1175.4" y="1012.5" width="151.3" height="89.0" rx="0" fill="none" stroke="#91adaa" stroke-width="2"/>
+<text x="1251.05" y="1066.1" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="22" font-weight="400" text-anchor="middle" fill="#315a60">更衣室</text>
+<rect x="1041.9" y="935.07" width="17.8" height="35.6" rx="0" fill="#98b6b2" stroke="none" stroke-width="2"/>
+<rect x="1068.6" y="935.07" width="17.8" height="35.6" rx="0" fill="#98b6b2" stroke="none" stroke-width="2"/>
+<rect x="1095.3000000000002" y="935.07" width="17.8" height="35.6" rx="0" fill="#98b6b2" stroke="none" stroke-width="2"/>
+<rect x="1193.2" y="935.07" width="17.8" height="35.6" rx="0" fill="#98b6b2" stroke="none" stroke-width="2"/>
+<rect x="1219.9" y="935.07" width="17.8" height="35.6" rx="0" fill="#98b6b2" stroke="none" stroke-width="2"/>
+<rect x="1246.6000000000001" y="935.07" width="17.8" height="35.6" rx="0" fill="#98b6b2" stroke="none" stroke-width="2"/>
+<rect x="1024.1" y="1137.1" width="302.6" height="124.60000000000001" rx="0" fill="#c6d9cf" stroke="#91adaa" stroke-width="2"/>
+<text x="1175.4" y="1203.1599999999999" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="22" font-weight="400" text-anchor="middle" fill="#173e49">食堂 / 公共活动</text>
+<polyline points="1024.1,1074.8000000000002 1024.1,1146.0" fill="none" stroke="#f6f8f5" stroke-width="10" stroke-linejoin="round"/>
+<polyline points="1024.1,1074.8000000000002 1024.1,1146.0" fill="none" stroke="#287d91" stroke-width="4" stroke-linejoin="round"/>
+<polyline points="1017.87,1074.8000000000002 1030.33,1074.8000000000002" fill="none" stroke="#287d91" stroke-width="3" stroke-linejoin="round"/>
+<polyline points="1017.87,1146.0 1030.33,1146.0" fill="none" stroke="#287d91" stroke-width="3" stroke-linejoin="round"/>
+<polyline points="1010.75,923.5 1055.25,923.5" fill="none" stroke="#f6f8f5" stroke-width="10" stroke-linejoin="round"/>
+<polyline points="1010.75,923.5 1055.25,923.5" fill="none" stroke="#287d91" stroke-width="4" stroke-linejoin="round"/>
+<polyline points="1010.75,917.27 1010.75,929.73" fill="none" stroke="#287d91" stroke-width="3" stroke-linejoin="round"/>
+<polyline points="1055.25,917.27 1055.25,929.73" fill="none" stroke="#287d91" stroke-width="3" stroke-linejoin="round"/>
+<circle cx="1326.7" cy="923.5" r="24" fill="#245c69" stroke="none" stroke-width="2"/>
+<text x="1326.7" y="931.0" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="25" font-weight="700" text-anchor="middle" fill="#ffffff">03</text>
+<text x="1175.4" y="1301.6000000000001" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="28" font-weight="700" text-anchor="middle" fill="#245c69">生活医疗楼</text>
+<rect x="1226.13" y="584.41" width="249.20000000000002" height="231.4" rx="0" fill="#cad5d2" stroke="none" stroke-width="2"/>
+<rect x="1219.9" y="576.4" width="249.20000000000002" height="231.4" rx="0" fill="#d9e2df" stroke="#638884" stroke-width="3"/>
+<polyline points="1362.3,576.4 1362.3,807.8" fill="none" stroke="#a8bcb4" stroke-width="2" stroke-linejoin="round"/>
+<text x="1291.1000000000001" y="640.5000000000001" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="20" font-weight="700" text-anchor="middle" fill="#66818a">动力机组</text>
+<text x="1291.1000000000001" y="747.3000000000001" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="20" font-weight="400" text-anchor="middle" fill="#66818a">维护间</text>
+<circle cx="1415.7" cy="629.8" r="29.37" fill="#b6c9c4" stroke="#839d99" stroke-width="2"/>
+<circle cx="1415.7" cy="718.8" r="29.37" fill="#b6c9c4" stroke="#839d99" stroke-width="2"/>
+<polyline points="1300.0,807.8 1353.4,807.8" fill="none" stroke="#f6f8f5" stroke-width="10" stroke-linejoin="round"/>
+<polyline points="1300.0,807.8 1353.4,807.8" fill="none" stroke="#287d91" stroke-width="4" stroke-linejoin="round"/>
+<polyline points="1300.0,801.5699999999999 1300.0,814.03" fill="none" stroke="#287d91" stroke-width="3" stroke-linejoin="round"/>
+<polyline points="1353.4,801.5699999999999 1353.4,814.03" fill="none" stroke="#287d91" stroke-width="3" stroke-linejoin="round"/>
+<circle cx="1219.9" cy="576.4" r="24" fill="#718e8c" stroke="none" stroke-width="2"/>
+<text x="1219.9" y="583.9" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="25" font-weight="700" text-anchor="middle" fill="#ffffff">04</text>
+<text x="1344.5" y="525.25" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="25" font-weight="700" text-anchor="middle" fill="#173e49">动力与生命保障站</text>
+<text x="1415.7" y="778.9799999999999" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="16" font-weight="400" text-anchor="middle" fill="#66818a">制氧 / 水</text>
+<rect x="994.73" y="1358.71" width="427.20000000000005" height="222.5" rx="0" fill="#cad5d2" stroke="none" stroke-width="2"/>
+<rect x="988.5" y="1350.7" width="427.20000000000005" height="222.5" rx="0" fill="#d9e2df" stroke="#638884" stroke-width="3"/>
+<polyline points="1273.3,1350.7 1273.3,1573.2" fill="none" stroke="#a5b9b2" stroke-width="2" stroke-linejoin="round"/>
+<text x="1344.5" y="1424.68" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="21" font-weight="400" text-anchor="middle" fill="#66818a">维修台</text>
+<text x="1344.5" y="1512.7" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="20" font-weight="400" text-anchor="middle" fill="#66818a">零件</text>
+<rect x="1024.1" y="1404.1000000000001" width="80.10000000000001" height="106.80000000000001" rx="7" fill="#aebfba" stroke="#78918b" stroke-width="2"/>
+<rect x="1034.7800000000002" y="1413.0" width="58.74" height="26.700000000000003" rx="0" fill="#69888b" stroke="none" stroke-width="2"/>
+<rect x="1018.7600000000001" y="1421.9" width="11.57" height="62.300000000000004" rx="0" fill="#69827e" stroke="none" stroke-width="2"/>
+<rect x="1100.6399999999999" y="1421.9" width="11.57" height="62.300000000000004" rx="0" fill="#69827e" stroke="none" stroke-width="2"/>
+<polyline points="1019.6500000000001,1350.7 1108.65,1350.7" fill="none" stroke="#f6f8f5" stroke-width="10" stroke-linejoin="round"/>
+<polyline points="1019.6500000000001,1350.7 1108.65,1350.7" fill="none" stroke="#287d91" stroke-width="4" stroke-linejoin="round"/>
+<polyline points="1019.6500000000001,1344.47 1019.6500000000001,1356.93" fill="none" stroke="#287d91" stroke-width="3" stroke-linejoin="round"/>
+<polyline points="1108.65,1344.47 1108.65,1356.93" fill="none" stroke="#287d91" stroke-width="3" stroke-linejoin="round"/>
+<rect x="1148.7" y="1404.1000000000001" width="80.10000000000001" height="106.80000000000001" rx="7" fill="#aebfba" stroke="#78918b" stroke-width="2"/>
+<rect x="1159.38" y="1413.0" width="58.74" height="26.700000000000003" rx="0" fill="#69888b" stroke="none" stroke-width="2"/>
+<rect x="1143.3600000000001" y="1421.9" width="11.57" height="62.300000000000004" rx="0" fill="#69827e" stroke="none" stroke-width="2"/>
+<rect x="1225.24" y="1421.9" width="11.57" height="62.300000000000004" rx="0" fill="#69827e" stroke="none" stroke-width="2"/>
+<polyline points="1144.25,1350.7 1233.25,1350.7" fill="none" stroke="#f6f8f5" stroke-width="10" stroke-linejoin="round"/>
+<polyline points="1144.25,1350.7 1233.25,1350.7" fill="none" stroke="#287d91" stroke-width="4" stroke-linejoin="round"/>
+<polyline points="1144.25,1344.47 1144.25,1356.93" fill="none" stroke="#287d91" stroke-width="3" stroke-linejoin="round"/>
+<polyline points="1233.25,1344.47 1233.25,1356.93" fill="none" stroke="#287d91" stroke-width="3" stroke-linejoin="round"/>
+<circle cx="988.5" cy="1350.7" r="24" fill="#718e8c" stroke="none" stroke-width="2"/>
+<text x="988.5" y="1358.2" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="25" font-weight="700" text-anchor="middle" fill="#ffffff">05</text>
+<text x="1202.1000000000001" y="1619.42" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="29" font-weight="700" text-anchor="middle" fill="#173e49">机修车库</text>
+<rect x="256.03" y="1358.71" width="382.7" height="222.5" rx="0" fill="#cad5d2" stroke="none" stroke-width="2"/>
+<rect x="249.8" y="1350.7" width="382.7" height="222.5" rx="0" fill="#d9e2df" stroke="#638884" stroke-width="3"/>
+<polyline points="516.8,1350.7 516.8,1573.2" fill="none" stroke="#a5b9b2" stroke-width="2" stroke-linejoin="round"/>
+<rect x="285.4" y="1395.2" width="62.300000000000004" height="26.700000000000003" rx="0" fill="#a0b4a8" stroke="#7f9989" stroke-width="1"/>
+<rect x="374.4" y="1395.2" width="62.300000000000004" height="26.700000000000003" rx="0" fill="#a0b4a8" stroke="#7f9989" stroke-width="1"/>
+<rect x="285.4" y="1457.5" width="62.300000000000004" height="26.700000000000003" rx="0" fill="#a0b4a8" stroke="#7f9989" stroke-width="1"/>
+<rect x="374.4" y="1457.5" width="62.300000000000004" height="26.700000000000003" rx="0" fill="#a0b4a8" stroke="#7f9989" stroke-width="1"/>
+<rect x="285.4" y="1519.8" width="62.300000000000004" height="26.700000000000003" rx="0" fill="#a0b4a8" stroke="#7f9989" stroke-width="1"/>
+<rect x="374.4" y="1519.8" width="62.300000000000004" height="26.700000000000003" rx="0" fill="#a0b4a8" stroke="#7f9989" stroke-width="1"/>
+<text x="574.6500000000001" y="1433.58" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="21" font-weight="400" text-anchor="middle" fill="#66818a">耗材</text>
+<text x="574.6500000000001" y="1513.68" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="21" font-weight="400" text-anchor="middle" fill="#66818a">工具</text>
+<polyline points="392.20000000000005,1350.7 499.0,1350.7" fill="none" stroke="#f6f8f5" stroke-width="10" stroke-linejoin="round"/>
+<polyline points="392.20000000000005,1350.7 499.0,1350.7" fill="none" stroke="#287d91" stroke-width="4" stroke-linejoin="round"/>
+<polyline points="392.20000000000005,1344.47 392.20000000000005,1356.93" fill="none" stroke="#287d91" stroke-width="3" stroke-linejoin="round"/>
+<polyline points="499.0,1344.47 499.0,1356.93" fill="none" stroke="#287d91" stroke-width="3" stroke-linejoin="round"/>
+<rect x="285.4" y="1315.1" width="284.8" height="35.6" rx="0" fill="#d0d9ca" stroke="#9aae9e" stroke-width="2"/>
+<rect x="303.20000000000005" y="1297.3000000000002" width="26.700000000000003" height="17.8" rx="0" fill="#b6bca7" stroke="#939d86" stroke-width="1"/>
+<rect x="356.6" y="1297.3000000000002" width="26.700000000000003" height="17.8" rx="0" fill="#b6bca7" stroke="#939d86" stroke-width="1"/>
+<rect x="579.1" y="1324.0" width="26.700000000000003" height="17.8" rx="0" fill="#b6bca7" stroke="#939d86" stroke-width="1"/>
+<circle cx="249.8" cy="1350.7" r="24" fill="#718e8c" stroke="none" stroke-width="2"/>
+<text x="249.8" y="1358.2" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="25" font-weight="700" text-anchor="middle" fill="#ffffff">06</text>
+<text x="441.15000000000003" y="1619.42" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="29" font-weight="700" text-anchor="middle" fill="#173e49">物资仓库</text>
+<polyline points="1353.4,576.4 1353.4,549.7 1184.3,549.7 1184.3,852.3 1433.5,852.3 1433.5,1306.2 1353.4,1306.2 1353.4,1350.7" fill="none" stroke="#bd9258" stroke-width="5" stroke-linejoin="round"/>
+<polyline points="1433.5,1306.2 445.6,1306.2 445.6,1315.1" fill="none" stroke="#bd9258" stroke-width="4" stroke-linejoin="round"/>
+<rect x="601.35" y="1154.9" width="53.400000000000006" height="24.919999999999998" rx="0" fill="#b8c7b8" stroke="#8da391" stroke-width="1"/>
+<rect x="877.25" y="1154.9" width="53.400000000000006" height="24.919999999999998" rx="0" fill="#c1cebf" stroke="#8da391" stroke-width="1"/>
+<rect x="614.7" y="1181.6" width="23.14" height="15.13" rx="0" fill="#b6bca7" stroke="#939d86" stroke-width="1"/>
+<rect x="899.5" y="1181.6" width="23.14" height="15.13" rx="0" fill="#b6bca7" stroke="#939d86" stroke-width="1"/>
+<circle cx="605.8" cy="950.2" r="5.34" fill="#4b777e" stroke="none" stroke-width="2"/>
+<circle cx="926.2" cy="950.2" r="5.34" fill="#4b777e" stroke="none" stroke-width="2"/>
+<circle cx="605.8" cy="1208.3000000000002" r="5.34" fill="#4b777e" stroke="none" stroke-width="2"/>
+<circle cx="926.2" cy="1208.3000000000002" r="5.34" fill="#4b777e" stroke="none" stroke-width="2"/>
+<text x="766.0" y="1054.72" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="34" font-weight="700" text-anchor="middle" fill="#245c69">中央作业院</text>
+<text x="766.0" y="1093.3400000000001" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="28" font-weight="700" text-anchor="middle" fill="#245c69">40 × 35m</text>
+<text x="766.0" y="1129.02" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="19" font-weight="400" text-anchor="middle" fill="#66818a">低矮装卸架 · 保持入口视野</text>
+<polyline points="766.0,1635.5 766.0,1217.2 766.0,1172.7" fill="none" stroke="#f6f8f5" stroke-width="12" stroke-linejoin="round"/>
+<polyline points="766.0,1635.5 766.0,1217.2 766.0,1172.7" fill="none" stroke="#287d91" stroke-width="7" stroke-linejoin="round"/>
+<polyline points="766.0,976.9 766.0,914.6" fill="none" stroke="#f6f8f5" stroke-width="12" stroke-linejoin="round"/>
+<polyline points="766.0,976.9 766.0,914.6" fill="none" stroke="#287d91" stroke-width="7" stroke-linejoin="round"/>
+<polyline points="766.0,1421.9 766.0,1324.0" fill="none" stroke="#287d91" stroke-width="4" stroke-linejoin="round"/>
+<polyline points="766.0,1324.0 774.3629956628905,1337.6403923529522" fill="none" stroke="#287d91" stroke-width="4" stroke-linejoin="round"/>
+<polyline points="766.0,1324.0 757.6370043371095,1337.6403923529522" fill="none" stroke="#287d91" stroke-width="4" stroke-linejoin="round"/>
+<polyline points="766.0,914.6 766.0,941.3000000000001 926.2,941.3000000000001 1122.0,887.9 1130.9,407.3" fill="none" stroke="#f6f8f5" stroke-width="11" stroke-linejoin="round"/>
+<polyline points="766.0,914.6 766.0,941.3000000000001 926.2,941.3000000000001 1122.0,887.9 1130.9,407.3" fill="none" stroke="#287d91" stroke-width="6" stroke-linejoin="round"/>
+<polyline points="1130.9,496.3 1130.9,407.3" fill="none" stroke="#287d91" stroke-width="4" stroke-linejoin="round"/>
+<polyline points="1130.9,407.3 1139.2629956628907,420.94039235295213" fill="none" stroke="#287d91" stroke-width="4" stroke-linejoin="round"/>
+<polyline points="1130.9,407.3 1122.5370043371095,420.94039235295213" fill="none" stroke="#287d91" stroke-width="4" stroke-linejoin="round"/>
+<polyline points="641.4000000000001,1110.4 525.7,1110.4" fill="none" stroke="#8c729e" stroke-width="3" stroke-linejoin="round" stroke-dasharray="11 9"/>
+<polyline points="944.0,1110.4 1024.1,1110.4" fill="none" stroke="#8c729e" stroke-width="3" stroke-linejoin="round" stroke-dasharray="11 9"/>
+<polyline points="766.0,1279.5 445.6,1279.5 445.6,1315.1" fill="none" stroke="#8c729e" stroke-width="3" stroke-linejoin="round" stroke-dasharray="11 9"/>
+<polyline points="863.9,1288.4 1064.15,1288.4 1064.15,1350.7" fill="none" stroke="#8c729e" stroke-width="3" stroke-linejoin="round" stroke-dasharray="11 9"/>
+<polyline points="1130.9,870.1 1326.7,870.1 1326.7,807.8" fill="none" stroke="#8c729e" stroke-width="3" stroke-linejoin="round" stroke-dasharray="11 9"/>
+<text x="1175.4" y="834.34" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="18" font-weight="400" text-anchor="middle" fill="#287d91">遗迹路</text>
+<polyline points="712.6,1626.6000000000001 770.45,536.35" fill="none" stroke="#bd6e39" stroke-width="4" stroke-linejoin="round" stroke-dasharray="11 9"/>
+<polyline points="772.23,620.9000000000001 770.45,549.7" fill="none" stroke="#bd6e39" stroke-width="3" stroke-linejoin="round"/>
+<polyline points="770.45,549.7 779.1512867443416,563.1271221411272" fill="none" stroke="#bd6e39" stroke-width="3" stroke-linejoin="round"/>
+<polyline points="770.45,549.7 762.4305198420288,563.545141313685" fill="none" stroke="#bd6e39" stroke-width="3" stroke-linejoin="round"/>
+<circle cx="855.0" cy="1439.7" r="19" fill="#bd6e39" stroke="none" stroke-width="2"/>
+<text x="855.0" y="1447.2" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="25" font-weight="700" text-anchor="middle" fill="#ffffff">A</text>
+<text x="881.7" y="1490.45" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="20" font-weight="700" text-anchor="start" fill="#bd6e39">仰望通讯塔</text>
+<rect x="855.0" y="576.4" width="195.8" height="44.5" rx="0" fill="#326d79" stroke="#8ab4ba" stroke-width="2"/>
+<polyline points="855.0,576.4 1050.8000000000002,576.4" fill="none" stroke="#f0cc8c" stroke-width="7" stroke-linejoin="round"/>
+<text x="952.9" y="600.45" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="20" font-weight="700" text-anchor="middle" fill="#ffffff">上层观察廊</text>
+<polyline points="961.8000000000001,585.3 1130.9,327.2" fill="none" stroke="#bd6e39" stroke-width="4" stroke-linejoin="round" stroke-dasharray="11 9"/>
+<polyline points="1077.5,407.3 1130.9,327.2" fill="none" stroke="#bd6e39" stroke-width="3" stroke-linejoin="round"/>
+<polyline points="1130.9,327.2 1130.2921046880826,343.1884478073936" fill="none" stroke="#bd6e39" stroke-width="3" stroke-linejoin="round"/>
+<polyline points="1130.9,327.2 1116.3752386823742,333.91053713692133" fill="none" stroke="#bd6e39" stroke-width="3" stroke-linejoin="round"/>
+<circle cx="1006.3000000000001" cy="434.0" r="19" fill="#bd6e39" stroke="none" stroke-width="2"/>
+<text x="1006.3000000000001" y="441.5" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="25" font-weight="700" text-anchor="middle" fill="#ffffff">B</text>
+<text x="908.4" y="431.35" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="20" font-weight="700" text-anchor="end" fill="#bd6e39">面向骨口</text>
+<circle cx="961.8000000000001" cy="585.3" r="10.68" fill="#f0cc8c" stroke="none" stroke-width="2"/>
+<rect x="641.4000000000001" y="1599.9" width="320.40000000000003" height="204.70000000000002" rx="0" fill="#d6e0db" stroke="#8ba69d" stroke-width="2"/>
+<polyline points="659.2,1617.7 659.2,1644.4" fill="none" stroke="#fafbf5" stroke-width="4" stroke-linejoin="round"/>
+<polyline points="659.2,1760.1000000000001 659.2,1786.8" fill="none" stroke="#fafbf5" stroke-width="4" stroke-linejoin="round"/>
+<polyline points="917.3000000000001,1617.7 917.3000000000001,1644.4" fill="none" stroke="#fafbf5" stroke-width="4" stroke-linejoin="round"/>
+<polyline points="917.3000000000001,1760.1000000000001 917.3000000000001,1786.8" fill="none" stroke="#fafbf5" stroke-width="4" stroke-linejoin="round"/>
+<polygon points="801.6,1626.6000000000001 846.1,1680.0 846.1,1760.1000000000001 819.4,1786.8 783.8000000000001,1786.8 757.1,1760.1000000000001 757.1,1680.0" fill="#76959a" stroke="#245c69" stroke-width="2"/>
+<rect x="779.35" y="1688.9" width="44.5" height="44.5" rx="0" fill="#e4edef" stroke="none" stroke-width="2"/>
+<polyline points="712.6,1626.6000000000001 714.558,1591.0" fill="none" stroke="#bd6e39" stroke-width="4" stroke-linejoin="round" stroke-dasharray="11 9"/>
+<circle cx="712.6" cy="1626.6000000000001" r="11.57" fill="#f6f8f5" stroke="#bd6e39" stroke-width="3"/>
+<text x="1041.9" y="1716.3400000000001" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="28" font-weight="700" text-anchor="start" fill="#245c69">飞船 / 停机坪</text>
+<text x="1041.9" y="1753.0" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="20" font-weight="400" text-anchor="start" fill="#bd6e39">A：下船先识别主楼</text>
+<polyline points="961.8000000000001,1688.9 1015.2,1688.9" fill="none" stroke="#8ea9a4" stroke-width="2" stroke-linejoin="round"/>
+<polyline points="801.6,1795.7 801.6,1822.4" fill="none" stroke="#287d91" stroke-width="4" stroke-linejoin="round"/>
+<polyline points="801.6,1822.4 793.2370043371095,1808.759607647048" fill="none" stroke="#287d91" stroke-width="4" stroke-linejoin="round"/>
+<polyline points="801.6,1822.4 809.9629956628905,1808.759607647048" fill="none" stroke="#287d91" stroke-width="4" stroke-linejoin="round"/>
+<text x="801.6" y="1863.72" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="24" font-weight="700" text-anchor="middle" fill="#287d91">入口 / 返航</text>
+<polyline points="588.0,1248.35 944.0,1248.35" fill="none" stroke="#7d9b80" stroke-width="2" stroke-linejoin="round"/>
+<polyline points="588.0,1235.0 588.0,1261.7" fill="none" stroke="#7d9b80" stroke-width="2" stroke-linejoin="round"/>
+<polyline points="944.0,1235.0 944.0,1261.7" fill="none" stroke="#7d9b80" stroke-width="2" stroke-linejoin="round"/>
+<text x="766.0" y="1273.1100000000001" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="18" font-weight="400" text-anchor="middle" fill="#638369">40m</text>
+<polyline points="568.4200000000001,923.5 568.4200000000001,1235.0" fill="none" stroke="#7d9b80" stroke-width="2" stroke-linejoin="round"/>
+<polyline points="558.6300000000001,923.5 579.1,923.5" fill="none" stroke="#7d9b80" stroke-width="2" stroke-linejoin="round"/>
+<polyline points="558.6300000000001,1235.0 579.1,1235.0" fill="none" stroke="#7d9b80" stroke-width="2" stroke-linejoin="round"/>
+<text x="550.62" y="1153.76" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="17" font-weight="400" text-anchor="end" fill="#638369">35m</text>
+<rect x="970.7" y="273.8" width="409.40000000000003" height="42" rx="0" fill="#f6f8f5" stroke="none" stroke-width="1"/>
+<text x="1157.6" y="304.71" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="27" font-weight="700" text-anchor="middle" fill="#287d91">巨型骨口方向</text>
+<text x="1157.6" y="330.51000000000005" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="17" font-weight="400" text-anchor="middle" fill="#66818a">图外地标 · 距离待定</text>
+<text x="1772" y="307.36" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="32" font-weight="700" text-anchor="start" fill="#173e49">本轮修改</text>
+<circle cx="1798" cy="357" r="22" fill="#245c69" stroke="none" stroke-width="2"/>
+<text x="1798" y="364.5" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="25" font-weight="700" text-anchor="middle" fill="#ffffff">1</text>
+<text x="1835" y="365.42" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="29" font-weight="700" text-anchor="start" fill="#173e49">院落收紧</text>
+<text x="1774" y="420.52" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="24" font-weight="700" text-anchor="start" fill="#245c69">作业院 70×53m → 40×35m</text>
+<text x="1774" y="465.54" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="23" font-weight="400" text-anchor="start" fill="#66818a">两翼与后勤靠拢，缩短楼间空走。</text>
+<text x="1774" y="504.54" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="23" font-weight="400" text-anchor="start" fill="#66818a">装卸架留在边缘，中央保持通行。</text>
+<polyline points="1774.0,536.0 2258.0,536.0" fill="none" stroke="#a7bfbd" stroke-width="2" stroke-linejoin="round"/>
+<circle cx="1798" cy="593" r="22" fill="#245c69" stroke="none" stroke-width="2"/>
+<text x="1798" y="600.5" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="25" font-weight="700" text-anchor="middle" fill="#ffffff">4</text>
+<text x="1835" y="601.42" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="29" font-weight="700" text-anchor="start" fill="#173e49">主楼与骨口的视线</text>
+<text x="1774" y="659.5" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="25" font-weight="700" text-anchor="start" fill="#bd6e39">A  停机坪 → 通讯塔顶</text>
+<text x="1774" y="699.54" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="23" font-weight="400" text-anchor="start" fill="#66818a">塔位贴近入站轴，轮廓高于主楼。</text>
+<text x="1774" y="755.5" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="25" font-weight="700" text-anchor="start" fill="#bd6e39">B  主楼观察廊 → 巨型骨口</text>
+<text x="1774" y="795.54" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="23" font-weight="400" text-anchor="start" fill="#66818a">北侧上层看见下一段探索方向。</text>
+<text x="1774" y="837.54" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="23" font-weight="400" text-anchor="start" fill="#66818a">观察廊与主路可分别前往。</text>
+<polyline points="1774.0,872.0 2258.0,872.0" fill="none" stroke="#a7bfbd" stroke-width="2" stroke-linejoin="round"/>
+<text x="1774" y="923.46" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="27" font-weight="700" text-anchor="start" fill="#173e49">A  视线剖面示意</text>
+<polyline points="1785.0,1176.0 2255.0,1176.0" fill="none" stroke="#8fa6a4" stroke-width="2" stroke-linejoin="round"/>
+<rect x="2010" y="1097" width="130" height="79" rx="0" fill="#ccdad5" stroke="#7b9994" stroke-width="2"/>
+<rect x="2094" y="998" width="27" height="178" rx="0" fill="#9ebcb7" stroke="#245c69" stroke-width="2"/>
+<circle cx="1820" cy="1154" r="7" fill="#173e49" stroke="none" stroke-width="2"/>
+<polyline points="1820.0,1162.0 1820.0,1176.0" fill="none" stroke="#173e49" stroke-width="3" stroke-linejoin="round"/>
+<polyline points="1826.0,1154.0 2107.0,998.0" fill="none" stroke="#bd6e39" stroke-width="3" stroke-linejoin="round" stroke-dasharray="11 9"/>
+<text x="1786" y="1214.6" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="20" font-weight="400" text-anchor="start" fill="#66818a">下船视点</text>
+<text x="2007" y="1214.6" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="20" font-weight="400" text-anchor="start" fill="#66818a">主楼约9m</text>
+<text x="2160" y="1033.6" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="20" font-weight="400" text-anchor="start" fill="#245c69">塔顶</text>
+<text x="2160" y="1065.6" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="20" font-weight="400" text-anchor="start" fill="#245c69">约22m</text>
+<text x="1774" y="1272.56" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="22" font-weight="400" text-anchor="start" fill="#66818a">高度为候选；需实机验证遮挡。</text>
+<polyline points="1774.0,1303.0 2258.0,1303.0" fill="none" stroke="#a7bfbd" stroke-width="2" stroke-linejoin="round"/>
+<text x="1774" y="1353.46" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="27" font-weight="700" text-anchor="start" fill="#173e49">建筑编号</text>
+<text x="1778" y="1399.58" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="21" font-weight="700" text-anchor="start" fill="#245c69">01 主科研楼</text>
+<text x="2018" y="1399.58" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="21" font-weight="400" text-anchor="start" fill="#245c69">02 标本保存与隔离馆</text>
+<text x="1778" y="1440.58" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="21" font-weight="400" text-anchor="start" fill="#245c69">03 生活医疗楼</text>
+<text x="2018" y="1440.58" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="21" font-weight="400" text-anchor="start" fill="#66818a">04 动力与生命保障站</text>
+<text x="1778" y="1481.58" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="21" font-weight="400" text-anchor="start" fill="#66818a">05 机修车库</text>
+<text x="2018" y="1481.58" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="21" font-weight="400" text-anchor="start" fill="#66818a">06 物资仓库</text>
+<polyline points="1774.0,1525.0 2258.0,1525.0" fill="none" stroke="#a7bfbd" stroke-width="2" stroke-linejoin="round"/>
+<text x="1774" y="1573.46" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="27" font-weight="700" text-anchor="start" fill="#173e49">图例</text>
+<polyline points="1782.0,1610.0 1840.0,1610.0" fill="none" stroke="#287d91" stroke-width="4" stroke-linejoin="round"/>
+<text x="1860" y="1613.56" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="22" font-weight="400" text-anchor="start" fill="#173e49">主线往返路线</text>
+<polyline points="1782.0,1656.0 1840.0,1656.0" fill="none" stroke="#8c729e" stroke-width="4" stroke-linejoin="round" stroke-dasharray="11 9"/>
+<text x="1860" y="1659.56" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="22" font-weight="400" text-anchor="start" fill="#173e49">可选探索连接</text>
+<polyline points="1782.0,1702.0 1840.0,1702.0" fill="none" stroke="#bd6e39" stroke-width="4" stroke-linejoin="round" stroke-dasharray="11 9"/>
+<text x="1860" y="1705.56" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="22" font-weight="400" text-anchor="start" fill="#173e49">视线投影（不是步行线）</text>
+<polyline points="1782.0,1748.0 1840.0,1748.0" fill="none" stroke="#bd9258" stroke-width="4" stroke-linejoin="round"/>
+<text x="1860" y="1751.56" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="22" font-weight="400" text-anchor="start" fill="#173e49">架空管线</text>
+<polyline points="1782.0,1815.0 1960.0,1815.0" fill="none" stroke="#173e49" stroke-width="3" stroke-linejoin="round"/>
+<polyline points="1782.0,1808.0 1782.0,1822.0" fill="none" stroke="#173e49" stroke-width="2" stroke-linejoin="round"/>
+<polyline points="1871.0,1808.0 1871.0,1822.0" fill="none" stroke="#173e49" stroke-width="2" stroke-linejoin="round"/>
+<polyline points="1960.0,1808.0 1960.0,1822.0" fill="none" stroke="#173e49" stroke-width="2" stroke-linejoin="round"/>
+<text x="1782" y="1851.64" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="18" font-weight="400" text-anchor="start" fill="#66818a">0</text>
+<text x="1960" y="1851.64" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="18" font-weight="400" text-anchor="end" fill="#66818a">20m</text>
+<text x="2020" y="1823.58" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="21" font-weight="400" text-anchor="start" fill="#66818a">主图等比例</text>
+<text x="2020" y="1856.62" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="19" font-weight="400" text-anchor="start" fill="#66818a">剖面为示意</text>
+<polyline points="65.0,1957.0 2275.0,1957.0" fill="none" stroke="#a7bfbd" stroke-width="2" stroke-linejoin="round"/>
+<text x="65" y="2003.52" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="24" font-weight="400" text-anchor="start" fill="#66818a">已按用户确认的第1、4项修订；六类建筑与既有主线保留。本图为规划草案，尚未接入游戏。</text>
+<text x="65" y="2046.54" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="23" font-weight="400" text-anchor="start" fill="#66818a">范围约155×168m；尺寸、塔高与视线需灰盒实测。普通室内门洞、楼梯及上层细部简化。</text>
+<text x="2275" y="2045.6" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="20" font-weight="400" text-anchor="end" fill="#66818a">2026.10.28 / PLAN 02</text>
+</svg>

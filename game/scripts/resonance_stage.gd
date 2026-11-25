@@ -4184,7 +4184,17 @@ func _enemy_snapshot() -> Array:
 
 func _sync_now() -> void:
     if controller != null and controller.is_host:
-        sync_coop_state.rpc(stage_snapshot())
+        if controller._ship_session.campaign.enabled:
+            var state: Dictionary = stage_snapshot()
+            sync_coop_state(state)
+            if multiplayer.multiplayer_peer is ENetMultiplayerPeer:
+                var network: ENetMultiplayerPeer = multiplayer.multiplayer_peer as ENetMultiplayerPeer
+                for peer_id: int in multiplayer.get_peers():
+                    var peer: ENetPacketPeer = network.get_peer(peer_id)
+                    if peer != null and peer.get_state() == ENetPacketPeer.STATE_CONNECTED and peer.get_channels() > 0:
+                        sync_coop_state.rpc_id(peer_id, state)
+        else:
+            sync_coop_state.rpc(stage_snapshot())
 
 @rpc("authority", "call_local", "reliable")
 func sync_coop_state(snapshot: Dictionary) -> void:

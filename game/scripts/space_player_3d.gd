@@ -628,7 +628,7 @@ func _physics_process(delta: float) -> void:
             _attack_cooldown = ATTACK_INTERVAL
             controller.handle_action(peer_id, "item_use")
     if Engine.get_physics_frames() % 2 == 0:
-        sync_transform.rpc(global_position, sprinting, rotation.y, falling_to_lava, _camera_pitch, jet_active, jet_button_held)
+        _publish_transform(falling_to_lava)
 
 func begin_resonance_fall() -> void:
     if falling_to_lava or lava_dead or downed:
@@ -730,7 +730,16 @@ func _tick_ship(controller: Main3D) -> void:
     if Input.is_action_just_pressed("item_use") and Time.get_ticks_msec() >= controller._items.suppress_use_until:
         controller.handle_action(peer_id, "item_use")
     if Engine.get_physics_frames() % 2 == 0:
-        sync_transform.rpc(global_position, sprinting, rotation.y, false, _camera_pitch, jet_active, jet_button_held)
+        _publish_transform(false)
+
+func _publish_transform(falling: bool) -> void:
+    if not is_inside_tree():
+        return
+    var director: Main3D = get_parent() as Main3D
+    if director != null and director._ship_session.campaign.enabled:
+        director.publish_campaign_pose(peer_id, [global_position, sprinting, rotation.y, falling, _camera_pitch, jet_active, jet_button_held])
+    else:
+        sync_transform.rpc(global_position, sprinting, rotation.y, falling, _camera_pitch, jet_active, jet_button_held)
 
 func aim_direction() -> Vector3:
     var pitch: float = _camera_pitch if is_multiplayer_authority() else _network_view_pitch

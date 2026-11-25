@@ -4,9 +4,31 @@
 
 GitHub 仓库：[FOXSGX/Lost-in-Space](https://github.com/FOXSGX/Lost-in-Space)。
 
+本机试玩：双击根目录 `运行.cmd`，按编号选择主游戏、美术演示、物理沙盒或霜烬星预览；也可以直接运行 `$env:LOCALAPPDATA\Programs\Godot\4.7.2\Godot_v4.7.2-stable_win64.exe --path game`。
+
+## 霜烬星 0.4：六栋科考站（2026-10-29）
+
+按建筑采访方案接入新版霜烬星：大厅与综合实验室、主楼二层环廊和首席办公室保险柜、静态骨架标本馆、可吃与收藏的生活物资、可驾驶运货载队友的运输车、动力恢复、仓库局部融冰探索。主舱“新航程→出舱”已加载新版，运输车可进入实际可通过的遗迹地形。旧0.3预览保留。
+
+独立入口：[启动新版霜烬星](game/previews/frost_station/play.cmd)。免安装试玩包在 `builds/Frost_Station_v0.4/`，双击“启动霜烬星.cmd”；“启动完整航程.cmd”保留主舱航线流程。操作与验证边界见[新版说明](game/previews/frost_station/README.md)及[六栋建筑设计](docs/design/planets/planet-00-科考站建筑设计.md)。当前为可玩低模原型，仍需真人节奏、四人体验和美术迭代。
+
+### 霜烬星美术层（2026-11-24，按共振星模板）
+
+按 ART-SAMPLE-002 的 `ART-PLANET-VISUAL-STANDARD v1` 与共振星 `cave_*` 做法，给六栋科考站补了五族材质（涂装钢构/基岩/雪/冰/骨）、环境与三光位、门斗与灯具、基座/檐雪/冰锥/雪堆/裂隙/冰晶簇/飘雪，并把家具原色收进站区色板。只改视觉，碰撞、交互与联机结算不动；`FROST_ART=0` 可关闭做同机位对照。规则见[霜烬星美术说明](docs/design/planets/planet-00-霜烬星美术说明.md)，证据与结论见[本轮美术迭代](work/art-iterations/20261124-frost-station-art/README.md)：技术 GO、视觉 CONDITIONAL GO、性能 P50 +25%（待合并 Draw Call），尚未真人试玩。
+
+## 共振星五幕试玩版（2026-11-21 接收）
+
+队友上传的独立导出包，已解压到 `builds/Resonance_FiveActs_20261121/`。包内是单文件 `迷失太空_共振星试玩版.exe`（610 MB，内嵌资源）加 5 个快捷脚本：五幕完整版、第一幕·静默矿站、第二三幕·矿车与断轨、第四幕·晶体洞窟、第五幕·地心核心。
+
+- 操作：WASD 移动、Shift 奔跑、空格跳、E 交互/抓扶/操控台、F 拾取或放置晶体、Q 旋转晶体、X 抛下、左右键挥拳、R 重置本幕、Esc 暂停菜单。
+- 联机：2–4 人，局域网主机端口 9877；异地需先连同一虚拟局域网再填房主 IP。
+- 这是独立构建，与仓库内 `game/` 的共振星关卡不是同一份实现，运行时也不会改动仓库。原始压缩包存于 `work/incoming-20261121/`，说明见包内 `试玩说明.txt`。
+
+2026-10-28 正式入口已接入新主线：菜单“新航程”从坠落霜烬星的飞船开始，先出舱寻找能源修复起飞核心，再通过航线电脑的当前星系图选择目的地，全员驾驶席就位后出发。已安装核心与归航能源分开记账；霜烬星重访保留任务和融冰进度，搜集足够能源与物资后可主动返航地球。“继续航程”使用独立存档，不覆盖旧主舱存档。操作、原型数值与验证见[新航程与当前星系图](game/docs/campaign-navigation.md)。下方较早的信标/主舱开局描述保留为旧实现背景，以本更新为当前正式入口规则。
+
 多人合作生存射击闯关游戏：迷航的地球人前往不同星球搜集燃料与物资，最终返回地球。支持单人尝试通关。
 
-当前 `game/` 已切换为 Godot 4 的真实 3D 运行架构：使用 `Node3D`、`Camera3D`、`CharacterBody3D` 和 `StaticBody3D`。太空舱与训练舱采用第一人称，霜烬星采用低模 3D + 正交视角，共振星采用第三人称。原 2D/伪 2.5D 版本已备份到 `backups/霜烬星-2.5d-20261009/`。
+当前 `game/` 已切换为 Godot 4 的真实 3D 运行架构：使用 `Node3D`、`Camera3D`、`CharacterBody3D` 和 `StaticBody3D`。太空舱、训练舱和新版霜烬星采用第一人称，旧霜烬星信标预览保留正交视角，共振星采用第三人称。原 2D/伪 2.5D 版本已备份到 `backups/霜烬星-2.5d-20261009/`。
 
 当前统一操作：WASD 移动、鼠标环视、Shift 加速、空格跳跃；E 拾取/操作/投送/救援，左键使用手中选中物品（空手攻击），右键扫描。初始两个手持格和两个橙色装备格，Tab 切换两栏焦点，1/2 或滚轮选择当前栏，G 丢落物品或卸下选中装备；星球日志 J、地图 M。主舱每个功能区使用一台电脑：靠近按 E 打开图形界面，选择图片卡并确认，Esc 关闭后恢复环视；航线、制作、装备、道具和换装的同类选项已合并，维修、补给、归还、记录和离舰有各自电脑。四个驾驶台仍各自按 E 就位，全员就位后倒数出发；再次 E 或走开取消。规则与实机图见 [主舱设备](game/docs/ship-devices.md)、[两格物品栏](game/docs/interaction-inventory.md)。
 
@@ -58,12 +80,23 @@ F3 才显示角度等调试数据。**尚未接入正式共振星关卡**，等 
 | `docs/planning/` | 任务、负责人和里程碑 |
 | `docs/competition/` | 官方比赛规则、截止时间、提交要求 |
 | `game/` | 引擎项目和游戏实际使用的资源 |
+| `game/addons/` | 团队 Godot 插件；当前为 `lis_physics` 第一人称物理 SDK |
 | `art-source/references/` | 美术风格参考 |
 | `art-source/ai-generated/` | AI 原图、提示词和生成记录 |
 | `art-source/editable/` | 可编辑美术原稿 |
 | `art-source/licenses/` | 素材来源及授权记录 |
+| `art-source/deliveries/` | 队友或外部交付的美术包，保持原始结构与验收材料 |
 | `builds/` | 按版本号存放导出的试玩包 |
 | `submission/` | 最终参赛说明、截图和视频 |
+
+## 队友交付包（2026-11-21 解包归位）
+
+两份队友交付已解压到各自目录，原始压缩包保存在 `work/incoming-20261121/`（本地存档，不入库）。
+
+- **美术母版 ART-SAMPLE-002** → `art-source/deliveries/ART-SAMPLE-002_TEAM_KIT/`：独立 Godot 演示工程、Blender 源与高模烘焙链路、可直接使用的 GLB、2K 材质库、5 份美术规范、四机位验收图和验证日志。包内结论为技术验收 GO / 视觉 CONDITIONAL GO；解压后按包内清单复核 SHA256 208/208 全等。索引见 [art-source/README.md](art-source/README.md)。
+- **物理 SDK LIS-PHYSICS 1.0.0-rc1** → `game/addons/lis_physics/`，文档在 [`game/docs/lis-physics/`](game/docs/lis-physics/)，示例在 `game/examples/`。Godot 4.7.2 下导入无错误，环境体检 `verdict=OK-WITH-WARNINGS`，示例 `minimal_planet` 可启动。安装、验证与未落地事项见 [物理 SDK 安装记录](game/docs/lis-physics-sdk.md)。
+
+接入物理 SDK 前仍需决定：3D 物理引擎是否显式切到 Jolt、共振星与腐墟星第三人称镜头与“SDK 只覆盖第一人称”的取舍、旧物件碰撞层位值 4 与 8 的对齐。
 
 ## 协作约定
 

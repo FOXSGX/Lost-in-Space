@@ -23,6 +23,12 @@
 - `editable/resonance/resonance_module_hero-preview.png`：独立建模审阅图，不进入游戏运行时。
 - `../game/assets/resonance/models/resonance_module_hero.glb`：Godot 使用的运行时模型；具体导入和验证规则见 `../game/docs/resonance-asset-pipeline.md`。
 
+## 团队交付包（2026-11-21）
+
+- `deliveries/ART-SAMPLE-002_TEAM_KIT/`：队友交付的第一套可复用美术母版。`01_GODOT_DEMO/` 是独立可运行工程，`02_BLENDER_SOURCE/` 是高模到低模的烘焙源，`03_GAME_READY_ASSETS/` 是可直接导入的 GLB，`04_MATERIAL_LIBRARY/` 是 2K 材质库与材质脚本，`05_ART_STYLE_GUIDE/` 是规范，`06_REFERENCE/` 是新旧对照与四机位，`07_VERIFICATION/` 是测试与校验记录，`08_TEAM_STARTER/` 是新星球模板。
+- 该包保持原始结构，不在 `art-source/` 内拆散；某颗星球真正采用某件资产时，再把对应 GLB 复制到 `../game/assets/` 并在该星球说明里登记来源。原始压缩包存于 `../work/incoming-20261121/`。
+- `01_GODOT_DEMO/` 已导入过一次，`.godot/` 缓存保留（约 52 MB，Git 忽略）。如果这个缓存被删掉，直接用 Godot 运行会因为缺 `.ctex` 报一串 `Unable to open file` —— 用编辑器打开一次，或先跑 `godot --headless --path <该目录> --import` 再运行即可。
+
 ## 参考图
 
 - `references/characters/`：人物低多边形切面风格参考。

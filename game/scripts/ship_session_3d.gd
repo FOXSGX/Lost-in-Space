@@ -7,6 +7,8 @@ const ITEM_NAMES := {"medical": "医疗包", "oxygen": "氧气瓶", "parts": "�
 const ITEM_COSTS := {"medical": 10, "oxygen": 5, "parts": 10}
 const TRAINING_STEPS := ["拿取架上的氧气瓶", "左键 · 安装到宇航服", "短按空格 · 跳上低台", "长按空格 · 喷气登高", "落地松开 · 耗氧充气后前往终点", "推进练习完成 · 可继续自由练习"]
 const SAVE_PATH := "user://ship-cabin-save.json"
+const CAMPAIGN_SAVE_PATH: String = "user://campaign-v1.json"
+var campaign: CampaignNavigation = preload("res://scripts/campaign_navigation.gd").new()
 const GOOFY_ITEMS := ["penguin", "bubble", "board", "hologram", "smoke"]
 const GEAR_ITEMS := ["thermal_suit", "wide_scanner", "signal_stabilizer"]
 const GEAR_NAMES := {"thermal_suit": "恒温外套", "wide_scanner": "广域扫描器", "signal_stabilizer": "信号稳压器"}
@@ -54,6 +56,7 @@ var _menu_environment: Environment
 var _menu_light_energy: Dictionary = {}
 var _aim_dot: Label
 var _computer: ShipComputerUI
+var _compass_hud: MissionCompassHUD
 var _opened_computers: Dictionary = {}
 
 func _ready() -> void:
@@ -78,13 +81,15 @@ func _build_ui() -> void:
     controller._place_hud(_aim_dot, Control.PRESET_CENTER, Vector2(-6, -10), Vector2(12, 20))
     _aim_dot.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
     _aim_dot.mouse_filter = Control.MOUSE_FILTER_IGNORE
-    _ship_panel = controller._panel(_layer, Vector2.ZERO, Vector2(112, 40), Color(0.06, 0.15, 0.18, 0.94), Color("#a2d8d3"), 14)
-    controller._place_hud(_ship_panel, Control.PRESET_CENTER_TOP, Vector2(-56, 18), Vector2(112, 40))
-    _ship_title = controller._ui_label(_ship_panel, "主舱", Vector2(8, 5), Vector2(96, 30), 20, Color("#f4ebd6"))
+    _ship_panel = controller._panel(_layer, Vector2.ZERO, Vector2(132, 34), UIStyleKit.VISOR_GLASS, UIStyleKit.VISOR_BORDER, 6)
+    controller._place_hud(_ship_panel, Control.PRESET_CENTER_TOP, Vector2(-66, 14), Vector2(132, 34))
+    _ship_title = controller._ui_label(_ship_panel, "主舱", Vector2(8, 3), Vector2(116, 28), 16, UIStyleKit.VISOR_CYAN)
+    _ship_title.add_theme_font_override("font", UIStyleKit.FONT_BOLD)
     _ship_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
     _ship_title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-    _hint_panel = controller._panel(_layer, Vector2(225, 634), Vector2(830, 62), Color(0.12, 0.24, 0.29, 0.94), Color("#93c1be"), 18)
-    _hint = controller._ui_label(_hint_panel, "", Vector2(16, 8), Vector2(800, 48), 17, Color("#e6f9ff"))
+    _hint_panel = controller._panel(_layer, Vector2(225, 580), Vector2(600, 44), UIStyleKit.VISOR_GLASS, UIStyleKit.VISOR_CYAN, 6)
+    _hint = controller._ui_label(_hint_panel, "", Vector2(16, 4), Vector2(568, 36), 15, UIStyleKit.VISOR_TEXT)
+    _hint.add_theme_font_override("font", UIStyleKit.FONT_BOLD)
     _hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
     _hint.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
     _panel = controller._panel(_layer, Vector2(335, 115), Vector2(610, 500), Color(0.95, 0.93, 0.86, 0.98), Color("#79aaa7"), 20)
@@ -95,6 +100,8 @@ func _build_ui() -> void:
     _computer = preload("res://scripts/ship_computer_ui.gd").new() as ShipComputerUI
     _layer.add_child(_computer)
     _computer.setup(self)
+    _compass_hud = preload("res://scripts/mission_compass_hud.gd").new() as MissionCompassHUD
+    _layer.add_child(_compass_hud)
 
 func tick(delta: float) -> void:
     _notice_remaining = maxf(_notice_remaining - delta, 0.0)
@@ -115,9 +122,58 @@ func tick(delta: float) -> void:
         _hint.text = _notice if _notice_remaining > 0.0 and not _notice.is_empty() else interaction_hint(player.global_position)
         _hint_panel.visible = _hint_panel.visible and not _hint.text.is_empty()
         if _hint_panel.visible:
-            var hint_width: float = clampf(_hint.get_theme_font("font").get_string_size(_hint.text, HORIZONTAL_ALIGNMENT_LEFT, -1, 17).x + 40.0, 220.0, 830.0)
-            controller._place_hud(_hint_panel, Control.PRESET_CENTER_BOTTOM, Vector2(-hint_width / 2.0, -86), Vector2(hint_width, 62))
+            var hint_width: float = clampf(_hint.get_theme_font("font").get_string_size(_hint.text, HORIZONTAL_ALIGNMENT_LEFT, -1, 16).x + 40.0, 180.0, 620.0)
+            controller._place_hud(_hint_panel, Control.PRESET_CENTER_BOTTOM, Vector2(-hint_width / 2.0, -148), Vector2(hint_width, 44))
             _hint.size.x = hint_width - 32.0
+    if _compass_hud != null:
+        _compass_hud.visible = active and in_hub and not has_panel() and controller._screen_view == "ship" and player != null and not player.downed
+        if _compass_hud.visible:
+            var fwd: Vector3 = -player._camera.global_basis.z if player._camera != null else -player.global_basis.z
+            var stage_t: String = "归航号 · 主线指引"
+            var m_title: String = ""
+            var m_detail: String = ""
+            var main_pt: Vector3 = Vector3(0.0, 0.0, 1.75)
+            var main_lbl: String = "星图台"
+            if hull < 60:
+                stage_t = "主线 1 / 3 · 舰体抢修"
+                m_title = "拉动右侧【舰体维修总闸】"
+                m_detail = "当前舰体 %d%%（需 ≥60%% 才能起飞）。走近右侧维修总闸直接按 E 修复。" % hull
+                main_pt = ShipHub3D.REPAIR
+                main_lbl = "维修总闸"
+            elif campaign.enabled and campaign.grounded and campaign.location == "demo" and not campaign.home_reached:
+                stage_t = "主线 1 / 3 · 坠落霜烬星"
+                m_title = "拉动舱尾【气闸出舱拉杆】出舱探索"
+                m_detail = "起飞核心已损毁！转身前往舱尾气闸旁按 E 出舱，到霜烬星科考站寻回高能核心。"
+                main_pt = ShipDevices3D.surface_device().position
+                main_lbl = "气闸出舱"
+            elif not ready_peers.has(peer_id):
+                stage_t = "主线 2 / 3 · 星际航行准备"
+                m_title = "在中央【星图台】选星，再登前方【驾驶席】"
+                var dest_name: String = String(PlanetRegistry.info(selected_destination).get("title", "霜烬星"))
+                m_detail = "当前航线：%s。确认后走上前排驾驶席按 E 就位，全员就位 3 秒自动起飞。" % dest_name
+                main_pt = Vector3(ShipDevices3D.PILOT_X[0], 0.61, -13.8)
+                main_lbl = "驾驶席"
+            else:
+                stage_t = "主线 3 / 3 · 点火起飞"
+                m_title = "已就位 · 等待起飞倒数"
+                m_detail = "保持就位，全员就位后自动点火前往下一颗星球。"
+                main_pt = Vector3(0.0, 0.61, -13.8)
+                main_lbl = "舰桥"
+            var sides: PackedStringArray = PackedStringArray([
+                "舱内功能分区（看墙面/头顶金属牌）：",
+                "• 右后【工坊军械台】制作/装备/道具/换装",
+                "• 左后【生命充氧站】E 一键回满血与气瓶",
+                "• 右舷侧门【独立训练舱】E 练习喷气背包",
+                "• 正后尾门【星球登陆气闸】降落后出舱",
+            ])
+            var tlist: Array = [
+                {"label": main_lbl, "pos": main_pt, "color": Color("#4ef0ff"), "main": true},
+                {"label": "星图台", "pos": Vector3(0.0, 0.0, 1.75), "color": Color("#86d8e8"), "main": false},
+                {"label": "工坊台", "pos": Vector3(4.8, 0.0, 2.2), "color": Color("#f4b65c"), "main": false},
+                {"label": "训练舱(右)", "pos": ShipHub3D.AIRLOCK, "color": Color("#7ce8b4"), "main": false},
+                {"label": "出舱门(后)", "pos": Vector3(0.0, 0.0, 14.8), "color": Color("#ff8a5c"), "main": false},
+            ]
+            _compass_hud.update_guidance(player.global_position, fwd, stage_t, m_title, m_detail, sides, tlist)
     if controller.is_host and not in_hub:
         for id in controller.connected_ids:
             var trainee := controller.players.get(id) as SpacePlayer3D
@@ -160,8 +216,8 @@ func interaction_hint(point: Vector3) -> String:
         return "E 训练舱" if facility == "airlock" else ""
     if controller._flat_distance(point, ShipTutorial3D.ENTRY_POINT) < 1.8:
         return "E 返回主舱"
-    var step := clampi(int(training.get(multiplayer.get_unique_id(), 0)), 0, TRAINING_STEPS.size() - 1)
-    return TRAINING_STEPS[step]
+    # 训练舱非交互区不再常驻底部文字提示，保持画面干净清爽
+    return ""
 
 func nearby_facility(point: Vector3) -> String:
     var positions := {"route": ShipHub3D.COCKPIT, "storage": ShipHub3D.STORAGE, "repair": ShipHub3D.REPAIR, "supply": ShipHub3D.SUPPLY, "mission": ShipHub3D.MISSION, "airlock": ShipHub3D.AIRLOCK}
@@ -180,7 +236,8 @@ func spawn_position(peer_id: int) -> Vector3:
     if not in_hub:
         return ShipTutorial3D.ENTRY_POINT + doorway_offset
     if _hub_training_arrival:
-        return ShipHub3D.AIRLOCK + Vector3(0, 0, -1.2) + doorway_offset
+        var side_offset: Vector3 = Vector3(0.0, 0.0, (float(index) - 1.5) * 0.55)
+        return ShipHub3D.AIRLOCK + Vector3(-1.45, 0, 0) + side_offset
     return Vector3(-1.8 + float(index) * 1.2, 0, 3.6)
 
 func spawn_yaw() -> float:
@@ -283,6 +340,9 @@ func _release_station(peer_id: int) -> void:
     launch_remaining = -1.0
 
 func _toggle_station(peer_id: int, slot: int) -> void:
+    if campaign.enabled and not campaign.block_reason(selected_destination).is_empty():
+        _notify(peer_id, campaign.block_reason(selected_destination) if not selected_destination.is_empty() else "先在航线电脑设定目的地")
+        return
     var owner: int = int(station_owners.get(slot, 0))
     if owner == peer_id:
         _release_station(peer_id)
@@ -322,7 +382,7 @@ func _tick_launch(delta: float) -> void:
         if player == null or controller._flat_distance(player.position, ShipDevices3D.point_for("pilot_%d" % slot)) > 2.65 or player.downed:
             _release_station(peer_id)
             changed = true
-    if all_ready() and hull >= 60:
+    if all_ready() and hull >= 60 and (not campaign.enabled or campaign.block_reason(selected_destination).is_empty()):
         if launch_remaining < 0.0:
             launch_remaining = 3.0
             changed = true
@@ -340,7 +400,10 @@ func _tick_launch(delta: float) -> void:
         broadcast()
 
 func _operate_device(peer_id: int, device: Dictionary) -> void:
-    if device.kind == "pilot":
+    if String(device.kind) in ShipDevices3D.DIRECT_KINDS:
+        var dr: ShipDevices3D = device_room()
+        if dr != null:
+            dr.pulse_lever(String(device.id))
         _execute_device(peer_id, device)
         return
     _opened_computers[peer_id] = String(device.id)
@@ -365,11 +428,29 @@ func _execute_device(peer_id: int, device: Dictionary) -> void:
     match String(device.kind):
         "pilot": _toggle_station(peer_id, int(item))
         "route":
+            if campaign.enabled:
+                if int(device.get("plan_revision", -1)) != campaign.revision:
+                    _notify(peer_id, "航线已变化 · 请重新选择目的地后确认")
+                    return
+                if item == "demo" and campaign.location == "demo" and campaign.grounded and not campaign.home_reached:
+                    controller._campaign_travel.open_surface.call_deferred()
+                    return
+                var reason: String = campaign.block_reason(item)
+                if not reason.is_empty():
+                    _notify(peer_id, reason)
+                    return
             if selected_destination != item:
                 selected_destination = item
+                if campaign.enabled:
+                    campaign.revision += 1
                 _clear_departure()
                 broadcast()
                 show_notice.rpc("航线：" + String(device.title))
+        "surface":
+            if campaign.enabled and campaign.grounded and campaign.location == "demo" and not campaign.home_reached:
+                controller._campaign_travel.open_surface.call_deferred()
+            else:
+                _notify(peer_id, "当前位于航行轨道 · 请前往星图台选星")
         "repair", "refill": handle_request(peer_id, String(device.kind))
         "craft": handle_request(peer_id, "craft", item)
         "toy": handle_request(peer_id, "assign_goofy", item)
@@ -477,9 +558,12 @@ func handle_request(peer_id: int, action: String, item := "") -> void:
             _notify(peer_id, "请靠近电脑")
             return
         var option: Dictionary = {}
-        for candidate: Dictionary in ShipDevices3D.options_for(current):
-            if candidate.id == item:
+        var requested_id: String = item.get_slice("@", 0)
+        for candidate: Dictionary in ShipDevices3D.options_for(current, campaign):
+            if candidate.id == requested_id:
                 option = candidate
+                if current.kind == "route" and campaign.enabled:
+                    option.plan_revision = int(item.get_slice("@", 1)) if item.contains("@") else -1
                 break
         if current.kind == "store" and item in ["store_0", "store_1"]:
             option = current.duplicate()
@@ -539,7 +623,7 @@ func handle_request(peer_id: int, action: String, item := "") -> void:
             _notify(peer_id, "库存不足、物品栏已满（共 2 格），或没有可存回的物品。")
             return
         result_message = ("已领取 1 件" if action == "take" else "已存回 1 件") + String(ITEM_NAMES[item]) + "。"
-    elif action == "craft" and ITEM_COSTS.has(item) and near_device.get("kind", "") == "craft":
+    elif action == "craft" and ITEM_COSTS.has(item) and near_device.get("kind", "") in ["craft", "workshop"]:
         var cost := int(ITEM_COSTS[item])
         if credits < cost:
             _notify(peer_id, "回收点数不足。远征投送电池或冰样，返航后可用于制作。")
@@ -547,13 +631,13 @@ func handle_request(peer_id: int, action: String, item := "") -> void:
         credits -= cost
         stock[item] = int(stock[item]) + 1
         result_message = "已制作 1 件" + String(ITEM_NAMES[item]) + "，存入共享库存。"
-    elif action == "assign_goofy" and GOOFY_ITEMS.has(item) and near_device.get("kind", "") == "toy":
+    elif action == "assign_goofy" and GOOFY_ITEMS.has(item) and near_device.get("kind", "") in ["toy", "workshop"]:
         if not controller._items.add_item(peer_id, item, -1, {}, true):
             _notify(peer_id, "物品栏已满，先使用或放下一件物品。")
             return
         goofy_assignments[peer_id] = item
         result_message = "已将%s分配给玩家 %d；道具箱仍归全队共享，可随时改分配。" % [goofy_item_name(item), peer_id]
-    elif action == "assign_gear" and GEAR_ITEMS.has(item) and int(gear_stock.get(item, 0)) > 0 and near_device.get("kind", "") == "gear":
+    elif action == "assign_gear" and GEAR_ITEMS.has(item) and int(gear_stock.get(item, 0)) > 0 and near_device.get("kind", "") in ["gear", "workshop"]:
         if not controller._items.equip_gear(peer_id, item):
             _notify(peer_id, "装备位不足或装备正在使用")
             return
@@ -609,7 +693,7 @@ func _trade_at_market(peer_id: int, item: String) -> void:
         return
     var devices: ShipDevices3D = device_room()
     var device: Dictionary = devices.nearby(peer_id) if devices != null else {}
-    if device.get("kind", "") != "gear" or not GEAR_COSTS.has(item):
+    if device.get("kind", "") not in ["gear", "workshop"] or not GEAR_COSTS.has(item):
         return
     if GEAR_COSTS.has(item):
         var cost := int(GEAR_COSTS[item])
@@ -700,12 +784,19 @@ func confirm_land() -> void:
             var player: SpacePlayer3D = controller.players.get(int(station_owners[slot])) as SpacePlayer3D
             if player == null or controller._flat_distance(player.position, ShipDevices3D.point_for("pilot_%d" % slot)) > 2.65:
                 return
-        controller.start_planet(selected_destination)
+        if campaign.enabled:
+            controller._campaign_travel.begin_destination(selected_destination)
+        else:
+            controller.start_planet(selected_destination)
 
 func select_destination(destination: String) -> void:
     if not controller.is_host or destination not in ["demo", "electromagnetic", "ruin"]:
         return
+    if campaign.enabled and not campaign.block_reason(destination).is_empty():
+        return
     selected_destination = destination
+    if campaign.enabled:
+        campaign.revision += 1
     _clear_departure()
     broadcast()
 
@@ -748,9 +839,11 @@ func settle(success: bool, value: int, report: String) -> void:
     save_state()
 
 func snapshot() -> Dictionary:
-    return {"oxygen_levels": oxygen_levels.duplicate(), "items": controller._items.snapshot() if controller._items != null else {}, "stock": stock.duplicate(true), "packs": packs.duplicate(true), "ready": ready_peers.duplicate(), "station_owners": station_owners.duplicate(), "launch_remaining": launch_remaining, "training": training.duplicate(true), "hull": hull, "credits": credits, "last_report": last_report, "goofy_stock": goofy_stock.duplicate(true), "goofy_assignments": goofy_assignments.duplicate(true), "gear_stock": gear_stock.duplicate(true), "gear_assignments": gear_assignments.duplicate(true), "planet_states": planet_states.duplicate(true), "selected_destination": selected_destination}
+    return {"campaign": campaign.snapshot(), "oxygen_levels": oxygen_levels.duplicate(), "items": controller._items.snapshot() if controller._items != null else {}, "stock": stock.duplicate(true), "packs": packs.duplicate(true), "ready": ready_peers.duplicate(), "station_owners": station_owners.duplicate(), "launch_remaining": launch_remaining, "training": training.duplicate(true), "hull": hull, "credits": credits, "last_report": last_report, "goofy_stock": goofy_stock.duplicate(true), "goofy_assignments": goofy_assignments.duplicate(true), "gear_stock": gear_stock.duplicate(true), "gear_assignments": gear_assignments.duplicate(true), "planet_states": planet_states.duplicate(true), "selected_destination": selected_destination}
 
 func apply_state(state: Dictionary) -> void:
+    if state.has("campaign"):
+        campaign.apply(state.campaign)
     oxygen_levels = state.get("oxygen_levels", oxygen_levels).duplicate()
     stock = state.get("stock", stock).duplicate(true)
     packs = state.get("packs", packs).duplicate(true)
@@ -786,11 +879,15 @@ func broadcast() -> void:
         var enet: ENetMultiplayerPeer = multiplayer.multiplayer_peer as ENetMultiplayerPeer
         for peer_id: int in multiplayer.get_peers():
             var peer: ENetPacketPeer = enet.get_peer(peer_id)
-            if peer != null and peer.get_state() == ENetPacketPeer.STATE_CONNECTED:
+            if peer != null and peer.get_state() == ENetPacketPeer.STATE_CONNECTED and peer.get_channels() > 0:
                 sync_state.rpc_id(peer_id, state)
     save_state()
 
 func close_room() -> void:
+    if campaign.enabled:
+        save_state()
+        controller._items.clear_session()
+        return
     for peer_id: int in controller._items.bags:
         var counts: Dictionary = controller._items.real_counts(peer_id)
         keep_oxygen_levels(controller._items.real_oxygen_levels(peer_id))
@@ -808,6 +905,9 @@ func close_room() -> void:
 
 func save_state() -> void:
     if not persistence_enabled or not controller.is_host:
+        return
+    if campaign.enabled:
+        _save_campaign()
         return
     var saved_stock: Dictionary = stock.duplicate(true)
     var saved_levels: Array = oxygen_levels.duplicate()
@@ -876,6 +976,85 @@ func load_state() -> void:
         controller._items.clear_session()
     training.clear()
     _clear_departure()
+
+func reset_campaign() -> void:
+    campaign.start_new()
+    save_path = CAMPAIGN_SAVE_PATH
+    stock = {"medical": 8, "oxygen": 8, "parts": 6}
+    oxygen_levels.clear()
+    packs.clear()
+    planet_states.clear()
+    gear_stock = {"thermal_suit": 0, "wide_scanner": 0, "signal_stabilizer": 0}
+    gear_assignments.clear()
+    goofy_assignments.clear()
+    hull = 80
+    credits = 0
+    selected_destination = ""
+    training.clear()
+    _clear_departure()
+    controller._items.clear_session()
+    last_report = "飞船紧急坠落在霜烬星 · 核心损坏，普通燃料尚有储备。\n出舱探索科考站与冰下遗迹，寻找替代能源。"
+
+func _save_campaign() -> void:
+    var state: Dictionary = snapshot()
+    if controller._campaign_travel != null:
+        state.items = controller._campaign_travel.active_items()
+    for peer_id: int in state.items.training_saved:
+        state.items.bags[peer_id] = state.items.training_saved[peer_id].bag.duplicate(true)
+    state.items.training_saved = {}
+    state.ready = []
+    state.station_owners = {}
+    state.launch_remaining = -1.0
+    var encoded: String = Marshalls.raw_to_base64(var_to_bytes(state))
+    var file: FileAccess = FileAccess.open(save_path + ".tmp", FileAccess.WRITE)
+    if file == null:
+        return
+    file.store_string(JSON.stringify({"version": 1, "payload": encoded, "checksum": encoded.sha256_text()}))
+    file.close()
+    var error: Error = DirAccess.rename_absolute(save_path + ".tmp", save_path)
+    if error != OK:
+        show_notice("航程未能保存 · 请检查存储空间")
+
+func load_campaign() -> bool:
+    if not FileAccess.file_exists(save_path):
+        return false
+    var parser: JSON = JSON.new()
+    if parser.parse(FileAccess.get_file_as_string(save_path)) != OK:
+        return false
+    var data: Variant = parser.data
+    if not data is Dictionary or data.get("version", 0) != 1 or not data.get("payload", "") is String:
+        return false
+    var encoded: String = data.payload
+    if encoded.is_empty() or encoded.sha256_text() != data.get("checksum", ""):
+        return false
+    var raw: PackedByteArray = Marshalls.base64_to_raw(encoded)
+    if raw.size() < 4:
+        return false
+    var state: Variant = bytes_to_var(raw)
+    if not state is Dictionary or not state.get("campaign", {}) is Dictionary or not state.campaign.get("enabled", false) or not state.get("items", {}) is Dictionary:
+        return false
+    apply_state(state)
+    # Network peer IDs change between rooms. Preserve the host's loadout and
+    # return other saved crew loadouts as physical items in the shared cabin.
+    for peer_id: int in controller._items.bags.keys():
+        if peer_id == 1:
+            continue
+        var bag: Dictionary = controller._items.bags[peer_id]
+        for item: Dictionary in bag.slots + bag.get("equipment", []):
+            if item.is_empty():
+                continue
+            var entry: Dictionary = item.duplicate(true)
+            entry.uid = "restored_%d" % controller._items.next_uid
+            controller._items.next_uid += 1
+            entry.area = "hub"
+            entry.position = Vector3(-15, 1.2, 8)
+            entry.rotation = Vector3.ZERO
+            controller._items.drops.append(entry)
+        controller._items.bags.erase(peer_id)
+    packs.clear()
+    training.clear()
+    _clear_departure()
+    return true
 
 func goofy_item_name(item_id: String) -> String:
     return {"penguin": "回声企鹅", "bubble": "反重力泡", "board": "雪地滑板", "hologram": "全息替身", "smoke": "彩色信号烟"}.get(item_id, item_id)

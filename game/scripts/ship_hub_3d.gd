@@ -3,6 +3,7 @@ class_name ShipHub3D
 
 const MODEL := preload("res://assets/ship-hub/ship_hub_blender_v2.glb")
 const KENNEY_ART: Script = preload("res://scripts/ship_hub_kenney_art.gd")
+const HUB_ART: Script = preload("res://scripts/ship_hub_art.gd")
 const DEVICES: Script = preload("res://scripts/ship_devices_3d.gd")
 # 42 x 33 m hull, with the equipment kept at human scale.
 const WALK_BOUNDS := Vector2(19.8, 15.3)
@@ -10,10 +11,12 @@ const CAMERA_SIZE := 14.0
 const CAMERA_OFFSET := Vector3(0, 12.8, 14.8)
 const COCKPIT := Vector3(6.2, 0.0, -12.32)
 const STORAGE := Vector3(-16.0, 0.0, 4.45)
-const REPAIR := Vector3(16.6, 0.0, -2.98)
-const SUPPLY := Vector3(16.75, 0.0, 10.18)
-const MISSION := Vector3(-16.7, 0.0, -9.5)
-const AIRLOCK := Vector3(0.0, 0.0, 14.15)
+const REPAIR := Vector3(4.8, 0.0, -2.5)
+const SUPPLY := Vector3(-4.8, 0.0, 2.2)
+const MISSION := Vector3(0.0, 0.0, 1.75)
+const WORKSHOP := Vector3(4.8, 0.0, 2.2)
+# 独立训练舱入口位于右舷侧门（X=+5.45, Z=+10.18），与正后方尾舱星球出舱气闸（Z=+15.6）呈 90° 彻底分离
+const AIRLOCK := Vector3(5.45, 0.0, 10.18)
 const CREW_BERTH_Z: Array[float] = [8.0, -6.5]
 const CREW_SIDE_TABLE_Z: float = 8.0
 
@@ -76,18 +79,14 @@ func _ready() -> void:
             _solid("CrewBench", Vector3(3.35, 1.35, 1.15), Vector3(side * 8.7, 0.675, seat_z))
         _solid("Planter", Vector3(1.16, 1.0, 1.16), Vector3(side * 11.7, 0.5, 0.7))
         _solid("SideTable", Vector3(1.1, 0.8, 1.1), Vector3(side * 11.3, 0.4, CREW_SIDE_TABLE_Z))
-    _deck_label("归 航 号", Vector3(0, 0.03, 10.4), 58, Color("#dae6db"))
-    _deck_label("01  舰 桥", Vector3(0, 0.03, -10.6), 36, Color("#c1e1d6"))
-    _deck_label("02  储 物", Vector3(-14.8, 0.03, 4.45), 36, Color("#eed6ad"), 90.0)
-    _deck_label("03  维 修", Vector3(15.1, 0.03, -2.98), 36, Color("#eed6ad"), -90.0)
-    _deck_label("04  补 给", Vector3(15.3, 0.03, 10.18), 36, Color("#c1e1d6"), -90.0)
-    _deck_label("05  任 务 记 录", Vector3(-15.2, 0.03, -9.5), 36, Color("#c4acff"), 90.0)
-    _deck_label("06  训 练 舱", Vector3(0, 0.03, 12.9), 36, Color("#8de3b3"), 180.0)
+    # 彻底移除旧版丑陋地板 Label3D 文字；所有区域标识统一由 ShipHubArt 装配实体金属吊牌与壁挂牌（鸿蒙字体）
     var devices: Node3D = DEVICES.new() as Node3D
     devices.name = "ShipDevices"
     add_child(devices)
-    for index: int in 4:
-        _deck_label("驾驶 %02d" % (index + 1), Vector3(ShipDevices3D.PILOT_X[index], 0.03, -11.8), 28, Color("#c1e1d6"))
+    var hub_art: ShipHubArt = HUB_ART.new() as ShipHubArt
+    hub_art.name = "ShipHubArt"
+    add_child(hub_art)
+    hub_art.install(self)
 
 func _build_first_person_interior() -> void:
     # Close the presentation model's cutaway above the existing walkable deck.

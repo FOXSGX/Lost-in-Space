@@ -177,8 +177,8 @@ func _build_entrance(half_z: float) -> void:
     _box_to(sign_root, "SignFrameB", Vector3(4.2, 0.09, 0.26), Vector3(0.0, -0.71, 0.02), PLINTH)
     _box_to(sign_root, "SignFrameL", Vector3(0.09, 1.41, 0.26), Vector3(-2.06, 0.0, 0.02), PLINTH)
     _box_to(sign_root, "SignFrameR", Vector3(0.09, 1.41, 0.26), Vector3(2.06, 0.0, 0.02), PLINTH)
-    # 图标：Tabler Icons 的 shopping-cart（MIT 许可），见 assets/icons/LICENSES.md
-    var icon := load("res://assets/icons/shopping-cart.svg") as Texture2D
+    # Reuse the cabin storage symbol; the previous cart asset was absent.
+    var icon: Texture2D = preload("res://assets/ship-hub/computer-icons/store.svg")
     if icon != null:
         var plate := MeshInstance3D.new()
         plate.name = "SignIcon"

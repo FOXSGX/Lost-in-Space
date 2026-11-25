@@ -160,6 +160,7 @@ var discovered_regions: Array[String] = []
 var route_seed := 0
 
 var _ship_session: ShipSession3D
+var _campaign_travel: CampaignTravel3D
 var _resonance_stage: ResonanceStage3D
 var ship_active: bool:
     get:
@@ -344,8 +345,20 @@ func _ready() -> void:
     _resonance_stage = RESONANCE_STAGE_SCENE.instantiate() as ResonanceStage3D
     add_child(_resonance_stage)
     _resonance_stage.setup(self)
+    _campaign_travel = CampaignTravel3D.new()
+    _campaign_travel.name = "CampaignTravel"
+    add_child(_campaign_travel)
+    _campaign_travel.setup(self)
+
+func _notification(what: int) -> void:
+    if what == NOTIFICATION_WM_CLOSE_REQUEST and is_host and _ship_session != null and _ship_session.campaign.enabled:
+        if _campaign_travel != null:
+            _campaign_travel.checkpoint()
+        _ship_session.save_state()
 
 func _input(event: InputEvent) -> void:
+    if _campaign_travel != null and _campaign_travel.frost != null:
+        return
     if not event is InputEventKey:
         return
     var key_event := event as InputEventKey
@@ -408,8 +421,14 @@ func _input(event: InputEvent) -> void:
         get_viewport().set_input_as_handled()
 
 func _process(delta: float) -> void:
-    if _ruin_planet != null and current_planet_id == "ruin":
+    if _campaign_travel != null and _campaign_travel.frost != null:
+        _campaign_travel.tick(delta)
+        return
+    if game_started and _ruin_planet != null and current_planet_id == "ruin":
         _ruin_planet.tick(delta)
+        if _ship_session.campaign.enabled:
+            _campaign_travel.tick_ruin(delta)
+            return
     if _settings_visible:
         return
     if _ship_session != null:
@@ -440,7 +459,10 @@ func _process(delta: float) -> void:
             _vitals_accumulator += delta
             if _vitals_accumulator >= 0.1:
                 _vitals_accumulator = 0.0
-                sync_vitals.rpc(_vitals_snapshot())
+                if _ship_session.campaign.enabled:
+                    broadcast_campaign_vitals()
+                else:
+                    sync_vitals.rpc(_vitals_snapshot())
         return
     var local_peer_id := multiplayer.get_unique_id()
     for mark_action in ["mark_heat", "mark_clue", "clear_marker"]:
@@ -891,23 +913,116 @@ func _ui_button(parent: Control, text: String, position: Vector2, size: Vector2,
     return button
 
 func _build_home_ui() -> void:
-    _panel(_home_group, Vector2(54, 54), Vector2(520, 530), Color(0.025, 0.08, 0.13, 0.92), Color("#2e6a83"), 18)
-    _ui_label(_home_group, "迷失太空", Vector2(88, 84), Vector2(420, 62), 44, Color("#f1fbff"))
-    _ui_label(_home_group, "LOST IN SPACE  /  3D EXPEDITION", Vector2(91, 145), Vector2(430, 28), 14, Color("#65e1e0"))
-    _ui_label(_home_group, "驾驶远征舰穿过未知航域，在霜烬星追踪异常回波、调查失联设施，理解星球的规律后带着全队安全返航。", Vector2(91, 194), Vector2(420, 82), 17, Color("#a7c4d3"))
-    _ui_label(_home_group, "联机 · 1—4 名船员 · 正交 3D 舰桥", Vector2(91, 292), Vector2(420, 30), 14, Color("#78aabd"))
+    # 复刻复古暖白航空手账风格（左：粗描边大标题 + 暖橙/暖沙主按钮；右：暖纸白大圆角“去哪儿，船长？”卡片）
+    var logo := Label.new()
+    logo.text = "迷失太空"
+    logo.position = Vector2(72, 64)
+    logo.size = Vector2(460, 88)
+    logo.add_theme_font_override("font", UIStyleKit.FONT_BOLD)
+    logo.add_theme_font_size_override("font_size", 66)
+    logo.add_theme_color_override("font_color", Color("#F5F1E6"))
+    logo.add_theme_color_override("font_outline_color", UIStyleKit.NAVY_INK)
+    logo.add_theme_constant_override("outline_size", 12)
+    _home_group.add_child(logo)
+
+    var sub := Label.new()
+    sub.text = "LOST IN SPACE"
+    sub.position = Vector2(78, 152)
+    sub.size = Vector2(400, 38)
+    sub.add_theme_font_override("font", UIStyleKit.FONT_BOLD)
+    sub.add_theme_font_size_override("font_size", 24)
+    sub.add_theme_color_override("font_color", UIStyleKit.ORANGE_PRIMARY)
+    sub.add_theme_color_override("font_outline_color", UIStyleKit.NAVY_INK)
+    sub.add_theme_constant_override("outline_size", 5)
+    _home_group.add_child(sub)
+
+    var tag := _ui_label(_home_group, "星际迷航 · 修复归航号 · 一起回家", Vector2(78, 194), Vector2(420, 30), 15, Color("#F2EDE2"))
+    tag.add_theme_color_override("font_shadow_color", Color(0.08, 0.12, 0.18, 0.65))
+    tag.add_theme_constant_override("shadow_offset_x", 1)
+    tag.add_theme_constant_override("shadow_offset_y", 2)
+
+    _host_button = Button.new()
+    _host_button.text = "▶  开始新航程"
+    _host_button.position = Vector2(74, 286)
+    _host_button.size = Vector2(310, 56)
+    _host_button.add_theme_font_size_override("font_size", 20)
+    UIStyleKit.style_button(_host_button, "orange", 13)
+    _host_button.pressed.connect(_create_campaign.bind(false))
+    _home_group.add_child(_host_button)
+
+    var cont_btn := Button.new()
+    cont_btn.text = "继续上次航程"
+    cont_btn.position = Vector2(74, 356)
+    cont_btn.size = Vector2(310, 52)
+    cont_btn.add_theme_font_size_override("font_size", 18)
+    UIStyleKit.style_button(cont_btn, "sand", 13)
+    cont_btn.pressed.connect(_create_campaign.bind(true))
+    _home_group.add_child(cont_btn)
+
+    var card := Panel.new()
+    card.position = Vector2(656, 56)
+    card.size = Vector2(560, 608)
+    card.add_theme_stylebox_override("panel", UIStyleKit.box(UIStyleKit.CREAM_BG, UIStyleKit.BORDER_SOFT, 22, 1, 28, 24, 16))
+    _home_group.add_child(card)
+
+    var h1 := _ui_label(card, "去哪儿，船长？", Vector2(32, 26), Vector2(460, 48), 30, UIStyleKit.NAVY_INK)
+    h1.add_theme_font_override("font", UIStyleKit.FONT_BOLD)
+    _ui_label(card, "单人 / 主机启程", Vector2(34, 88), Vector2(300, 24), 14, UIStyleKit.MUTED_INK)
+
+    var solo_card_btn := Button.new()
+    solo_card_btn.text = "✦  开启霜烬星远征（单人 / 房主）"
+    solo_card_btn.position = Vector2(32, 118)
+    solo_card_btn.size = Vector2(496, 58)
+    solo_card_btn.add_theme_font_size_override("font_size", 18)
+    UIStyleKit.style_button(solo_card_btn, "orange", 13)
+    solo_card_btn.pressed.connect(_create_campaign.bind(false))
+    card.add_child(solo_card_btn)
+
+    _ui_label(card, "飞船坠落霜烬星。修复起飞核心，探索整个星系，带回能源一起回地球。", Vector2(34, 186), Vector2(492, 48), 14, UIStyleKit.MUTED_INK)
+
+    _ui_label(card, "创建或续玩", Vector2(34, 248), Vector2(300, 24), 14, UIStyleKit.MUTED_INK)
+    var lan_host_btn := Button.new()
+    lan_host_btn.text = "在 LAN 创建联机主机"
+    lan_host_btn.position = Vector2(32, 278)
+    lan_host_btn.size = Vector2(242, 48)
+    lan_host_btn.add_theme_font_size_override("font_size", 16)
+    UIStyleKit.style_button(lan_host_btn, "teal", 12)
+    lan_host_btn.pressed.connect(_create_campaign.bind(false))
+    card.add_child(lan_host_btn)
+
+    var resume_btn := Button.new()
+    resume_btn.text = "读取航程存档"
+    resume_btn.position = Vector2(286, 278)
+    resume_btn.size = Vector2(242, 48)
+    resume_btn.add_theme_font_size_override("font_size", 16)
+    UIStyleKit.style_button(resume_btn, "sand", 12)
+    resume_btn.pressed.connect(_create_campaign.bind(true))
+    card.add_child(resume_btn)
+
+    _ui_label(card, "局域网联机使用端口 24567，最多支持 4 名船员同行。", Vector2(34, 336), Vector2(492, 26), 13, UIStyleKit.MUTED_INK)
+
+    _ui_label(card, "加入队友的飞船", Vector2(34, 384), Vector2(300, 24), 14, UIStyleKit.MUTED_INK)
     _address_edit = LineEdit.new()
-    _address_edit.placeholder_text = "主机 IP（加入时填写）"
+    _address_edit.placeholder_text = "输入房主局域网 IP"
     _address_edit.text = "127.0.0.1"
-    _address_edit.position = Vector2(91, 340)
-    _address_edit.size = Vector2(410, 46)
+    _address_edit.position = Vector2(32, 414)
+    _address_edit.size = Vector2(328, 48)
     _address_edit.add_theme_font_size_override("font_size", 16)
-    _address_edit.add_theme_color_override("font_color", Color("#dff8ff"))
-    _address_edit.add_theme_stylebox_override("normal", _input_style())
-    _home_group.add_child(_address_edit)
-    _host_button = _ui_button(_home_group, "创建主机 · 进入飞船准备区", Vector2(91, 402), Vector2(410, 48), _create_host, true)
-    _join_button = _ui_button(_home_group, "加入已有主机", Vector2(91, 462), Vector2(410, 44), _join_host)
-    _status_label = _ui_label(_home_group, "状态：请创建主机或加入已有主机", Vector2(91, 525), Vector2(440, 44), 15, Color("#8ff1a0"))
+    _address_edit.add_theme_color_override("font_color", UIStyleKit.NAVY_INK)
+    _address_edit.add_theme_stylebox_override("normal", UIStyleKit.box(UIStyleKit.IVORY_INPUT, UIStyleKit.BORDER_SOFT, 11, 1, 14, 10, 0))
+    _address_edit.add_theme_stylebox_override("focus", UIStyleKit.box(UIStyleKit.IVORY_INPUT, UIStyleKit.TEAL_ACTION, 11, 2, 14, 10, 0))
+    card.add_child(_address_edit)
+
+    _join_button = Button.new()
+    _join_button.text = "加入 IP"
+    _join_button.position = Vector2(372, 414)
+    _join_button.size = Vector2(156, 48)
+    _join_button.add_theme_font_size_override("font_size", 16)
+    UIStyleKit.style_button(_join_button, "teal", 12)
+    _join_button.pressed.connect(_join_host)
+    card.add_child(_join_button)
+
+    _status_label = _ui_label(card, "状态：准备就绪，随时启程", Vector2(34, 486), Vector2(492, 44), 14, UIStyleKit.TEAL_ACTION)
 
 func _input_style() -> StyleBoxFlat:
     var style := StyleBoxFlat.new()
@@ -1003,11 +1118,23 @@ func _show_home() -> void:
     if _settings_visible:
         _close_settings()
     if is_host and _ship_session != null:
+        if _campaign_travel != null and _campaign_travel.frost != null:
+            _campaign_travel.checkpoint()
+            _items.apply_state(_campaign_travel.active_items())
         _ship_session.close_room()
+    if _campaign_travel != null:
+        _campaign_travel.stop_frost()
     if multiplayer.multiplayer_peer is ENetMultiplayerPeer:
         multiplayer.multiplayer_peer.close()
     is_host = false
     multiplayer.multiplayer_peer = OfflineMultiplayerPeer.new()
+    game_started = false
+    if _ship_session != null and _ship_session.campaign.enabled:
+        if _resonance_stage != null and _resonance_stage.world_root != null:
+            _resonance_stage.stop_stage()
+        if _ruin_planet != null:
+            _ruin_planet.reset()
+            _ruin_planet = null
     _clear_players()
     connected_ids.clear()
     current_planet_id = "demo"
@@ -1225,7 +1352,35 @@ func _animate_menu_world() -> void:
     if _menu_planet != null:
         _menu_planet.rotation.y += 0.0015
 
+func _create_campaign(continuing: bool = false) -> void:
+    if continuing and not FileAccess.file_exists(ShipSession3D.CAMPAIGN_SAVE_PATH):
+        _set_status("没有可继续的新航程存档 · 请选择新航程")
+        return
+    (multiplayer as SceneMultiplayer).server_relay = false
+    var peer: ENetMultiplayerPeer = ENetMultiplayerPeer.new()
+    var result: Error = peer.create_server(network_port, MAX_PLAYERS - 1)
+    if result != OK:
+        _set_status("创建航程失败：" + error_string(result))
+        return
+    multiplayer.multiplayer_peer = peer
+    is_host = true
+    connected_ids = [1]
+    _ship_session.reset_campaign()
+    if continuing and not _ship_session.load_campaign():
+        peer.close()
+        multiplayer.multiplayer_peer = OfflineMultiplayerPeer.new()
+        is_host = false
+        _set_status("航程存档无法读取 · 原文件已保留")
+        return
+    _ship_session.enter_ship(true, connected_ids, _ship_session.snapshot())
+    _ship_session.save_state()
+    _ship_session.show_notice("核心损坏 · 去气闸旁的出舱电脑探索霜烬星" if not _ship_session.campaign.navigation_restored else "航程已恢复 · 查看航线电脑")
+
 func _create_host() -> void:
+    # Retained for legacy integration tests and development tools.
+    (multiplayer as SceneMultiplayer).server_relay = true
+    _ship_session.campaign.enabled = false
+    _ship_session.save_path = ShipSession3D.SAVE_PATH
     var peer := ENetMultiplayerPeer.new()
     var result := peer.create_server(network_port, MAX_PLAYERS)
     if result != OK:
@@ -1264,6 +1419,9 @@ func _on_peer_connected(peer_id: int) -> void:
         return
     if not connected_ids.has(peer_id):
         connected_ids.append(peer_id)
+    if _campaign_travel != null and _campaign_travel.frost != null:
+        _campaign_travel.add_peer(peer_id)
+        return
     if ship_active:
         _ship_session.add_peer(peer_id)
         return
@@ -1272,6 +1430,10 @@ func _on_peer_connected(peer_id: int) -> void:
     _set_status("玩家 %d 已加入 3D 霜烬星。" % peer_id)
 
 func _on_peer_disconnected(peer_id: int) -> void:
+    if _campaign_travel != null and _campaign_travel.frost != null:
+        connected_ids.erase(peer_id)
+        _campaign_travel.remove_peer(peer_id)
+        return
     if _resonance_stage != null:
         _resonance_stage.release_core_carrier(peer_id)
     if is_host and game_started and current_planet_id == "demo" and players.has(peer_id):
@@ -1287,6 +1449,8 @@ func _on_peer_disconnected(peer_id: int) -> void:
         players.erase(peer_id)
 
 func _on_server_disconnected() -> void:
+    if _campaign_travel != null:
+        _campaign_travel.stop_frost()
     if game_started:
         return_to_ship("主机已断开连接。")
     _show_home()
@@ -1294,6 +1458,50 @@ func _on_server_disconnected() -> void:
 
 func _confirm_land() -> void:
     _ship_session.confirm_land()
+
+func publish_campaign_pose(peer_id: int, pose: Array) -> void:
+    if not multiplayer.multiplayer_peer is ENetMultiplayerPeer:
+        return
+    if not is_host:
+        campaign_pose.rpc_id(1, peer_id, _items.area(), _ship_session.campaign.revision, pose)
+        return
+    var network: ENetMultiplayerPeer = multiplayer.multiplayer_peer as ENetMultiplayerPeer
+    for target_id: int in multiplayer.get_peers():
+        var target: ENetPacketPeer = network.get_peer(target_id)
+        if target != null and target.get_state() == ENetPacketPeer.STATE_CONNECTED and target.get_channels() > 0:
+            campaign_pose_relay.rpc_id(target_id, peer_id, _items.area(), _ship_session.campaign.revision, pose)
+
+@rpc("any_peer", "call_remote", "unreliable_ordered")
+func campaign_pose(peer_id: int, area: String, version: int, pose: Array) -> void:
+    if not is_host or multiplayer.get_remote_sender_id() != peer_id or not _apply_campaign_pose(peer_id, area, version, pose):
+        return
+    var network: ENetMultiplayerPeer = multiplayer.multiplayer_peer as ENetMultiplayerPeer
+    for target_id: int in multiplayer.get_peers():
+        var target: ENetPacketPeer = network.get_peer(target_id)
+        if target_id != peer_id and target != null and target.get_state() == ENetPacketPeer.STATE_CONNECTED and target.get_channels() > 0:
+            campaign_pose_relay.rpc_id(target_id, peer_id, area, version, pose)
+
+@rpc("authority", "call_remote", "unreliable_ordered")
+func campaign_pose_relay(peer_id: int, area: String, version: int, pose: Array) -> void:
+    _apply_campaign_pose(peer_id, area, version, pose)
+
+func _apply_campaign_pose(peer_id: int, area: String, version: int, pose: Array) -> bool:
+    if not _ship_session.campaign.enabled or _campaign_travel.frost != null or not players.has(peer_id) or area != _items.area() or version != _ship_session.campaign.revision or pose.size() != 7:
+        return false
+    if not pose[0] is Vector3 or not (pose[0] as Vector3).is_finite() or not is_finite(float(pose[2])) or not is_finite(float(pose[4])):
+        return false
+    (players[peer_id] as SpacePlayer3D).sync_transform(pose[0], bool(pose[1]), float(pose[2]), bool(pose[3]), float(pose[4]), bool(pose[5]), bool(pose[6]))
+    return true
+
+func broadcast_campaign_vitals() -> void:
+    var state: Array = _vitals_snapshot()
+    sync_vitals(state)
+    if multiplayer.multiplayer_peer is ENetMultiplayerPeer:
+        var network: ENetMultiplayerPeer = multiplayer.multiplayer_peer as ENetMultiplayerPeer
+        for peer_id: int in multiplayer.get_peers():
+            var peer: ENetPacketPeer = network.get_peer(peer_id)
+            if peer != null and peer.get_state() == ENetPacketPeer.STATE_CONNECTED and peer.get_channels() > 0:
+                sync_vitals.rpc_id(peer_id, state)
 
 func _clear_players() -> void:
     for player in players.values():
@@ -1423,6 +1631,8 @@ func _start_ruin_planet() -> void:
     if _ruin_planet == null:
         _ruin_planet = RUIN_PLANET.new(self)
         _ruin_planet.build()
+    if _ship_session.campaign.enabled:
+        _ruin_planet.apply_snapshot(_ship_session.campaign.ruin_state)
     _ruin_planet.set_visible(true)
     if _world_root != null:
         _world_root.visible = false
@@ -1434,6 +1644,8 @@ func _start_ruin_planet() -> void:
             walker.teleport_to(_ruin_planet.spawn_position(int(peer_id)))
     game_started = true
     _set_status("腐墟星：噪声会引来感染者，搜刮时尽量别跑动。")
+    if is_host:
+        sync_full_state.rpc(_world_snapshot())
 
 func start_planet(stage_id: String = "demo") -> void:
     _start_planet(stage_id)
@@ -3586,6 +3798,9 @@ func spawn_goofy_effect_rpc(item_id: String, origin: Vector3, direction: Vector3
         _goofy_items.spawn_local(item_id, origin, direction, caster_id, effect_id, duration)
 
 func handle_action(peer_id: int, action: String) -> void:
+    if is_host and _ship_session.campaign.enabled and game_started and current_planet_id == "ruin" and action in ["interact", "repair"]:
+        if _campaign_travel.ruin_return(peer_id):
+            return
     if action in ["interact", "item_use", "item_drop", "item_scan", "slot_1", "slot_2", "slot_next", "slot_previous", "toggle_equipment"] or action.begins_with("choice_"):
         if not is_host:
             request_action.rpc_id(1, peer_id, action)
@@ -4117,6 +4332,16 @@ func _tick_extraction(delta: float) -> void:
 
 @rpc("authority", "call_local", "reliable")
 func return_to_ship(reason: String, final_vitals: Array = []) -> void:
+    if is_host and _ship_session.campaign.enabled:
+        if current_planet_id == "ruin" and _ruin_planet != null:
+            _ship_session.campaign.ruin_state = _ruin_planet.snapshot()
+        var supply_sites: Array = _ruin_planet.taken_food if current_planet_id == "ruin" and _ruin_planet != null else []
+        reason += "\n" + _ship_session.campaign.settle_planet(current_planet_id, mission_completed, supply_sites)
+    if current_planet_id == "ruin" and _ruin_planet != null:
+        _ruin_planet.set_visible(false)
+        if _ship_session.campaign.enabled:
+            _ruin_planet.reset()
+            _ruin_planet = null
     if current_planet_id == "electromagnetic":
         _return_from_resonance(reason, final_vitals)
         return
@@ -4261,7 +4486,7 @@ func _enemy_snapshot() -> Array:
     return snapshot
 
 func _world_snapshot() -> Dictionary:
-    return {"extraction_enabled": extraction_enabled, "extraction_progress": extraction_progress, "planet_id": current_planet_id, "ruin_enemies": _ruin_planet.enemy_snapshot() if (_ruin_planet != null and current_planet_id == "ruin") else [], "kit": kit_assignments.duplicate(true), "credits": credits, "owned_skins": owned_skins, "player_skins": player_skins.duplicate(true), "resonance_state": _resonance_stage.stage_snapshot() if current_planet_id == "electromagnetic" and _resonance_stage != null else {}, "ship_state": _ship_session.snapshot(), "wave": enemy_wave_index, "timer": enemy_wave_timer, "enemies": _enemy_snapshot(), "beacons": activated_beacons, "crates": taken_crates, "samples": taken_samples, "deposited": deposited_resources, "salvage": salvage_value, "mission_elapsed": mission_elapsed, "knowledge": knowledge_flags.keys(), "anomaly_resolved": anomaly_resolved, "ending_choice": ending_choice, "story_flags": story_flags, "side_quest_states": side_quest_states, "achievements": achievement_flags, "world_flags": world_flags, "resource_epoch": _planet_resource_epoch, "lost_cargo": lost_cargo, "rift_valve_open": rift_valve_open, "signal_mode": signal_mode, "signal_lure_until": signal_lure_until, "signal_lure_position": signal_lure_position, "signal_cooldown_until": signal_cooldown_until, "map_markers": map_markers, "vitals": _vitals_snapshot(), "beacon_positions": beacon_positions, "crate_positions": crate_positions, "sample_positions": sample_positions, "journal": journal_entries, "regions": discovered_regions, "clues": discovered_clues, "scan_clues": scan_revealed_clues, "scan_device_active": scan_device_active, "scan_device_position": scan_device_position, "scan_remaining": scan_remaining, "goofy_effects": _goofy_items.snapshot() if _goofy_items != null else [], "field_state": _field_interactions.snapshot() if _field_interactions != null else {}, "roam_state": _roam_activities.snapshot() if _roam_activities != null else {}}
+    return {"ruin_state": _ruin_planet.snapshot() if current_planet_id == "ruin" and _ruin_planet != null else {}, "extraction_enabled": extraction_enabled, "extraction_progress": extraction_progress, "planet_id": current_planet_id, "ruin_enemies": _ruin_planet.enemy_snapshot() if (_ruin_planet != null and current_planet_id == "ruin") else [], "kit": kit_assignments.duplicate(true), "credits": credits, "owned_skins": owned_skins, "player_skins": player_skins.duplicate(true), "resonance_state": _resonance_stage.stage_snapshot() if current_planet_id == "electromagnetic" and _resonance_stage != null else {}, "ship_state": _ship_session.snapshot(), "wave": enemy_wave_index, "timer": enemy_wave_timer, "enemies": _enemy_snapshot(), "beacons": activated_beacons, "crates": taken_crates, "samples": taken_samples, "deposited": deposited_resources, "salvage": salvage_value, "mission_elapsed": mission_elapsed, "knowledge": knowledge_flags.keys(), "anomaly_resolved": anomaly_resolved, "ending_choice": ending_choice, "story_flags": story_flags, "side_quest_states": side_quest_states, "achievements": achievement_flags, "world_flags": world_flags, "resource_epoch": _planet_resource_epoch, "lost_cargo": lost_cargo, "rift_valve_open": rift_valve_open, "signal_mode": signal_mode, "signal_lure_until": signal_lure_until, "signal_lure_position": signal_lure_position, "signal_cooldown_until": signal_cooldown_until, "map_markers": map_markers, "vitals": _vitals_snapshot(), "beacon_positions": beacon_positions, "crate_positions": crate_positions, "sample_positions": sample_positions, "journal": journal_entries, "regions": discovered_regions, "clues": discovered_clues, "scan_clues": scan_revealed_clues, "scan_device_active": scan_device_active, "scan_device_position": scan_device_position, "scan_remaining": scan_remaining, "goofy_effects": _goofy_items.snapshot() if _goofy_items != null else [], "field_state": _field_interactions.snapshot() if _field_interactions != null else {}, "roam_state": _roam_activities.snapshot() if _roam_activities != null else {}}
 
 func _vitals_snapshot() -> Array:
     var snapshot: Array = []
@@ -4325,6 +4550,14 @@ func sync_full_state(snapshot: Dictionary) -> void:
             if carrier != null:
                 carrier.set_tool(kit_tool_for(int(peer_id)))
     var snapshot_planet := String(snapshot.get("planet_id", "demo"))
+    if snapshot_planet == "ruin":
+        if not game_started or current_planet_id != "ruin":
+            _start_ruin_planet()
+        if _ruin_planet != null:
+            _ruin_planet.apply_snapshot(snapshot.get("ruin_state", {}))
+            _ruin_planet.apply_enemy_snapshot(snapshot.get("ruin_enemies", []))
+        sync_vitals(snapshot.get("vitals", []))
+        return
     if snapshot_planet == "electromagnetic":
         if not game_started or current_planet_id != "electromagnetic":
             _start_resonance_planet()

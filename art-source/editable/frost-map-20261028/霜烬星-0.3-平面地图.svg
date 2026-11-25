@@ -1,0 +1,315 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="2200" height="2400" viewBox="0 0 2200 2400">
+<rect width="2200" height="2400" fill="#0b1825"/>
+<text x="64" y="105.72" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="64" font-weight="700" text-anchor="start" fill="#eaf4f5">霜烬星</text>
+<text x="340" y="103.24000000000001" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="38" font-weight="400" text-anchor="start" fill="#9ccbdc">平面地图</text>
+<text x="65" y="152.46" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="27" font-weight="400" text-anchor="start" fill="#9eb7c4">0.3 科考站扩展版  /  依据当前独立试玩关卡绘制</text>
+<rect x="1740" y="58" width="395" height="56" rx="12" fill="#183c43" stroke="none" stroke-width="1"/>
+<text x="1937" y="92.48" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="26" font-weight="700" text-anchor="middle" fill="#65d9dd">当前实现 · 观察事实</text>
+<polyline points="65.0,184.0 2135.0,184.0" fill="none" stroke="#294556" stroke-width="2" stroke-linejoin="round"/>
+<rect x="60" y="215" width="1045" height="1925" rx="22" fill="#102333" stroke="#294556" stroke-width="2"/>
+<rect x="1140" y="215" width="1000" height="1145" rx="22" fill="#102333" stroke="#294556" stroke-width="2"/>
+<rect x="1140" y="1390" width="1000" height="750" rx="22" fill="#102333" stroke="#294556" stroke-width="2"/>
+<text x="91" y="267.44" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="28" font-weight="700" text-anchor="start" fill="#eaf4f5">01  总平面</text>
+<text x="91" y="304.54" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="23" font-weight="400" text-anchor="start" fill="#9eb7c4">上方为遗迹深处</text>
+<polyline points="1025.0,346.0 1025.0,276.0" fill="none" stroke="#9ccbdc" stroke-width="3" stroke-linejoin="round"/>
+<polyline points="1025.0,276.0 1032.3176212050291,287.93534330883307" fill="none" stroke="#9ccbdc" stroke-width="3" stroke-linejoin="round"/>
+<polyline points="1025.0,276.0 1017.6823787949708,287.93534330883307" fill="none" stroke="#9ccbdc" stroke-width="3" stroke-linejoin="round"/>
+<text x="1025" y="261.52" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="24" font-weight="700" text-anchor="middle" fill="#9ccbdc">N</text>
+<text x="1025" y="379.6" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="20" font-weight="400" text-anchor="middle" fill="#9eb7c4">−Z</text>
+<rect x="449.0" y="1064.6399999999999" width="282.0" height="977.5999999999999" rx="0" fill="#1c3948" stroke="#587a8a" stroke-width="2"/>
+<rect x="456.52" y="827.76" width="266.96" height="285.76" rx="0" fill="#254554" stroke="#71838b" stroke-width="3"/>
+<rect x="452.76" y="827.76" width="15.04" height="285.76" rx="0" fill="#1b2832" stroke="#3c505c" stroke-width="1"/>
+<rect x="712.2" y="827.76" width="15.04" height="285.76" rx="0" fill="#1b2832" stroke="#3c505c" stroke-width="1"/>
+<rect x="519.5" y="872.88" width="5.64" height="7.52" rx="0" fill="#9b9688" stroke="none" stroke-width="2"/>
+<rect x="654.86" y="872.88" width="5.64" height="7.52" rx="0" fill="#9b9688" stroke="none" stroke-width="2"/>
+<rect x="519.5" y="919.88" width="5.64" height="7.52" rx="0" fill="#9b9688" stroke="none" stroke-width="2"/>
+<rect x="654.86" y="919.88" width="5.64" height="7.52" rx="0" fill="#9b9688" stroke="none" stroke-width="2"/>
+<rect x="519.5" y="966.88" width="5.64" height="7.52" rx="0" fill="#9b9688" stroke="none" stroke-width="2"/>
+<rect x="654.86" y="966.88" width="5.64" height="7.52" rx="0" fill="#9b9688" stroke="none" stroke-width="2"/>
+<rect x="519.5" y="1013.88" width="5.64" height="7.52" rx="0" fill="#9b9688" stroke="none" stroke-width="2"/>
+<rect x="654.86" y="1013.88" width="5.64" height="7.52" rx="0" fill="#9b9688" stroke="none" stroke-width="2"/>
+<rect x="519.5" y="1060.88" width="5.64" height="7.52" rx="0" fill="#9b9688" stroke="none" stroke-width="2"/>
+<rect x="654.86" y="1060.88" width="5.64" height="7.52" rx="0" fill="#9b9688" stroke="none" stroke-width="2"/>
+<polyline points="590.0,1098.48 546.76,1042.08 623.84,981.92 561.8,910.48 590.0,872.88" fill="none" stroke="#b4a58e" stroke-width="15" stroke-linejoin="round"/>
+<rect x="580.6" y="1089.08" width="18.799999999999997" height="18.799999999999997" rx="0" fill="#b4a58e" stroke="none" stroke-width="2"/>
+<rect x="537.36" y="1032.6799999999998" width="18.799999999999997" height="18.799999999999997" rx="0" fill="#b4a58e" stroke="none" stroke-width="2"/>
+<rect x="614.44" y="972.52" width="18.799999999999997" height="18.799999999999997" rx="0" fill="#b4a58e" stroke="none" stroke-width="2"/>
+<rect x="552.4" y="901.0799999999999" width="18.799999999999997" height="18.799999999999997" rx="0" fill="#b4a58e" stroke="none" stroke-width="2"/>
+<rect x="580.6" y="863.48" width="18.799999999999997" height="18.799999999999997" rx="0" fill="#b4a58e" stroke="none" stroke-width="2"/>
+<rect x="567.44" y="854.0799999999999" width="45.12" height="37.599999999999994" rx="0" fill="#b4a58e" stroke="none" stroke-width="2"/>
+<rect x="460.28" y="850.3199999999999" width="259.44" height="3.76" rx="0" fill="#a59a87" stroke="none" stroke-width="2"/>
+<polyline points="590.0,1098.48 546.76,1042.08 623.84,981.92 561.8,910.48 590.0,872.88 590.0,854.456 590.0,824.0" fill="none" stroke="#65d9dd" stroke-width="4" stroke-linejoin="round"/>
+<rect x="547.7" y="1052.42" width="9.399999999999999" height="5.64" rx="0" fill="#9ccbdc" stroke="none" stroke-width="2"/>
+<rect x="626.66" y="1052.42" width="9.399999999999999" height="5.64" rx="0" fill="#9ccbdc" stroke="none" stroke-width="2"/>
+<circle cx="543.0" cy="1075.92" r="8" fill="#65d9dd" stroke="none" stroke-width="2"/>
+<text x="529.0" y="1077.46" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="23" font-weight="700" text-anchor="start" fill="#0b1825">+</text>
+<circle cx="590.0" cy="1012.0" r="8" fill="#c5a0df" stroke="none" stroke-width="2"/>
+<rect x="456.52" y="545.76" width="266.96" height="285.76" rx="0" fill="#3d3652" stroke="#71838b" stroke-width="3"/>
+<rect x="452.76" y="545.76" width="15.04" height="285.76" rx="0" fill="#1b2832" stroke="#3c505c" stroke-width="1"/>
+<rect x="712.2" y="545.76" width="15.04" height="285.76" rx="0" fill="#1b2832" stroke="#3c505c" stroke-width="1"/>
+<rect x="519.5" y="590.88" width="5.64" height="7.52" rx="0" fill="#9b9688" stroke="none" stroke-width="2"/>
+<rect x="654.86" y="590.88" width="5.64" height="7.52" rx="0" fill="#9b9688" stroke="none" stroke-width="2"/>
+<rect x="519.5" y="637.88" width="5.64" height="7.52" rx="0" fill="#9b9688" stroke="none" stroke-width="2"/>
+<rect x="654.86" y="637.88" width="5.64" height="7.52" rx="0" fill="#9b9688" stroke="none" stroke-width="2"/>
+<rect x="519.5" y="684.88" width="5.64" height="7.52" rx="0" fill="#9b9688" stroke="none" stroke-width="2"/>
+<rect x="654.86" y="684.88" width="5.64" height="7.52" rx="0" fill="#9b9688" stroke="none" stroke-width="2"/>
+<rect x="519.5" y="731.88" width="5.64" height="7.52" rx="0" fill="#9b9688" stroke="none" stroke-width="2"/>
+<rect x="654.86" y="731.88" width="5.64" height="7.52" rx="0" fill="#9b9688" stroke="none" stroke-width="2"/>
+<rect x="519.5" y="778.88" width="5.64" height="7.52" rx="0" fill="#9b9688" stroke="none" stroke-width="2"/>
+<rect x="654.86" y="778.88" width="5.64" height="7.52" rx="0" fill="#9b9688" stroke="none" stroke-width="2"/>
+<polyline points="590.0,816.48 546.76,760.0799999999999 623.84,699.92 561.8,628.48 590.0,590.88" fill="none" stroke="#b4a58e" stroke-width="15" stroke-linejoin="round"/>
+<rect x="580.6" y="807.0799999999999" width="18.799999999999997" height="18.799999999999997" rx="0" fill="#b4a58e" stroke="none" stroke-width="2"/>
+<rect x="537.36" y="750.68" width="18.799999999999997" height="18.799999999999997" rx="0" fill="#b4a58e" stroke="none" stroke-width="2"/>
+<rect x="614.44" y="690.52" width="18.799999999999997" height="18.799999999999997" rx="0" fill="#b4a58e" stroke="none" stroke-width="2"/>
+<rect x="552.4" y="619.0799999999999" width="18.799999999999997" height="18.799999999999997" rx="0" fill="#b4a58e" stroke="none" stroke-width="2"/>
+<rect x="580.6" y="581.48" width="18.799999999999997" height="18.799999999999997" rx="0" fill="#b4a58e" stroke="none" stroke-width="2"/>
+<rect x="567.44" y="572.0799999999999" width="45.12" height="37.599999999999994" rx="0" fill="#b4a58e" stroke="none" stroke-width="2"/>
+<rect x="460.28" y="568.3199999999999" width="259.44" height="3.76" rx="0" fill="#a59a87" stroke="none" stroke-width="2"/>
+<polyline points="590.0,816.48 546.76,760.0799999999999 623.84,699.92 561.8,628.48 590.0,590.88 590.0,572.4560000000001 590.0,542.0" fill="none" stroke="#65d9dd" stroke-width="4" stroke-linejoin="round"/>
+<rect x="547.7" y="770.42" width="9.399999999999999" height="5.64" rx="0" fill="#9ccbdc" stroke="none" stroke-width="2"/>
+<rect x="626.66" y="770.42" width="9.399999999999999" height="5.64" rx="0" fill="#9ccbdc" stroke="none" stroke-width="2"/>
+<circle cx="543.0" cy="793.92" r="8" fill="#65d9dd" stroke="none" stroke-width="2"/>
+<text x="529.0" y="795.4599999999999" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="23" font-weight="700" text-anchor="start" fill="#0b1825">+</text>
+<circle cx="590.0" cy="730.0" r="8" fill="#c5a0df" stroke="none" stroke-width="2"/>
+<rect x="456.52" y="263.76" width="266.96" height="285.76" rx="0" fill="#4b3c32" stroke="#71838b" stroke-width="3"/>
+<rect x="452.76" y="263.76" width="15.04" height="285.76" rx="0" fill="#1b2832" stroke="#3c505c" stroke-width="1"/>
+<rect x="712.2" y="263.76" width="15.04" height="285.76" rx="0" fill="#1b2832" stroke="#3c505c" stroke-width="1"/>
+<rect x="519.5" y="308.88" width="5.64" height="7.52" rx="0" fill="#9b9688" stroke="none" stroke-width="2"/>
+<rect x="654.86" y="308.88" width="5.64" height="7.52" rx="0" fill="#9b9688" stroke="none" stroke-width="2"/>
+<rect x="519.5" y="355.88" width="5.64" height="7.52" rx="0" fill="#9b9688" stroke="none" stroke-width="2"/>
+<rect x="654.86" y="355.88" width="5.64" height="7.52" rx="0" fill="#9b9688" stroke="none" stroke-width="2"/>
+<rect x="519.5" y="402.88" width="5.64" height="7.52" rx="0" fill="#9b9688" stroke="none" stroke-width="2"/>
+<rect x="654.86" y="402.88" width="5.64" height="7.52" rx="0" fill="#9b9688" stroke="none" stroke-width="2"/>
+<rect x="519.5" y="449.88" width="5.64" height="7.52" rx="0" fill="#9b9688" stroke="none" stroke-width="2"/>
+<rect x="654.86" y="449.88" width="5.64" height="7.52" rx="0" fill="#9b9688" stroke="none" stroke-width="2"/>
+<rect x="519.5" y="496.88" width="5.64" height="7.52" rx="0" fill="#9b9688" stroke="none" stroke-width="2"/>
+<rect x="654.86" y="496.88" width="5.64" height="7.52" rx="0" fill="#9b9688" stroke="none" stroke-width="2"/>
+<polyline points="590.0,534.48 546.76,478.08 623.84,417.91999999999996 561.8,346.48 590.0,308.88" fill="none" stroke="#b4a58e" stroke-width="15" stroke-linejoin="round"/>
+<rect x="580.6" y="525.0799999999999" width="18.799999999999997" height="18.799999999999997" rx="0" fill="#b4a58e" stroke="none" stroke-width="2"/>
+<rect x="537.36" y="468.67999999999995" width="18.799999999999997" height="18.799999999999997" rx="0" fill="#b4a58e" stroke="none" stroke-width="2"/>
+<rect x="614.44" y="408.52" width="18.799999999999997" height="18.799999999999997" rx="0" fill="#b4a58e" stroke="none" stroke-width="2"/>
+<rect x="552.4" y="337.08" width="18.799999999999997" height="18.799999999999997" rx="0" fill="#b4a58e" stroke="none" stroke-width="2"/>
+<rect x="580.6" y="299.48" width="18.799999999999997" height="18.799999999999997" rx="0" fill="#b4a58e" stroke="none" stroke-width="2"/>
+<rect x="567.44" y="290.08" width="45.12" height="37.599999999999994" rx="0" fill="#b4a58e" stroke="none" stroke-width="2"/>
+<polyline points="590.0,534.48 546.76,478.08 623.84,417.91999999999996 561.8,346.48 590.0,308.88" fill="none" stroke="#65d9dd" stroke-width="4" stroke-linejoin="round"/>
+<rect x="547.7" y="488.41999999999996" width="9.399999999999999" height="5.64" rx="0" fill="#9ccbdc" stroke="none" stroke-width="2"/>
+<rect x="626.66" y="488.41999999999996" width="9.399999999999999" height="5.64" rx="0" fill="#9ccbdc" stroke="none" stroke-width="2"/>
+<circle cx="543.0" cy="511.91999999999996" r="8" fill="#65d9dd" stroke="none" stroke-width="2"/>
+<text x="529.0" y="513.4599999999999" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="23" font-weight="700" text-anchor="start" fill="#0b1825">+</text>
+<circle cx="590.0" cy="448.0" r="8" fill="#c5a0df" stroke="none" stroke-width="2"/>
+<rect x="458.4" y="260.94" width="263.2" height="9.399999999999999" rx="0" fill="#17252f" stroke="#536676" stroke-width="1"/>
+<rect x="581.54" y="1863.6399999999999" width="16.919999999999998" height="37.599999999999994" rx="0" fill="#476776" stroke="none" stroke-width="2"/>
+<rect x="581.54" y="1818.52" width="16.919999999999998" height="37.599999999999994" rx="0" fill="#476776" stroke="none" stroke-width="2"/>
+<rect x="581.54" y="1773.3999999999999" width="16.919999999999998" height="37.599999999999994" rx="0" fill="#476776" stroke="none" stroke-width="2"/>
+<rect x="581.54" y="1728.28" width="16.919999999999998" height="37.599999999999994" rx="0" fill="#476776" stroke="none" stroke-width="2"/>
+<rect x="581.54" y="1683.1599999999999" width="16.919999999999998" height="37.599999999999994" rx="0" fill="#476776" stroke="none" stroke-width="2"/>
+<rect x="581.54" y="1638.04" width="16.919999999999998" height="37.599999999999994" rx="0" fill="#476776" stroke="none" stroke-width="2"/>
+<rect x="581.54" y="1592.9199999999998" width="16.919999999999998" height="37.599999999999994" rx="0" fill="#476776" stroke="none" stroke-width="2"/>
+<rect x="581.54" y="1547.8" width="16.919999999999998" height="37.599999999999994" rx="0" fill="#476776" stroke="none" stroke-width="2"/>
+<rect x="581.54" y="1502.6799999999998" width="16.919999999999998" height="37.599999999999994" rx="0" fill="#476776" stroke="none" stroke-width="2"/>
+<rect x="581.54" y="1457.56" width="16.919999999999998" height="37.599999999999994" rx="0" fill="#476776" stroke="none" stroke-width="2"/>
+<rect x="581.54" y="1412.4399999999998" width="16.919999999999998" height="37.599999999999994" rx="0" fill="#476776" stroke="none" stroke-width="2"/>
+<rect x="581.54" y="1367.32" width="16.919999999999998" height="37.599999999999994" rx="0" fill="#476776" stroke="none" stroke-width="2"/>
+<rect x="581.54" y="1322.2" width="16.919999999999998" height="37.599999999999994" rx="0" fill="#476776" stroke="none" stroke-width="2"/>
+<rect x="581.54" y="1277.08" width="16.919999999999998" height="37.599999999999994" rx="0" fill="#476776" stroke="none" stroke-width="2"/>
+<rect x="581.54" y="1231.96" width="16.919999999999998" height="37.599999999999994" rx="0" fill="#476776" stroke="none" stroke-width="2"/>
+<rect x="581.54" y="1186.84" width="16.919999999999998" height="37.599999999999994" rx="0" fill="#476776" stroke="none" stroke-width="2"/>
+<rect x="581.54" y="1141.7199999999998" width="16.919999999999998" height="37.599999999999994" rx="0" fill="#476776" stroke="none" stroke-width="2"/>
+<rect x="581.54" y="1096.6" width="16.919999999999998" height="37.599999999999994" rx="0" fill="#476776" stroke="none" stroke-width="2"/>
+<rect x="445.24" y="1117.28" width="11.28" height="45.12" rx="0" fill="#344c5b" stroke="none" stroke-width="2"/>
+<rect x="723.48" y="1117.28" width="11.28" height="45.12" rx="0" fill="#344c5b" stroke="none" stroke-width="2"/>
+<rect x="445.24" y="1183.08" width="11.28" height="45.12" rx="0" fill="#344c5b" stroke="none" stroke-width="2"/>
+<rect x="723.48" y="1183.08" width="11.28" height="45.12" rx="0" fill="#344c5b" stroke="none" stroke-width="2"/>
+<rect x="445.24" y="1248.88" width="11.28" height="45.12" rx="0" fill="#344c5b" stroke="none" stroke-width="2"/>
+<rect x="723.48" y="1248.88" width="11.28" height="45.12" rx="0" fill="#344c5b" stroke="none" stroke-width="2"/>
+<rect x="445.24" y="1314.6799999999998" width="11.28" height="45.12" rx="0" fill="#344c5b" stroke="none" stroke-width="2"/>
+<rect x="723.48" y="1314.6799999999998" width="11.28" height="45.12" rx="0" fill="#344c5b" stroke="none" stroke-width="2"/>
+<rect x="445.24" y="1380.48" width="11.28" height="45.12" rx="0" fill="#344c5b" stroke="none" stroke-width="2"/>
+<rect x="723.48" y="1380.48" width="11.28" height="45.12" rx="0" fill="#344c5b" stroke="none" stroke-width="2"/>
+<rect x="445.24" y="1446.28" width="11.28" height="45.12" rx="0" fill="#344c5b" stroke="none" stroke-width="2"/>
+<rect x="723.48" y="1446.28" width="11.28" height="45.12" rx="0" fill="#344c5b" stroke="none" stroke-width="2"/>
+<rect x="445.24" y="1512.08" width="11.28" height="45.12" rx="0" fill="#344c5b" stroke="none" stroke-width="2"/>
+<rect x="723.48" y="1512.08" width="11.28" height="45.12" rx="0" fill="#344c5b" stroke="none" stroke-width="2"/>
+<rect x="445.24" y="1577.8799999999999" width="11.28" height="45.12" rx="0" fill="#344c5b" stroke="none" stroke-width="2"/>
+<rect x="723.48" y="1577.8799999999999" width="11.28" height="45.12" rx="0" fill="#344c5b" stroke="none" stroke-width="2"/>
+<rect x="445.24" y="1643.6799999999998" width="11.28" height="45.12" rx="0" fill="#344c5b" stroke="none" stroke-width="2"/>
+<rect x="723.48" y="1643.6799999999998" width="11.28" height="45.12" rx="0" fill="#344c5b" stroke="none" stroke-width="2"/>
+<rect x="445.24" y="1709.48" width="11.28" height="45.12" rx="0" fill="#344c5b" stroke="none" stroke-width="2"/>
+<rect x="723.48" y="1709.48" width="11.28" height="45.12" rx="0" fill="#344c5b" stroke="none" stroke-width="2"/>
+<rect x="445.24" y="1775.28" width="11.28" height="45.12" rx="0" fill="#344c5b" stroke="none" stroke-width="2"/>
+<rect x="723.48" y="1775.28" width="11.28" height="45.12" rx="0" fill="#344c5b" stroke="none" stroke-width="2"/>
+<rect x="445.24" y="1841.08" width="11.28" height="45.12" rx="0" fill="#344c5b" stroke="none" stroke-width="2"/>
+<rect x="723.48" y="1841.08" width="11.28" height="45.12" rx="0" fill="#344c5b" stroke="none" stroke-width="2"/>
+<rect x="445.24" y="1906.8799999999999" width="11.28" height="45.12" rx="0" fill="#344c5b" stroke="none" stroke-width="2"/>
+<rect x="723.48" y="1906.8799999999999" width="11.28" height="45.12" rx="0" fill="#344c5b" stroke="none" stroke-width="2"/>
+<rect x="445.24" y="1972.6799999999998" width="11.28" height="45.12" rx="0" fill="#344c5b" stroke="none" stroke-width="2"/>
+<rect x="723.48" y="1972.6799999999998" width="11.28" height="45.12" rx="0" fill="#344c5b" stroke="none" stroke-width="2"/>
+<rect x="490.36" y="1756.48" width="56.4" height="63.919999999999995" rx="0" fill="#846c47" stroke="#b1c9ca" stroke-width="2"/>
+<rect x="631.36" y="1536.52" width="60.16" height="71.44" rx="0" fill="#386876" stroke="#b1c9ca" stroke-width="2"/>
+<rect x="492.24" y="1294.94" width="60.16" height="65.8" rx="0" fill="#3c756e" stroke="#b1c9ca" stroke-width="2"/>
+<rect x="552.4" y="1316.56" width="34.78" height="41.36" rx="0" fill="#345453" stroke="#7ba7a1" stroke-width="2"/>
+<rect x="561.8" y="1948.24" width="56.4" height="52.64" rx="0" fill="#576e7d" stroke="#b6c4c6" stroke-width="2"/>
+<rect x="576.84" y="1972.6799999999998" width="26.32" height="30.08" rx="0" fill="#c3c9c2" stroke="#f1ce90" stroke-width="3"/>
+<rect x="552.4" y="1929.4399999999998" width="3.76" height="75.19999999999999" rx="0" fill="#253744" stroke="none" stroke-width="2"/>
+<rect x="623.84" y="1929.4399999999998" width="3.76" height="75.19999999999999" rx="0" fill="#253744" stroke="none" stroke-width="2"/>
+<rect x="582.386" y="1931.79" width="15.227999999999998" height="2.82" rx="0" fill="#9ccbdc" stroke="#9ccbdc" stroke-width="2"/>
+<rect x="537.36" y="1085.32" width="15.04" height="22.56" rx="0" fill="#c9b89a" stroke="#e3d4b3" stroke-width="2"/>
+<rect x="627.6" y="1085.32" width="15.04" height="22.56" rx="0" fill="#c9b89a" stroke="#e3d4b3" stroke-width="2"/>
+<polyline points="544.88,1096.6 635.12,1096.6" fill="none" stroke="#c9b89a" stroke-width="9" stroke-linejoin="round" stroke-dasharray="9 8"/>
+<polyline points="590.0,1982.08 590.0,1933.1999999999998 590.0,1835.4399999999998 590.0,1393.6399999999999 522.32,1369.2 522.32,1327.84" fill="none" stroke="#65d9dd" stroke-width="4" stroke-linejoin="round"/>
+<polyline points="522.32,1369.2 590.0,1393.6399999999999 590.0,1098.48" fill="none" stroke="#65d9dd" stroke-width="4" stroke-linejoin="round"/>
+<polyline points="590.0,1730.1599999999999 590.0,1677.52" fill="none" stroke="#65d9dd" stroke-width="4" stroke-linejoin="round"/>
+<polyline points="590.0,1677.52 597.3176212050292,1689.455343308833" fill="none" stroke="#65d9dd" stroke-width="4" stroke-linejoin="round"/>
+<polyline points="590.0,1677.52 582.6823787949708,1689.455343308833" fill="none" stroke="#65d9dd" stroke-width="4" stroke-linejoin="round"/>
+<polyline points="590.0,1485.76 590.0,1433.12" fill="none" stroke="#65d9dd" stroke-width="4" stroke-linejoin="round"/>
+<polyline points="590.0,1433.12 597.3176212050292,1445.055343308833" fill="none" stroke="#65d9dd" stroke-width="4" stroke-linejoin="round"/>
+<polyline points="590.0,1433.12 582.6823787949708,1445.055343308833" fill="none" stroke="#65d9dd" stroke-width="4" stroke-linejoin="round"/>
+<polyline points="590.0,1222.56 590.0,1169.92" fill="none" stroke="#65d9dd" stroke-width="4" stroke-linejoin="round"/>
+<polyline points="590.0,1169.92 597.3176212050292,1181.8553433088332" fill="none" stroke="#65d9dd" stroke-width="4" stroke-linejoin="round"/>
+<polyline points="590.0,1169.92 582.6823787949708,1181.8553433088332" fill="none" stroke="#65d9dd" stroke-width="4" stroke-linejoin="round"/>
+<polyline points="590.0,1098.48 571.2,1074.04" fill="none" stroke="#65d9dd" stroke-width="4" stroke-linejoin="round"/>
+<polyline points="571.2,1074.04 584.2772293601176,1079.038607032252" fill="none" stroke="#65d9dd" stroke-width="4" stroke-linejoin="round"/>
+<polyline points="571.2,1074.04 572.6769851395443,1087.9618718173083" fill="none" stroke="#65d9dd" stroke-width="4" stroke-linejoin="round"/>
+<polyline points="590.0,816.48 571.2,792.04" fill="none" stroke="#65d9dd" stroke-width="4" stroke-linejoin="round"/>
+<polyline points="571.2,792.04 584.2772293601176,797.038607032252" fill="none" stroke="#65d9dd" stroke-width="4" stroke-linejoin="round"/>
+<polyline points="571.2,792.04 572.6769851395443,805.9618718173084" fill="none" stroke="#65d9dd" stroke-width="4" stroke-linejoin="round"/>
+<polyline points="590.0,534.48 571.2,510.03999999999996" fill="none" stroke="#65d9dd" stroke-width="4" stroke-linejoin="round"/>
+<polyline points="571.2,510.03999999999996 584.2772293601176,515.038607032252" fill="none" stroke="#65d9dd" stroke-width="4" stroke-linejoin="round"/>
+<polyline points="571.2,510.03999999999996 572.6769851395443,523.9618718173084" fill="none" stroke="#65d9dd" stroke-width="4" stroke-linejoin="round"/>
+<polyline points="590.0,1045.84 507.28,996.9599999999999" fill="none" stroke="#c5a0df" stroke-width="3" stroke-linejoin="round" stroke-dasharray="9 8"/>
+<polyline points="637.0,647.28 670.84,683.0 670.84,639.76 642.64,617.2" fill="none" stroke="#c5a0df" stroke-width="3" stroke-linejoin="round" stroke-dasharray="9 8"/>
+<polyline points="590.0,463.03999999999996 684.0,423.56 684.0,376.56 672.72,361.52" fill="none" stroke="#c5a0df" stroke-width="3" stroke-linejoin="round" stroke-dasharray="9 8"/>
+<rect x="493.18" y="983.8" width="28.2" height="26.32" rx="0" fill="#62526d" stroke="#c5a0df" stroke-width="2"/>
+<rect x="623.84" y="602.16" width="37.599999999999994" height="30.08" rx="0" fill="#62526d" stroke="#c5a0df" stroke-width="2"/>
+<rect x="653.92" y="346.48" width="37.599999999999994" height="30.08" rx="0" fill="#62526d" stroke="#c5a0df" stroke-width="2"/>
+<circle cx="535.48" cy="1809.12" r="8" fill="#65d9dd" stroke="none" stroke-width="2"/>
+<circle cx="580.6" cy="1976.4399999999998" r="8" fill="#65d9dd" stroke="none" stroke-width="2"/>
+<circle cx="585.488" cy="308.88" r="12" fill="#f0bd71" stroke="none" stroke-width="2"/>
+<circle cx="522.32" cy="1310.9199999999998" r="9" fill="#f0bd71" stroke="none" stroke-width="2"/>
+<polyline points="585.488,308.88 398.0,390.0 115.0,390.0" fill="none" stroke="#6a8797" stroke-width="2" stroke-linejoin="round"/>
+<text x="114" y="353.42" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="29" font-weight="700" text-anchor="start" fill="#f0bd71">06  深处钥匙</text>
+<text x="114" y="385.54" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="23" font-weight="400" text-anchor="start" fill="#9eb7c4">首席遗体旁 · 高台约 +12m</text>
+<polyline points="672.72,361.52 775.0,410.0 1057.0,410.0" fill="none" stroke="#6a8797" stroke-width="2" stroke-linejoin="round"/>
+<text x="785" y="373.42" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="29" font-weight="700" text-anchor="start" fill="#c5a0df">设备侧台</text>
+<text x="785" y="405.54" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="23" font-weight="400" text-anchor="start" fill="#9eb7c4">可选记录 / 补给</text>
+<polyline points="486.6,421.67999999999995 398.0,520.0 115.0,520.0" fill="none" stroke="#6a8797" stroke-width="2" stroke-linejoin="round"/>
+<text x="114" y="483.42" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="29" font-weight="700" text-anchor="start" fill="#eaf4f5">深厅</text>
+<text x="114" y="515.54" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="23" font-weight="400" text-anchor="start" fill="#9eb7c4">小型敌对生物</text>
+<polyline points="642.64,617.2 775.0,660.0 1057.0,660.0" fill="none" stroke="#6a8797" stroke-width="2" stroke-linejoin="round"/>
+<text x="785" y="623.42" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="29" font-weight="700" text-anchor="start" fill="#c5a0df">弹射观察台</text>
+<text x="785" y="655.54" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="23" font-weight="400" text-anchor="start" fill="#9eb7c4">生物弹射 / 东侧缓坡</text>
+<polyline points="486.6,688.64 398.0,745.0 115.0,745.0" fill="none" stroke="#6a8797" stroke-width="2" stroke-linejoin="round"/>
+<text x="114" y="708.42" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="29" font-weight="700" text-anchor="start" fill="#eaf4f5">栖息厅</text>
+<text x="114" y="740.54" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="23" font-weight="400" text-anchor="start" fill="#9eb7c4">多只柔软生物</text>
+<polyline points="507.28,996.9599999999999 398.0,935.0 115.0,935.0" fill="none" stroke="#6a8797" stroke-width="2" stroke-linejoin="round"/>
+<text x="114" y="898.42" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="29" font-weight="700" text-anchor="start" fill="#c5a0df">冰封运输橇</text>
+<text x="114" y="930.54" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="23" font-weight="400" text-anchor="start" fill="#9eb7c4">可选物资箱</text>
+<polyline points="693.4,948.0799999999999 775.0,1000.0 1057.0,1000.0" fill="none" stroke="#6a8797" stroke-width="2" stroke-linejoin="round"/>
+<text x="785" y="963.42" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="29" font-weight="700" text-anchor="start" fill="#eaf4f5">05  入口厅</text>
+<text x="785" y="995.54" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="23" font-weight="400" text-anchor="start" fill="#9eb7c4">骨脊斜坡 / 生物体验</text>
+<polyline points="635.12,1096.6 775.0,1135.0 1057.0,1135.0" fill="none" stroke="#6a8797" stroke-width="2" stroke-linejoin="round"/>
+<text x="785" y="1098.42" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="29" font-weight="700" text-anchor="start" fill="#eaf4f5">04  巨型骨口</text>
+<text x="785" y="1130.54" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="23" font-weight="400" text-anchor="start" fill="#9eb7c4">基地与遗迹的连接口</text>
+<polyline points="522.32,1327.84 398.0,1360.0 115.0,1360.0" fill="none" stroke="#6a8797" stroke-width="2" stroke-linejoin="round"/>
+<text x="114" y="1323.42" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="29" font-weight="700" text-anchor="start" fill="#eaf4f5">03  主科考楼</text>
+<text x="114" y="1355.54" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="23" font-weight="400" text-anchor="start" fill="#9eb7c4">保险柜 / 实验 / 观察夹层</text>
+<polyline points="661.44,1572.24 775.0,1590.0 1057.0,1590.0" fill="none" stroke="#6a8797" stroke-width="2" stroke-linejoin="round"/>
+<text x="785" y="1553.42" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="29" font-weight="700" text-anchor="start" fill="#eaf4f5">生活与后勤楼</text>
+<text x="785" y="1585.54" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="23" font-weight="400" text-anchor="start" fill="#9eb7c4">床铺 / 撤离记录 / 补给</text>
+<polyline points="518.56,1788.4399999999998 398.0,1800.0 115.0,1800.0" fill="none" stroke="#6a8797" stroke-width="2" stroke-linejoin="round"/>
+<text x="114" y="1763.42" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="29" font-weight="700" text-anchor="start" fill="#eaf4f5">02  仓储楼</text>
+<text x="114" y="1795.54" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="23" font-weight="400" text-anchor="start" fill="#9eb7c4">电池 / 医疗 / 维护台</text>
+<polyline points="590.0,1933.1999999999998 775.0,1875.0 1057.0,1875.0" fill="none" stroke="#6a8797" stroke-width="2" stroke-linejoin="round"/>
+<text x="785" y="1838.42" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="29" font-weight="700" text-anchor="start" fill="#9ccbdc">融冰出口</text>
+<text x="785" y="1870.54" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="23" font-weight="400" text-anchor="start" fill="#9eb7c4">热风机融开封冰</text>
+<polyline points="590.0,1987.7199999999998 398.0,2035.0 115.0,2035.0" fill="none" stroke="#6a8797" stroke-width="2" stroke-linejoin="round"/>
+<text x="114" y="1998.42" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="29" font-weight="700" text-anchor="start" fill="#f0bd71">01  飞船与停机坪</text>
+<text x="114" y="2030.54" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="23" font-weight="400" text-anchor="start" fill="#9eb7c4">取装备 → 返航安装能源</text>
+<text x="785" y="2059.54" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="23" font-weight="400" text-anchor="start" fill="#9eb7c4">地表约 150m 宽</text>
+<text x="785" y="2092.54" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="23" font-weight="400" text-anchor="start" fill="#9eb7c4">全图纵深约 940m</text>
+<text x="1174" y="274.36" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="32" font-weight="700" text-anchor="start" fill="#eaf4f5">02  主科考楼 · 放大平面</text>
+<text x="1174" y="319.5" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="25" font-weight="400" text-anchor="start" fill="#9eb7c4">南侧进出；东侧附间是可选实验环路</text>
+<rect x="1275.0" y="447.5" width="480" height="525" rx="0" fill="#214640" stroke="#7baaa4" stroke-width="4"/>
+<rect x="1755.0" y="620.0" width="277.5" height="330" rx="0" fill="#254250" stroke="#71939d" stroke-width="4"/>
+<polyline points="1387.5,972.5 1552.5,972.5" fill="none" stroke="#0b1825" stroke-width="10" stroke-linejoin="round"/>
+<polyline points="1755.0,753.4999999999997 1755.0,816.5000000000003" fill="none" stroke="#9ccbdc" stroke-width="10" stroke-linejoin="round"/>
+<rect x="1301.25" y="812.0000000000002" width="67.5" height="36.0" rx="0" fill="#9abcb5" stroke="none" stroke-width="2"/>
+<rect x="1480.5" y="550.9999999999997" width="69.0" height="30" rx="0" fill="#f0bd71" stroke="none" stroke-width="2"/>
+<rect x="1575.0" y="895.9999999999997" width="60" height="24.0" rx="0" fill="#658b91" stroke="none" stroke-width="2"/>
+<rect x="1636.5" y="818.75" width="57.0" height="22.5" rx="0" fill="#67818c" stroke="none" stroke-width="2"/>
+<rect x="1887.75" y="685.9999999999997" width="34.5" height="18.0" rx="0" fill="#f0bd71" stroke="none" stroke-width="2"/>
+<rect x="1305.0" y="729.5000000000002" width="30" height="21.0" rx="0" fill="#6b8f95" stroke="none" stroke-width="2"/>
+<rect x="1305.0" y="624.5000000000002" width="30" height="21.0" rx="0" fill="#6b8f95" stroke="none" stroke-width="2"/>
+<rect x="1305.0" y="504.50000000000017" width="30" height="21.0" rx="0" fill="#6b8f95" stroke="none" stroke-width="2"/>
+<rect x="1545.0" y="470.0" width="135" height="210" rx="0" fill="#304e51" stroke="#7e9c9b" stroke-width="2"/>
+<polyline points="1545.0,680.0 1545.0,470.0 1680.0,470.0 1680.0,680.0 1545.0,680.0" fill="none" stroke="#c5a0df" stroke-width="3" stroke-linejoin="round" stroke-dasharray="9 8"/>
+<polyline points="1716.0,717.5 1716.0,527.0000000000002" fill="none" stroke="#c5a0df" stroke-width="8" stroke-linejoin="round"/>
+<polyline points="1716.0,680.0 1716.0,575.0" fill="none" stroke="#c5a0df" stroke-width="3" stroke-linejoin="round"/>
+<polyline points="1716.0,575.0 1723.3176212050291,586.9353433088331" fill="none" stroke="#c5a0df" stroke-width="3" stroke-linejoin="round"/>
+<polyline points="1716.0,575.0 1708.6823787949709,586.9353433088331" fill="none" stroke="#c5a0df" stroke-width="3" stroke-linejoin="round"/>
+<text x="1612.5" y="539.5599999999997" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="22" font-weight="700" text-anchor="middle" fill="#c5a0df">夹层</text>
+<text x="1612.5" y="572.6200000000003" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="19" font-weight="400" text-anchor="middle" fill="#c5a0df">+3.2m</text>
+<text x="1515" y="635.04" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="23" font-weight="700" text-anchor="middle" fill="#f0bd71">保险柜</text>
+<text x="1353.0" y="890.04" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="23" font-weight="700" text-anchor="middle" fill="#eaf4f5">样本台</text>
+<text x="1894.5" y="749.5599999999997" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="22" font-weight="700" text-anchor="middle" fill="#f0bd71">旁路电源</text>
+<text x="1894.5" y="867.54" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="23" font-weight="700" text-anchor="middle" fill="#eaf4f5">检修附间</text>
+<text x="1605" y="962.1" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="20" font-weight="400" text-anchor="middle" fill="#9eb7c4">接待台</text>
+<text x="1395" y="700.58" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="21" font-weight="700" text-anchor="middle" fill="#65d9dd">主通道</text>
+<polyline points="1440.0,1010.0 1440.0,740.0" fill="none" stroke="#65d9dd" stroke-width="4" stroke-linejoin="round"/>
+<polyline points="1440.0,740.0 1447.3176212050291,751.9353433088331" fill="none" stroke="#65d9dd" stroke-width="4" stroke-linejoin="round"/>
+<polyline points="1440.0,740.0 1432.6823787949709,751.9353433088331" fill="none" stroke="#65d9dd" stroke-width="4" stroke-linejoin="round"/>
+<polyline points="1440.0,740.0 1485.0,620.0" fill="none" stroke="#65d9dd" stroke-width="4" stroke-linejoin="round"/>
+<polyline points="1485.0,620.0 1487.6609234255304,633.744798526114" fill="none" stroke="#65d9dd" stroke-width="4" stroke-linejoin="round"/>
+<polyline points="1485.0,620.0 1473.9575189361967,628.6060218426138" fill="none" stroke="#65d9dd" stroke-width="4" stroke-linejoin="round"/>
+<polyline points="1590.0,785.0 1800.0,785.0" fill="none" stroke="#c5a0df" stroke-width="3" stroke-linejoin="round"/>
+<polyline points="1800.0,785.0 1788.0646566911669,792.3176212050292" fill="none" stroke="#c5a0df" stroke-width="3" stroke-linejoin="round"/>
+<polyline points="1800.0,785.0 1788.0646566911669,777.6823787949708" fill="none" stroke="#c5a0df" stroke-width="3" stroke-linejoin="round"/>
+<circle cx="2010" cy="710" r="6" fill="#65d9dd" stroke="none" stroke-width="2"/>
+<text x="2028" y="430.54" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="23" font-weight="400" text-anchor="start" fill="#9ccbdc">N ↑</text>
+<text x="1665" y="1024.5" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="25" font-weight="700" text-anchor="middle" fill="#65d9dd">↑ 南侧入口</text>
+<text x="1180" y="1068.5" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="25" font-weight="400" text-anchor="start" fill="#9eb7c4">青色：开柜主通道    紫色：可选实验与夹层</text>
+<polyline points="1180.0,1100.0 2100.0,1100.0" fill="none" stroke="#294556" stroke-width="2" stroke-linejoin="round"/>
+<text x="1180" y="1147.44" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="28" font-weight="700" text-anchor="start" fill="#c5a0df">实验环路</text>
+<text x="1180" y="1191.5" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="25" font-weight="400" text-anchor="start" fill="#eaf4f5">融开检修门 → E 开门 → 复位电源 → 解冻并观察样本</text>
+<text x="1180" y="1239.5" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="25" font-weight="400" text-anchor="start" fill="#9eb7c4">观察夹层经楼内斜坡往返；观察窗密闭。</text>
+<text x="1180" y="1287.5" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="25" font-weight="400" text-anchor="start" fill="#f0bd71">实验、供电和日志均不作为开保险柜的门槛。</text>
+<text x="1174" y="1451.36" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="32" font-weight="700" text-anchor="start" fill="#eaf4f5">03  路线与图例</text>
+<circle cx="1200" cy="1504" r="21" fill="#0b1825" stroke="#65d9dd" stroke-width="3"/>
+<text x="1200" y="1511.5" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="25" font-weight="700" text-anchor="middle" fill="#65d9dd">1</text>
+<text x="1240" y="1511.44" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="28" font-weight="700" text-anchor="start" fill="#eaf4f5">出发</text>
+<text x="1380" y="1510.5" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="25" font-weight="400" text-anchor="start" fill="#9eb7c4">飞船取装备，融开停机坪出口。</text>
+<circle cx="1200" cy="1587" r="21" fill="#0b1825" stroke="#65d9dd" stroke-width="3"/>
+<text x="1200" y="1594.5" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="25" font-weight="700" text-anchor="middle" fill="#65d9dd">2</text>
+<text x="1240" y="1594.44" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="28" font-weight="700" text-anchor="start" fill="#eaf4f5">调查</text>
+<text x="1380" y="1593.5" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="25" font-weight="400" text-anchor="start" fill="#9eb7c4">前往主科考楼，发现能源与钥匙线索。</text>
+<circle cx="1200" cy="1670" r="21" fill="#0b1825" stroke="#65d9dd" stroke-width="3"/>
+<text x="1200" y="1677.5" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="25" font-weight="700" text-anchor="middle" fill="#65d9dd">3</text>
+<text x="1240" y="1677.44" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="28" font-weight="700" text-anchor="start" fill="#eaf4f5">深入</text>
+<text x="1380" y="1676.5" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="25" font-weight="400" text-anchor="start" fill="#9eb7c4">穿过骨口，依次进入口厅、栖息厅、深厅。</text>
+<circle cx="1200" cy="1753" r="21" fill="#0b1825" stroke="#65d9dd" stroke-width="3"/>
+<text x="1200" y="1760.5" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="25" font-weight="700" text-anchor="middle" fill="#65d9dd">4</text>
+<text x="1240" y="1760.44" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="28" font-weight="700" text-anchor="start" fill="#eaf4f5">取钥匙</text>
+<text x="1380" y="1759.5" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="25" font-weight="400" text-anchor="start" fill="#9eb7c4">沿可逆骨脊斜坡到深处高台。</text>
+<circle cx="1200" cy="1836" r="21" fill="#0b1825" stroke="#f0bd71" stroke-width="3"/>
+<text x="1200" y="1843.5" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="25" font-weight="700" text-anchor="middle" fill="#f0bd71">5</text>
+<text x="1240" y="1843.44" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="28" font-weight="700" text-anchor="start" fill="#eaf4f5">返航</text>
+<text x="1380" y="1842.5" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="25" font-weight="400" text-anchor="start" fill="#9eb7c4">原路返回科考楼开柜，再回飞船。</text>
+<text x="1180" y="1939.5" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="25" font-weight="400" text-anchor="start" fill="#f0bd71">回船后操作核心台两次：安装能源 → 恢复航行。</text>
+<polyline points="1180.0,1974.0 2100.0,1974.0" fill="none" stroke="#294556" stroke-width="2" stroke-linejoin="round"/>
+<polyline points="1188.0,2013.0 1250.0,2013.0" fill="none" stroke="#65d9dd" stroke-width="5" stroke-linejoin="round"/>
+<text x="1265" y="2015.52" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="24" font-weight="400" text-anchor="start" fill="#eaf4f5">主线 / 骨脊可往返</text>
+<polyline points="1640.0,2013.0 1702.0,2013.0" fill="none" stroke="#c5a0df" stroke-width="4" stroke-linejoin="round" stroke-dasharray="9 8"/>
+<text x="1717" y="2015.52" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="24" font-weight="400" text-anchor="start" fill="#eaf4f5">可选探索支路</text>
+<circle cx="1208" cy="2076" r="9" fill="#65d9dd" stroke="none" stroke-width="2"/>
+<text x="1235" y="2078.52" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="24" font-weight="400" text-anchor="start" fill="#9eb7c4">慢充 / 补氧</text>
+<rect x="1600" y="2068" width="25" height="16" rx="0" fill="#9ccbdc" stroke="none" stroke-width="1"/>
+<text x="1640" y="2078.52" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="24" font-weight="400" text-anchor="start" fill="#9eb7c4">可融封冰</text>
+<circle cx="1890" cy="2076" r="9" fill="#f0bd71" stroke="none" stroke-width="2"/>
+<text x="1913" y="2078.52" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="24" font-weight="400" text-anchor="start" fill="#9eb7c4">关键目标</text>
+<polyline points="65.0,2186.0 2135.0,2186.0" fill="none" stroke="#294556" stroke-width="2" stroke-linejoin="round"/>
+<text x="65" y="2236.46" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="27" font-weight="700" text-anchor="start" fill="#eaf4f5">图面说明</text>
+<text x="65" y="2277.5" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="25" font-weight="400" text-anchor="start" fill="#9eb7c4">总图按 X/Z 等比例投影；北向约定为 −Z。骨脊高度以文字标注，屋顶与高处骨架省略。</text>
+<text x="65" y="2320.5" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="25" font-weight="400" text-anchor="start" fill="#9eb7c4">细小物资、表层雪块与陈设已简化；本图记录 0.3 独立试玩实现，不代表整颗星球的最终设计。</text>
+<text x="65" y="2362.62" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="19" font-weight="400" text-anchor="start" fill="#658697">LOST IN SPACE  /  PLANET 00</text>
+<text x="2135" y="2363.6" font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" font-size="20" font-weight="400" text-anchor="end" fill="#658697">2026.10.28 · 平面资料图</text>
+</svg>

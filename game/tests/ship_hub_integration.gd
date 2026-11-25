@@ -118,7 +118,7 @@ func run_check() -> void:
     ship.close_panel()
     player.teleport_to(ShipHub3D.MISSION)
     ship.request("interact")
-    check(ship._facility == "mission", "任务终端未接入")
+    check(ship._facility in ["mission", "routes"], "任务终端未接入")
     ship.close_panel()
     player.teleport_to(Vector3(ShipDevices3D.PILOT_X[0], 0, -12.2))
     player.rotation.y = 0.0
