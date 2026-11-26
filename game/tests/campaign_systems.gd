@@ -48,6 +48,8 @@ func run() -> void:
     player.rotation.y = 0.0
     main._ship_session.credits = 100
     main.handle_action(1, "interact")
+    check(main._ship_session.has_panel(), "装备电脑没有打开")
+    main._ship_session.request("computer_action", "gear_thermal_suit")
     check(main._ship_session.has_gear(1, "thermal_suit"), "共享装备没有分配到船员")
     main._start_planet()
     player = main.players[1] as SpacePlayer3D

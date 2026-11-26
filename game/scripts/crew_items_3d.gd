@@ -1,17 +1,24 @@
 extends Node
 class_name CrewItems3D
 
-const CAPACITY: int = 2
+const CAPACITY: int = 4
 const EQUIPMENT_CAPACITY: int = 2
 const JET_REFILL_DELAY: float = 0.3
 const JET_REFILL_RATE: float = 1.0
 const JET_OXYGEN_COST: float = 2.0
-const NAMES: Dictionary = {"medical": "医疗包", "oxygen": "氧气瓶", "battery": "热能电池", "sample": "异常冰样", "penguin": "回声企鹅", "bubble": "反重力泡", "board": "雪地滑板", "hologram": "全息替身", "smoke": "彩色信号烟", "thermal_suit": "恒温外套", "wide_scanner": "广域扫描器", "signal_stabilizer": "信号稳压器", "lockpick": "撬锁工具"}
+const NAMES: Dictionary = {"suction": "手持吸推器", "chips": "薯片", "keepsake": "科考纪念杯", "crate": "轻型样本箱", "heater": "便携热风机", "cell": "备用电池", "fuel": "普通燃料", "medical": "医疗包", "oxygen": "氧气瓶", "battery": "热能电池", "sample": "异常冰样", "penguin": "回声企鹅", "bubble": "反重力泡", "board": "雪地滑板", "hologram": "全息替身", "smoke": "彩色信号烟", "thermal_suit": "恒温外套", "wide_scanner": "广域扫描器", "signal_stabilizer": "信号稳压器", "lockpick": "撬锁工具"}
 const EQUIPPABLE: Array[String] = ["oxygen", "thermal_suit", "wide_scanner", "signal_stabilizer"]
 const SUPPLIES: Array[String] = ["medical", "oxygen"]
 const CARGO: Array[String] = ["battery", "sample"]
 const HEAVY: Dictionary = {3: "core", 4: "freight", 5: "coolant"}
 const ICONS: Dictionary = {
+    "suction": preload("res://previews/frost_station/signs/icon_suction.png"),
+    "chips": preload("res://previews/frost_station/signs/icon_chips.png"),
+    "keepsake": preload("res://previews/frost_station/signs/icon_keepsake.png"),
+    "crate": preload("res://previews/frost_station/signs/icon_crate.png"),
+    "heater": preload("res://previews/frost_first_playable/heat.svg"),
+    "cell": preload("res://previews/frost_first_playable/cell.svg"),
+    "fuel": preload("res://previews/frost_first_playable/cell.svg"),
     "medical": preload("res://assets/items/icons/medical.svg"),
     "oxygen": preload("res://assets/items/icons/oxygen.svg"),
     "battery": preload("res://assets/items/icons/battery.svg"),
@@ -75,14 +82,28 @@ func _build_ui() -> void:
     add_child(_layer)
     _bar = Control.new()
     _bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
-    controller._place_hud(_bar, Control.PRESET_CENTER_BOTTOM, Vector2(-74, -160), Vector2(148, 68))
+    var bar_w: float = float(CAPACITY) * 78.0 - 10.0
+    controller._place_hud(_bar, Control.PRESET_CENTER_BOTTOM, Vector2(-bar_w * 0.5, -92), Vector2(bar_w, 68))
     _layer.add_child(_bar)
     for index: int in CAPACITY:
-        var panel: Panel = controller._panel(_bar, Vector2(index * 80, 0), Vector2(68, 68), Color("#183445"), Color("#56727c"), 10)
+        var panel: Panel = Panel.new()
+        panel.position = Vector2(index * 78, 0)
+        panel.size = Vector2(68, 68)
+        panel.add_theme_stylebox_override("panel", UIStyleKit.visor_slot(index == 0, false))
         panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+        _bar.add_child(panel)
         _cells.append(panel)
+        var key_tag: Label = Label.new()
+        key_tag.text = str(index + 1)
+        key_tag.position = Vector2(5, 2)
+        key_tag.size = Vector2(18, 16)
+        key_tag.add_theme_font_override("font", UIStyleKit.FONT_BOLD)
+        key_tag.add_theme_font_size_override("font_size", 10)
+        key_tag.add_theme_color_override("font_color", UIStyleKit.VISOR_MUTED)
+        key_tag.mouse_filter = Control.MOUSE_FILTER_IGNORE
+        panel.add_child(key_tag)
         var icon: TextureRect = TextureRect.new()
-        icon.position = Vector2(12, 12)
+        icon.position = Vector2(12, 10)
         icon.size = Vector2(44, 44)
         icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
         icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
@@ -90,23 +111,25 @@ func _build_ui() -> void:
         panel.add_child(icon)
         _icons.append(icon)
         var level: Label = Label.new()
-        level.position = Vector2(4, 45)
-        level.size = Vector2(54, 20)
+        level.position = Vector2(4, 46)
+        level.size = Vector2(58, 18)
         level.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-        level.add_theme_font_size_override("font_size", 12)
-        level.add_theme_color_override("font_color", Color("#c9f6f3"))
+        level.add_theme_font_override("font", UIStyleKit.FONT_BOLD)
+        level.add_theme_font_size_override("font_size", 11)
+        level.add_theme_color_override("font_color", UIStyleKit.VISOR_CYAN)
         level.mouse_filter = Control.MOUSE_FILTER_IGNORE
         panel.add_child(level)
         _slot_levels.append(level)
-    _choice = controller._panel(_layer, Vector2(390, 230), Vector2(500, 240), Color("#173446"), Color("#8ccdd0"), 16)
+    _choice = controller._panel(_layer, Vector2(390, 230), Vector2(500, 240), UIStyleKit.VISOR_GLASS_DEEP, UIStyleKit.VISOR_CYAN, 10)
     _choice.visible = false
     _build_equipment_ui()
 
 func _build_equipment_ui() -> void:
     _equipment_column = VBoxContainer.new()
-    _equipment_column.add_theme_constant_override("separation", 12)
+    _equipment_column.add_theme_constant_override("separation", 10)
     _equipment_column.mouse_filter = Control.MOUSE_FILTER_IGNORE
-    controller._place_hud(_equipment_column, Control.PRESET_CENTER_LEFT, Vector2(24, -74), Vector2(68, 148))
+    # 整齐排在左上角生命体征下方，为左下角战术雷达小地图让出充裕空间
+    controller._place_hud(_equipment_column, Control.PRESET_TOP_LEFT, Vector2(20, 112), Vector2(68, 146))
     _layer.add_child(_equipment_column)
     for index: int in EQUIPMENT_CAPACITY:
         _build_equipment_cell()
@@ -116,24 +139,27 @@ func _build_equipment_ui() -> void:
     _jet_bar = _equipment_jets[0]
 
 func _build_equipment_cell() -> void:
-    _equipment_panel = controller._panel(_equipment_column, Vector2.ZERO, Vector2(68, 68), Color("#9d5728"), Color("#f2ad60"), 10)
+    _equipment_panel = Panel.new()
+    _equipment_panel.add_theme_stylebox_override("panel", UIStyleKit.visor_slot(false, true))
     _equipment_panel.custom_minimum_size = Vector2(68, 68)
     _equipment_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
     _equipment_panel.tooltip_text = "宇航服装备"
+    _equipment_column.add_child(_equipment_panel)
     _equipment_icon = TextureRect.new()
     _equipment_icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
     _equipment_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
     _equipment_icon.texture = ICONS.oxygen
-    _equipment_icon.position = Vector2(14, 8)
+    _equipment_icon.position = Vector2(12, 8)
     _equipment_icon.size = Vector2(40, 40)
     _equipment_icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
     _equipment_panel.add_child(_equipment_icon)
     _equipment_percent = Label.new()
-    _equipment_percent.position = Vector2(4, 45)
-    _equipment_percent.size = Vector2(54, 20)
+    _equipment_percent.position = Vector2(4, 46)
+    _equipment_percent.size = Vector2(52, 18)
     _equipment_percent.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-    _equipment_percent.add_theme_font_size_override("font_size", 12)
-    _equipment_percent.add_theme_color_override("font_color", Color("#fff0d4"))
+    _equipment_percent.add_theme_font_override("font", UIStyleKit.FONT_BOLD)
+    _equipment_percent.add_theme_font_size_override("font_size", 11)
+    _equipment_percent.add_theme_color_override("font_color", UIStyleKit.VISOR_AMBER)
     _equipment_percent.mouse_filter = Control.MOUSE_FILTER_IGNORE
     _equipment_panel.add_child(_equipment_percent)
     _jet_bar = ProgressBar.new()
@@ -143,16 +169,16 @@ func _build_equipment_cell() -> void:
     _jet_bar.tooltip_text = "喷气储备"
     _jet_bar.add_theme_font_size_override("font_size", 1)
     var background: StyleBoxFlat = StyleBoxFlat.new()
-    background.bg_color = Color("#59341e")
+    background.bg_color = Color(0.04, 0.10, 0.15, 0.78)
     background.set_corner_radius_all(2)
     var fill: StyleBoxFlat = StyleBoxFlat.new()
-    fill.bg_color = Color("#ffdea0")
+    fill.bg_color = UIStyleKit.VISOR_CYAN
     fill.set_corner_radius_all(2)
     _jet_bar.add_theme_stylebox_override("background", background)
     _jet_bar.add_theme_stylebox_override("fill", fill)
-    _jet_bar.custom_minimum_size = Vector2(4, 42)
+    _jet_bar.custom_minimum_size = Vector2(4, 44)
     _jet_bar.position = Vector2(60, 8)
-    _jet_bar.size = Vector2(4, 42)
+    _jet_bar.size = Vector2(4, 44)
     _equipment_panel.add_child(_jet_bar)
     _equipment_cells.append(_equipment_panel)
     _equipment_icons.append(_equipment_icon)
@@ -186,11 +212,8 @@ func _process(_delta: float) -> void:
             _equipment_percent = _equipment_levels[index]
             _jet_bar = _equipment_jets[index]
         if _last_focus != focus:
-            var style: StyleBoxFlat = (_equipment_cells[index].get_theme_stylebox("panel") as StyleBoxFlat).duplicate() as StyleBoxFlat
             var chosen: bool = bool(bag.equipment_active) and int(bag.equipment_selected) == index
-            style.border_color = Color("#ffe6a8") if chosen else Color("#f2ad60")
-            style.set_border_width_all(3 if chosen else 1)
-            _equipment_cells[index].add_theme_stylebox_override("panel", style)
+            _equipment_cells[index].add_theme_stylebox_override("panel", UIStyleKit.visor_slot(chosen, true))
     var slots: Array = bag.slots
     for index: int in CAPACITY:
         var kind: String = String((slots[index] as Dictionary).get("kind", ""))
@@ -198,11 +221,8 @@ func _process(_delta: float) -> void:
         _slot_levels[index].visible = kind == "oxygen"
         _slot_levels[index].text = "%d%%" % ceili(float((slots[index] as Dictionary).get("oxygen", 100.0))) if kind == "oxygen" else ""
         if _last_focus != focus:
-            var style: StyleBoxFlat = (_cells[index].get_theme_stylebox("panel") as StyleBoxFlat).duplicate() as StyleBoxFlat
             var chosen: bool = not bool(bag.equipment_active) and int(bag.selected) == index
-            style.border_color = Color("#a4f3e0") if chosen else Color("#56727c")
-            style.set_border_width_all(3 if chosen else 1)
-            _cells[index].add_theme_stylebox_override("panel", style)
+            _cells[index].add_theme_stylebox_override("panel", UIStyleKit.visor_slot(chosen, false))
     _last_selected = int(bag.selected)
     _last_focus = focus
     _refresh_world()
@@ -210,7 +230,9 @@ func _process(_delta: float) -> void:
 
 func ensure_bag(peer_id: int) -> Dictionary:
     if not bags.has(peer_id):
-        var slots: Array = [{}, {}]
+        var slots: Array = []
+        for _i: int in CAPACITY:
+            slots.append({})
         var legacy: Dictionary = controller._ship_session.packs.get(peer_id, {})
         var cursor: int = 0
         for kind: String in SUPPLIES:
@@ -220,6 +242,8 @@ func ensure_bag(peer_id: int) -> Dictionary:
                     cursor += 1
         bags[peer_id] = {"slots": slots, "selected": 0}
     var bag: Dictionary = bags[peer_id]
+    while (bag.slots as Array).size() < CAPACITY:
+        (bag.slots as Array).append({})
     if not bag.has("equipment"):
         bag.equipment = [{}, {}]
         if bool(bag.get("oxygen_mounted", false)):
@@ -489,6 +513,8 @@ func add_item(peer_id: int, kind: String, reference: int = -1, data: Dictionary 
     for index: int in CAPACITY:
         if (bag.slots[index] as Dictionary).is_empty():
             bag.slots[index] = {"kind": kind, "ref": reference}
+            if kind in ["heater", "cell", "fuel"]:
+                bag.slots[index].charge = clampf(float(data.get("charge", 180.0)), 0.0, 180.0)
             if kind == "oxygen":
                 bag.slots[index]["oxygen"] = clampf(float(data.get("oxygen", 100.0)), 0.0, 100.0)
                 bag.slots[index]["jet_reserve"] = clampf(float(data.get("jet_reserve", 0.0)), 0.0, 1.0)
@@ -768,11 +794,15 @@ func handle_action(peer_id: int, action: String) -> void:
             _pending_choices.erase(peer_id)
             controller.handle_action(peer_id, choice)
         return
-    if action in ["slot_1", "slot_2", "slot_next", "slot_previous"]:
+    if action in ["slot_1", "slot_2", "slot_3", "slot_4", "slot_next", "slot_previous"]:
         var field: String = "equipment_selected" if bool(bag.equipment_active) else "selected"
         var capacity: int = EQUIPMENT_CAPACITY if bool(bag.equipment_active) else CAPACITY
         var direction: int = -1 if action == "slot_previous" else 1
-        bag[field] = posmod(int(bag[field]) + direction, capacity) if action in ["slot_next", "slot_previous"] else (0 if action == "slot_1" else 1)
+        if action in ["slot_next", "slot_previous"]:
+            bag[field] = posmod(int(bag[field]) + direction, capacity)
+        else:
+            var idx_map: Dictionary = {"slot_1": 0, "slot_2": 1, "slot_3": 2, "slot_4": 3}
+            bag[field] = clampi(int(idx_map.get(action, 0)), 0, capacity - 1)
         publish()
         return
     if action == "item_drop":
@@ -797,6 +827,20 @@ func _use_selected(peer_id: int) -> void:
             controller._ship_session._notify(peer_id, "装备栏已满 · Tab 选择装备后 G 卸下")
     elif SUPPLIES.has(kind):
         controller._ship_session._use_supply(peer_id, kind)
+    elif kind == "chips":
+        take_selected(peer_id)
+        publish()
+        controller._ship_session._notify(peer_id, "咔嚓！吃掉一包薯片。")
+    elif kind in ["suction", "keepsake", "crate"]:
+        controller._ship_session._notify(peer_id, "霜烬星探索物品 · 出舱后使用，纪念杯可在地面飞船收藏柜存放")
+    elif kind in ["heater", "cell", "fuel"]:
+        if kind == "fuel" and controller.ship_active and controller._ship_session.campaign.enabled:
+            take_selected(peer_id)
+            controller._ship_session.campaign.ordinary_fuel += 1
+            publish()
+            controller._ship_session._notify(peer_id, "普通燃料已存入飞船")
+        else:
+            controller._ship_session._notify(peer_id, "霜烬星探索工具 · 出舱后使用")
     elif NAMES.has(kind) and not CARGO.has(kind):
         if controller._goofy_items != null:
             controller._goofy_items.activate(peer_id, kind)
@@ -853,6 +897,8 @@ func _spawn_drop(peer_id: int, item: Dictionary) -> void:
     var kind: String = String(item.kind)
     var point: Vector3 = drop_position(player)
     drops.append({"uid": "drop_%d" % next_uid, "kind": kind, "position": point + Vector3.UP * 0.48, "rotation": Vector3(0.75, player.rotation.y, 0.35), "area": area(), "owner": peer_id, "oxygen": float(item.get("oxygen", 100.0)), "jet_reserve": float(item.get("jet_reserve", 0.0))})
+    if item.has("charge"):
+        drops[-1].charge = float(item.charge)
     next_uid += 1
 
 func drop_position(player: SpacePlayer3D) -> Vector3:

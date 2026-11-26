@@ -1,0 +1,41 @@
+{
+  "sdk_id": "lis_physics",
+  "name": "LIS Physics · 第一人称通用真实物理系统",
+  "version": "1.0.0-rc1",
+  "channel": "rc",
+  "built_at": "2026-11-10T00:51:17+08:00",
+  "godot_required": ">=4.7",
+  "godot_verified": "4.7.2-stable",
+  "physics_engine": "Jolt Physics",
+  "physics_tick_hz": 60,
+  "target_platform": "Windows PC",
+  "language": "GDScript",
+  "install_path": "addons/lis_physics",
+  "entry_docs": [
+    "docs/README.md",
+    "docs/QUICKSTART.md",
+    "docs/TEAM_HANDOFF.md",
+    "docs/第一人称物理SDK接入指令.md"
+  ],
+  "check_tool": "addons/lis_physics/tools/lis_project_check.gd",
+  "perf_tool": "addons/lis_physics/tools/lis_perf_bench.tscn",
+  "dependencies": {
+    "autoloads": "none",
+    "optional_settings": {
+      "layer_names/3d_physics/layer_3": "interactable（建议，不强制）"
+    },
+    "required_settings": {
+      "physics/3d/physics_engine": "Jolt Physics",
+      "physics/common/physics_ticks_per_second": 60
+    },
+    "third_party_assets": "none（全部程序化生成，无外部素材、无授权问题）"
+  },
+  "status": {
+    "functional_acceptance": "passed",
+    "human_playtest": "NOT DONE",
+    "performance_acceptance": "NOT VERIFIED（性能门禁未通过）",
+    "network_beyond_smoke": "NOT VERIFIED（高延迟/丢包/重连未验证）",
+    "note": "RC 候选版本，不得作为正式稳定版 V1.0.0 发布"
+  },
+  "file_count": 119
+}

@@ -3,9 +3,9 @@ class_name ShipComputerUI
 
 const ICON_DIR: String = "res://assets/ship-hub/computer-icons/"
 const SKIN_PREVIEW_DIR: String = "res://assets/characters/skins/previews/"
-const INK: Color = Color("#dcece5")
-const MUTED: Color = Color("#8da9ae")
-const ACCENT: Color = Color("#92e3c6")
+const INK: Color = Color("#222E3D")
+const MUTED: Color = Color("#636D78")
+const ACCENT: Color = Color("#2B9292")
 var session: ShipSession3D
 var computer: Dictionary = {}
 var selection: Dictionary = {}
@@ -22,10 +22,19 @@ var _meter_label: Label
 var _notes: RichTextLabel
 var _status: Label
 var _exit_confirm_until: int = 0
+var _selection_revision: int = 0
+var _star_map: Control
+var _workshop_tab: String = "craft"
+var _tab_buttons: Dictionary = {}
+var _grid: GridContainer
+var _wallet_icon: TextureRect
+var _count_label: Label
 
 static func icon(option: Dictionary) -> Texture2D:
     var kind: String = String(option.get("kind", ""))
     var item: String = String(option.get("item", ""))
+    if kind == "surface" or (kind == "route" and item == "earth"):
+        return load(ICON_DIR + "route.svg") as Texture2D
     if kind == "skin" and not item.is_empty():
         return load(SKIN_PREVIEW_DIR + "skin_%s.png" % item) as Texture2D
     var key: String = item if not item.is_empty() and kind in ["route", "gear", "craft", "toy"] else kind
@@ -53,32 +62,7 @@ func _style(fill: Color, border: Color) -> StyleBoxFlat:
     return box
 
 func _theme() -> Theme:
-    var result: Theme = Theme.new()
-    result.default_font_size = 18
-    result.set_color("font_color", "Label", INK)
-    result.set_color("default_color", "RichTextLabel", MUTED)
-    result.set_stylebox("panel", "PanelContainer", _style(Color("#142c38"), Color("#3f626b")))
-    for state: String in ["normal", "hover", "pressed", "disabled", "focus"]:
-        var fill: Color = Color("#213e4b")
-        var border: Color = Color("#41616b")
-        if state in ["hover", "focus", "pressed"]:
-            fill = Color("#2d555b")
-            border = ACCENT
-        if state == "disabled":
-            fill = Color("#19313c")
-            border = Color("#2b4853")
-        result.set_stylebox(state, "Button", _style(fill, border))
-        result.set_color("font_" + ("color" if state == "normal" else state + "_color"), "Button", MUTED if state == "disabled" else INK)
-    result.set_stylebox("background", "ProgressBar", _style(Color("#0c202c"), Color("#34535e")))
-    var bar: StyleBoxFlat = _style(ACCENT, ACCENT)
-    bar.content_margin_top = 0
-    bar.content_margin_bottom = 0
-    result.set_stylebox("fill", "ProgressBar", bar)
-    result.set_constant("separation", "VBoxContainer", 12)
-    result.set_constant("separation", "HBoxContainer", 16)
-    result.set_constant("h_separation", "GridContainer", 12)
-    result.set_constant("v_separation", "GridContainer", 12)
-    return result
+    return UIStyleKit.build_app_theme()
 
 func _label(parent: Node, text: String, font_size: int = 18, color: Color = INK) -> Label:
     var label: Label = Label.new()
@@ -104,10 +88,16 @@ func open(device: Dictionary) -> void:
     selection = {}
     _exit_confirm_until = 0
     _cards.clear()
+    _tab_buttons.clear()
+    if computer.kind == "workshop":
+        _workshop_tab = "craft"
     for child: Node in get_children():
         remove_child(child)
         child.queue_free()
-    _options = ShipDevices3D.options_for(computer)
+    var active_kind: String = _workshop_tab if computer.kind == "workshop" else String(computer.kind)
+    _options = ShipDevices3D.options_for({"kind": active_kind}, session.campaign)
+    var star_view: bool = computer.kind == "route" and session.campaign.enabled
+    _star_map = null
     if computer.kind == "store":
         _options = []
         for index: int in CrewItems3D.CAPACITY:
@@ -122,36 +112,58 @@ func open(device: Dictionary) -> void:
     center.mouse_filter = Control.MOUSE_FILTER_IGNORE
     var shell: PanelContainer = PanelContainer.new()
     shell.name = "ComputerWindow"
-    shell.custom_minimum_size = Vector2(1040, 568)
+    shell.custom_minimum_size = Vector2(1040, 588)
     center.add_child(shell)
     var column: VBoxContainer = VBoxContainer.new()
-    column.add_theme_constant_override("separation", 20)
+    column.add_theme_constant_override("separation", 16)
     shell.add_child(column)
     var heading: HBoxContainer = HBoxContainer.new()
     column.add_child(heading)
-    _picture(heading, icon({"kind": computer.kind}), Vector2(40, 40))
-    _label(heading, String(computer.title), 27).size_flags_horizontal = Control.SIZE_EXPAND_FILL
-    var money: String = "coin" if computer.kind == "skin" else "credits"
-    _picture(heading, load(ICON_DIR + money + ".svg") as Texture2D, Vector2(28, 28))
+    _picture(heading, icon({"kind": active_kind}), Vector2(40, 40))
+    _label(heading, "当前星系 · 归航计划" if star_view else String(computer.title), 27).size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    var money: String = "coin" if active_kind == "skin" else "credits"
+    _wallet_icon = _picture(heading, load(ICON_DIR + money + ".svg") as Texture2D, Vector2(28, 28))
+    _wallet_icon.visible = not star_view
     _wallet = _label(heading, "0", 21, Color("#f4cd83"))
+    _wallet.visible = not star_view
     var close: Button = Button.new()
     close.name = "CloseComputer"
     close.text = "×"
     close.custom_minimum_size = Vector2(52, 48)
     close.pressed.connect(session.close_panel)
     heading.add_child(close)
+    if computer.kind == "workshop":
+        var tabs: HBoxContainer = HBoxContainer.new()
+        tabs.add_theme_constant_override("separation", 10)
+        column.add_child(tabs)
+        for tab_def: Array in [["craft", "补给制作"], ["gear", "宇航装备"], ["toy", "欢乐道具"], ["skin", "外观换装"]]:
+            var tb: Button = Button.new()
+            tb.name = "Tab_" + String(tab_def[0])
+            tb.text = String(tab_def[1])
+            tb.toggle_mode = true
+            tb.button_pressed = String(tab_def[0]) == _workshop_tab
+            tb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+            tb.custom_minimum_size = Vector2(0, 42)
+            tb.pressed.connect(_switch_workshop_tab.bind(String(tab_def[0])))
+            tabs.add_child(tb)
+            _tab_buttons[String(tab_def[0])] = tb
     var body: HBoxContainer = HBoxContainer.new()
     body.size_flags_vertical = Control.SIZE_EXPAND_FILL
     body.add_theme_constant_override("separation", 24)
     column.add_child(body)
     var hero_panel: PanelContainer = PanelContainer.new()
-    hero_panel.custom_minimum_size = Vector2(312, 0)
-    hero_panel.add_theme_stylebox_override("panel", _style(Color("#0d2431"), Color("#34545f")))
+    hero_panel.custom_minimum_size = Vector2(496 if star_view else 312, 0)
+    hero_panel.add_theme_stylebox_override("panel", UIStyleKit.box(UIStyleKit.IVORY_INPUT, UIStyleKit.BORDER_SOFT, 16, 1, 18, 16, 0))
     body.add_child(hero_panel)
     var hero_column: VBoxContainer = VBoxContainer.new()
     hero_panel.add_child(hero_column)
     _hero = _picture(hero_column, null, Vector2(248, 224))
     _hero.size_flags_vertical = Control.SIZE_EXPAND_FILL
+    _hero.visible = not star_view
+    if star_view:
+        _star_map = preload("res://scripts/campaign_star_map.gd").new() as Control
+        hero_column.add_child(_star_map)
+        _star_map.destination_selected.connect(_select_map_destination)
     _hero_title = _label(hero_column, "", 24)
     _hero_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
     _detail = _label(hero_column, "", 15, MUTED)
@@ -163,39 +175,17 @@ func open(device: Dictionary) -> void:
     choices.add_child(status_row)
     _status = _label(status_row, "●  在线", 15, ACCENT)
     _status.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-    _label(status_row, "%02d 项" % _options.size(), 15, MUTED)
-    var grid: GridContainer = GridContainer.new()
-    grid.columns = 3 if _options.size() >= 3 else _options.size()
-    choices.add_child(grid)
-    for option: Dictionary in _options:
-        var button: Button = Button.new()
-        button.name = "Option_" + String(option.id)
-        button.custom_minimum_size = Vector2(194 if grid.columns < 3 else 178, 152)
-        button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-        button.toggle_mode = true
-        grid.add_child(button)
-        var stack: VBoxContainer = VBoxContainer.new()
-        button.add_child(stack)
-        stack.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-        stack.offset_left = 12
-        stack.offset_top = 10
-        stack.offset_right = -12
-        stack.offset_bottom = -10
-        stack.mouse_filter = Control.MOUSE_FILTER_IGNORE
-        var picture: TextureRect = _picture(stack, icon(option) if option.kind != "store" else icon({"kind": "store"}), Vector2(72, 72))
-        var title: Label = _label(stack, String(option.title), 16)
-        title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-        var caption: Label = _label(stack, "", 14, MUTED)
-        caption.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-        _cards[option.id] = {"button": button, "picture": picture, "title": title, "caption": caption}
-        button.pressed.connect(_select.bind(option))
+    _count_label = _label(status_row, "%02d 项" % _options.size(), 15, MUTED)
+    _grid = GridContainer.new()
+    choices.add_child(_grid)
+    _populate_grid(star_view)
     _meter_label = _label(choices, "", 17, MUTED)
     _meter = ProgressBar.new()
     _meter.custom_minimum_size = Vector2(0, 12)
     _meter.show_percentage = false
     choices.add_child(_meter)
     _notes = RichTextLabel.new()
-    _notes.custom_minimum_size = Vector2(0, 92)
+    _notes.custom_minimum_size = Vector2(0, 88 if star_view else 92)
     _notes.size_flags_vertical = Control.SIZE_EXPAND_FILL
     _notes.scroll_active = true
     _notes.add_theme_font_size_override("normal_font_size", 16)
@@ -212,12 +202,57 @@ func open(device: Dictionary) -> void:
     _action = Button.new()
     _action.name = "ConfirmComputerAction"
     _action.custom_minimum_size = Vector2(248, 56)
-    _action.add_theme_stylebox_override("normal", _style(Color("#376559"), ACCENT))
+    UIStyleKit.style_button(_action, "teal", 14)
     _action.pressed.connect(_confirm)
     footer.add_child(_action)
     visible = true
-    _select(_options[0])
-    (_cards[_options[0].id].button as Button).grab_focus()
+    if not _options.is_empty():
+        _select(_options[0])
+        (_cards[_options[0].id].button as Button).grab_focus()
+
+func _populate_grid(star_view: bool) -> void:
+    _cards.clear()
+    for child: Node in _grid.get_children():
+        _grid.remove_child(child)
+        child.queue_free()
+    _grid.columns = 2 if star_view else (3 if _options.size() >= 3 else maxi(_options.size(), 1))
+    _count_label.text = "%02d 项" % _options.size()
+    for option: Dictionary in _options:
+        var button: Button = Button.new()
+        button.name = "Option_" + String(option.id)
+        button.custom_minimum_size = Vector2(178 if star_view else (194 if _grid.columns < 3 else 178), 112 if star_view else 142)
+        button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+        button.toggle_mode = true
+        _grid.add_child(button)
+        var stack: VBoxContainer = VBoxContainer.new()
+        button.add_child(stack)
+        stack.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+        stack.offset_left = 12
+        stack.offset_top = 10
+        stack.offset_right = -12
+        stack.offset_bottom = -10
+        stack.mouse_filter = Control.MOUSE_FILTER_IGNORE
+        if star_view:
+            stack.add_theme_constant_override("separation", 3)
+        var picture: TextureRect = _picture(stack, icon(option) if option.kind != "store" else icon({"kind": "store"}), Vector2(48, 48) if star_view else Vector2(66, 66))
+        var title: Label = _label(stack, String(option.title), 16)
+        title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+        var caption: Label = _label(stack, "", 14, MUTED)
+        caption.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+        _cards[option.id] = {"button": button, "picture": picture, "title": title, "caption": caption}
+        button.pressed.connect(_select.bind(option))
+
+func _switch_workshop_tab(tab_kind: String) -> void:
+    _workshop_tab = tab_kind
+    for key: String in _tab_buttons:
+        (_tab_buttons[key] as Button).button_pressed = key == tab_kind
+    _options = ShipDevices3D.options_for({"kind": tab_kind}, session.campaign)
+    if _wallet_icon != null:
+        _wallet_icon.texture = load(ICON_DIR + ("coin.svg" if tab_kind == "skin" else "credits.svg")) as Texture2D
+    _populate_grid(false)
+    if not _options.is_empty():
+        _select(_options[0])
+        (_cards[_options[0].id].button as Button).grab_focus()
 
 func _slot(option: Dictionary) -> Dictionary:
     return session.controller._items.ensure_bag(multiplayer.get_unique_id()).slots[int(option.item)]
@@ -230,10 +265,17 @@ func _texture(option: Dictionary) -> Texture2D:
 
 func _select(option: Dictionary) -> void:
     selection = option.duplicate()
+    _selection_revision = session.campaign.revision
     _hero.texture = _texture(selection)
     for id: String in _cards:
         (_cards[id].button as Button).button_pressed = id == selection.id
     refresh()
+
+func _select_map_destination(destination: String) -> void:
+    for option: Dictionary in _options:
+        if option.item == destination:
+            _select(option)
+            return
 
 func _confirm() -> void:
     if computer.kind == "mission":
@@ -242,7 +284,10 @@ func _confirm() -> void:
     if not selection.is_empty() and not _action.disabled:
         if computer.kind == "exit" and Time.get_ticks_msec() >= _exit_confirm_until:
             _exit_confirm_until = Time.get_ticks_msec() + 3000
-        session.request("computer_action", String(selection.id))
+        var option_id: String = String(selection.id)
+        if computer.kind == "route" and session.campaign.enabled:
+            option_id += "@%d" % _selection_revision
+        session.request("computer_action", option_id)
         refresh()
 
 func refresh() -> void:
@@ -251,14 +296,15 @@ func refresh() -> void:
     var peer: int = multiplayer.get_unique_id()
     var main: Main3D = session.controller
     var player: SpacePlayer3D = main.players.get(peer) as SpacePlayer3D
-    _wallet.text = str(main.credits if computer.kind == "skin" else session.credits)
+    var active_kind: String = String(selection.get("kind", computer.kind))
+    _wallet.text = str(main.credits if active_kind == "skin" else session.credits)
     _feedback.text = session.notice_text().get_slice("。", 0).get_slice("；", 0)
-    _notes.visible = computer.kind == "mission"
+    _notes.visible = computer.kind in ["mission", "route"]
     _notes.text = session.last_report if _notes.visible else ""
     _hero_title.text = String(selection.title)
     _detail.text = ""
     _action.disabled = false
-    _meter.visible = computer.kind in ["repair", "refill"]
+    _meter.visible = active_kind in ["repair", "refill"]
     _meter_label.visible = _meter.visible
     _status.text = "●  在线"
     for option: Dictionary in _options:
@@ -278,11 +324,33 @@ func refresh() -> void:
                 caption = "空" if held.is_empty() else ("可归还" if kind in ["medical", "oxygen"] or ShipSession3D.GOOFY_ITEMS.has(kind) else "任务货物")
         (card.caption as Label).text = caption
     _hero.texture = _texture(selection)
-    match String(computer.kind):
+    match active_kind:
         "route":
             _action.text = "✓ 已选航线" if session.selected_destination == selection.item else "设为航线 →"
             _action.disabled = session.selected_destination == selection.item
             _detail.text = "4 个驾驶席 · 全员就位后出发"
+            if session.campaign.enabled:
+                var reason: String = session.campaign.block_reason(String(selection.item))
+                var surface_action: bool = selection.item == "demo" and session.campaign.location == "demo" and session.campaign.grounded and not session.campaign.home_reached
+                if surface_action:
+                    reason = ""
+                    _action.disabled = false
+                _star_map.refresh(session.campaign, String(selection.item))
+                _hero_title.text = "◆ 当前位置 · 已访 ✓"
+                _detail.text = session.campaign.summary()
+                _notes.text = session.campaign.planet_detail(String(selection.item))
+                _status.text = "✓ 已访问" if session.campaign.visits.has(selection.item) else "○ 已知信号"
+                _action.text = "✓ 已设定 · 前往驾驶席" if session.selected_destination == selection.item else session.campaign.action_word(String(selection.item)) + " →"
+                if surface_action:
+                    _action.text = "继续探索霜烬星 →"
+                if not reason.is_empty():
+                    _action.disabled = true
+                    _notes.text += "\n" + reason
+                    _status.text = "○ 暂不可出发"
+        "surface":
+            _action.text = "出舱探索 →"
+            _action.disabled = not session.campaign.enabled or not session.campaign.grounded or session.campaign.location != "demo" or session.campaign.home_reached
+            _detail.text = "停机坪 · 科考站 · 冰下遗迹"
         "craft":
             var cost: int = int(ShipSession3D.ITEM_COSTS[selection.item])
             _action.text = "制作   ◆ %d" % cost
@@ -332,5 +400,5 @@ func refresh() -> void:
         "exit":
             _action.text = "确认离开" if Time.get_ticks_msec() < _exit_confirm_until else "离开房间 →"
             _detail.text = "再次确认后离舰"
-    if _action.disabled and computer.kind in ["gear", "skin", "craft"] and not _action.text.begins_with("✓") and _action.text not in ["装备栏已满", "装备使用中"]:
+    if _action.disabled and active_kind in ["gear", "skin", "craft"] and not _action.text.begins_with("✓") and _action.text not in ["装备栏已满", "装备使用中"]:
         _status.text = "○  余额不足"
