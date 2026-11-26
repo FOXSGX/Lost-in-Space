@@ -1413,6 +1413,51 @@ func _build_arena_floor(center: Vector3, tag: String) -> void:
 
 ## 给场外两张图补“物流场地”细节：集装箱堆、管线、碎石、墙面警示条、门头横梁。
 ## 纯视觉（与主场景装饰一致，不加碰撞），避免改变球路。
+
+## 地面贴花（保持畅通 / 斑马线 / 集装箱编号）：平贴、无阴影、不受光。
+
+## 竖立的贴图板（集装箱编号、墙面标识）。
+func _add_wall_panel(at: Vector3, size: Vector2, texture_path: String, yaw: float) -> void:
+	if not ResourceLoader.exists(texture_path):
+		return
+	var tex := load(texture_path) as Texture2D
+	if tex == null:
+		return
+	var mat := StandardMaterial3D.new()
+	mat.albedo_texture = tex
+	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+	var quad := MeshInstance3D.new()
+	var plane := QuadMesh.new()
+	plane.size = size
+	quad.mesh = plane
+	quad.material_override = mat
+	quad.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	quad.position = at
+	quad.rotation.y = yaw
+	add_child(quad)
+func _add_floor_decal(at: Vector3, size: Vector2, texture_path: String, yaw: float = 0.0) -> void:
+	if not ResourceLoader.exists(texture_path):
+		return
+	var tex := load(texture_path) as Texture2D
+	if tex == null:
+		return
+	var mat := StandardMaterial3D.new()
+	mat.albedo_texture = tex
+	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+	var quad := MeshInstance3D.new()
+	var plane := QuadMesh.new()
+	plane.size = size
+	quad.mesh = plane
+	quad.material_override = mat
+	quad.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	quad.position = at
+	quad.rotation.x = -PI * 0.5
+	quad.rotation.y = yaw
+	add_child(quad)
 func _dress_arena(center: Vector3, tag: String) -> void:
 	var warm := tag.ends_with("B")
 	var accent := Color("#ffcf5c") if warm else Color("#7dffd4")
@@ -1545,7 +1590,14 @@ func _dress_arena(center: Vector3, tag: String) -> void:
 		column.material_override = rust
 		column.position = center + Vector3(5.5, 2.3, side * 8.6)
 		add_child(column)
-	# 生活痕迹：托盘、锥桶、防水布、地面油渍
+	# 地面贴花：门口“保持畅通”、连廊口斑马线、集装箱编号
+	_add_floor_decal(center + Vector3(9.6, 0.03, 0.0), Vector2(3.2, 0.8), "res://assets/textures/signs/floor_keep_clear.png", 0.0)
+	_add_floor_decal(center + Vector3(-11.6, 0.03, 0.0), Vector2(2.6, 2.6), "res://assets/textures/signs/floor_zebra.png", 0.0)
+	for index in range(3):
+		var z_face := 7.15 if tag.ends_with("C") else -7.15
+		var yaw_no := PI if tag.ends_with("C") else 0.0
+		_add_wall_panel(center + Vector3(3.8 - index * 3.7, 1.35, z_face),
+			Vector2(1.3, 0.65), "res://assets/textures/signs/container_no_%02d.png" % (index + 1), yaw_no)	# 生活痕迹：托盘、锥桶、防水布、地面油渍
 	var wood := StandardMaterial3D.new()
 	wood.albedo_color = Color("#8a6a3f")
 	wood.roughness = 0.82
