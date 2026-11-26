@@ -28,6 +28,8 @@ $preview = "C:\Users\31798\Documents\GitHub\Lost-in-Space-gulu\game\previews\gul
 & $godot --headless --path $preview -- --touch-test   # 接球抽射（滚球更远可踢 / 球速加成）
 & $godot --headless --path $preview -- --hud-test     # HUD 分辨率自适应（1280/1600x900/1920x1080）
 & $godot --headless --path $preview -- --stage-boot-test # --stage=N 直达关卡
+& $godot --headless --path $preview -- --edge-test       # 赶路中重开 / 掉出场地 / 暂停保持
+& $godot --headless --path $preview -- --soak-test       # 随机移动/踢球/暂停/掉边压力测试
 ```
 
 **录演示片**（23 秒，含 BGM/音效；需要开窗口，不能 headless）：

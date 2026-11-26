@@ -36,6 +36,8 @@ var _music: AudioStreamPlayer
 ## 环境底噪（风/管线低频）：一条 6 秒无缝循环，按地图调音量与音高。
 const AMB_PATH := "res://assets/audio/amb_wind.wav"
 var _amb: AudioStreamPlayer
+var _amb_pitch := 1.0
+var _amb_db := -24.0
 
 var _last_ms: Dictionary = {}
 var _duck_until := 0
@@ -76,8 +78,10 @@ func play_ambience(pitch: float, volume_db: float) -> void:
 		_amb = AudioStreamPlayer.new()
 		_amb.stream = stream
 		add_child(_amb)
-	_amb.pitch_scale = clampf(pitch, 0.5, 2.0)
-	_amb.volume_db = volume_db
+	_amb_pitch = clampf(pitch, 0.5, 2.0)
+	_amb_db = volume_db
+	_amb.pitch_scale = _amb_pitch
+	_amb.volume_db = _amb_db
 	if not _amb.playing:
 		_amb.play()
 
@@ -127,6 +131,11 @@ func set_muted(value: bool) -> void:
 	if value and _amb != null and _amb.playing:
 		_amb.stop()
 	muted = value
+	# 取消静音后把当前地图的环境底噪接回来（否则要等下一关才恢复）
+	if not value and _amb != null and not _amb.playing:
+		_amb.pitch_scale = _amb_pitch
+		_amb.volume_db = _amb_db
+		_amb.play()
 	if _music != null:
 		_music.volume_db = -80.0 if value else MUSIC_VOLUME_DB
 

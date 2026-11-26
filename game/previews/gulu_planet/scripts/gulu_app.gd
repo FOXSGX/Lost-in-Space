@@ -416,6 +416,12 @@ func _ready() -> void:
 	elif args.has("--stage-boot-test"):
 		_automation = true
 		call_deferred("_run_stage_boot_test")
+	elif args.has("--soak-test"):
+		_automation = true
+		call_deferred("_run_soak_test")
+	elif args.has("--edge-test"):
+		_automation = true
+		call_deferred("_run_edge_test")
 	elif args.has("--arena-test"):
 		_automation = true
 		call_deferred("_run_arena_test")
@@ -1784,6 +1790,19 @@ func _compass_hint(target: Vector3) -> String:
 	return "往%s方向" % dirs[index]
 
 ## 赶路 HUD：显示目的地、方位和剩余距离，玩家不用瞎找连廊。
+
+## 掉出场外（走出场地/连廊边缘）时放回当前场地出生点，避免卡在虚空。
+func _check_player_fallen() -> void:
+	if player == null or completed:
+		return
+	if player.global_position.y > -6.0:
+		return
+	var spawn := arena_spawn(current_arena())
+	player.global_position = (spawn["pos"] as Vector3) + Vector3(0.0, 0.6, 0.0)
+	player.velocity = Vector3.ZERO
+	_flash("掉出场外，已放回场地", 1.4)
+	if _sfx != null and _fx_live:
+		_sfx.call("play_pitched", "metal", 0.9)
 func _update_travel_hud() -> void:
 	if _travel_label == null:
 		return
@@ -1830,6 +1849,7 @@ func _advance_stage() -> void:
 ## 关卡内重开：保留当前关，只重置这一关的状态。
 func restart_stage() -> void:
 	_keep_stage = true
+	_travel_pending = false
 	reset_round()
 	reset_stage_counters()
 	round_time_left = ROUND_SECONDS
@@ -2403,6 +2423,7 @@ func _update_arcade(delta: float) -> void:
 	_update_stage_label()
 	_tick_counter(delta)
 	_update_travel_hud()
+	_check_player_fallen()
 
 
 ## 订单计时：每 30 秒换一层，换单时闪一下提示并让装货口对应灯带亮起。
@@ -2919,6 +2940,9 @@ func _update_meter_label() -> void:
 # ---------------------------------------------------------------- 事件
 
 func _on_goal_scored(total: int, target: int) -> void:
+	# 赶路途中球是隐藏的，旧场地的门不应再计分（否则会在下一关凭空加分）。
+	if _travel_pending:
+		return
 	loaded_count = total
 	_record_peak_loaded = maxi(_record_peak_loaded, loaded_count)
 	_counter_punch = 1.0
@@ -3489,7 +3513,11 @@ func reset_round() -> void:
 		campaign_done = false
 		reset_stage_counters()
 	_keep_stage = false
+	_travel_pending = false
+	_update_travel_hud()
 	_update_stage_label()
+	if ball != null:
+		ball.visible = true
 	goals_this_round = 0
 	shots_this_round = 0
 	saves_this_round = 0
@@ -5129,6 +5157,7 @@ func _run_campaign_test() -> void:
 	await _wait(0.4)
 	_check(absf(round_time_left - travel_time) < 0.1, "timer pauses during the walk", passes, failures)
 	await _walk_to_next_stage()
+	_check(ball != null and ball.visible, "ball is visible again after arriving", passes, failures)
 	_check(stage == 2, "two goals clear stage 1 (stage=%d)" % stage, passes, failures)
 	_check(current_arena() == 1 and stage_ball_spots().size() == 3,
 		"stage 2 moves the play zone to the north deck (arena=%d)" % current_arena(), passes, failures)
@@ -5601,6 +5630,116 @@ func _run_icon_shot() -> void:
 	image.save_png("user://icon_raw.png")
 	print("ICON %s" % ProjectSettings.globalize_path("user://icon_raw.png"))
 	get_tree().quit(0)
+
+# ---------------------------------------------------------------- 边界情况自测
+
+## 赶路中被 R 重开、玩家掉出场外、暂停时赶路状态是否被破坏。
+func _run_edge_test() -> void:
+	var passes: Array = []
+	var failures: Array = []
+	print("GULU EDGE TEST start")
+	await _wait(0.5)
+	_keep_stage = false
+	reset_round()
+	await _wait(0.3)
+	_round_active = true
+	_set_play_enabled(true)
+
+	# 1) 赶路中按 R：回到本关、球重新可见、不再处于赶路
+	_campaign_goal(false, false, false)
+	_campaign_goal(false, false, false)
+	await _wait(0.1)
+	_check(_travel_pending, "stage 1 clear enters travel", passes, failures)
+	var before_goals := stage_goals
+	_on_goal_scored(1, goal_target)
+	await _wait(0.05)
+	_check(stage_goals == before_goals, "no scoring while travelling", passes, failures)
+	restart_stage()
+	await _wait(0.15)
+	_check(not _travel_pending, "restart cancels travel", passes, failures)
+	_check(ball != null and ball.visible, "restart restores the ball", passes, failures)
+	_check(not _travel_label.visible, "travel HUD hides after restart", passes, failures)
+	_check(stage == 1 and stage_goals == 0, "restart keeps stage and clears goals", passes, failures)
+
+	# 2) 掉出场外自动放回
+	var spawn := arena_spawn(current_arena())["pos"] as Vector3
+	_round_active = true
+	player.global_position = Vector3(spawn.x, -20.0, spawn.z)
+	await _wait(0.25)
+	_check(player.global_position.y > -2.0, "falling out of the arena is recovered (y=%.1f)" % player.global_position.y,
+		passes, failures)
+	_check(player.global_position.distance_to(spawn) < 4.0, "recovered at the current arena spawn",
+		passes, failures)
+
+	# 3) 赶路中暂停再恢复，不丢状态
+	_campaign_goal(false, false, false)
+	_campaign_goal(false, false, false)
+	await _wait(0.1)
+	var pending_before := _travel_pending
+	_close_pause()
+	await _wait(0.1)
+	_open_pause()
+	await _wait(0.1)
+	_check(_travel_pending == pending_before, "pause/resume keeps the travel state", passes, failures)
+
+	# 4) 暂停菜单里的重开：清掉赶路、恢复球、回到第 1 关
+	_on_restart_requested()
+	await _wait(0.2)
+	_check(not _travel_pending and stage == 1, "pause-menu restart clears travel and resets the stage", passes, failures)
+	_check(ball != null and ball.visible, "pause-menu restart restores the ball", passes, failures)
+
+	print("GULU EDGE SUMMARY passes=%d failures=%d" % [passes.size(), failures.size()])
+	get_tree().quit(0 if failures.is_empty() else 1)
+
+# ---------------------------------------------------------------- 随机压力自测
+
+## 随机移动/踢球/暂停/重开/掉边，跑一段时间，检查位置、计时和状态没有崩坏。
+func _run_soak_test() -> void:
+	var passes: Array = []
+	var failures: Array = []
+	print("GULU SOAK TEST start")
+	await _wait(0.5)
+	_keep_stage = false
+	reset_round()
+	await _wait(0.3)
+	_round_active = true
+	_set_play_enabled(true)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 20261127
+	var recoveries := 0
+	var actions := ["move_up", "move_down", "move_left", "move_right"]
+	for step in range(240):
+		var action: String = actions[rng.randi() % actions.size()]
+		Input.action_press(action)
+		await _wait(0.05)
+		Input.action_release(action)
+		if step % 7 == 0:
+			_try_kick(rng.randf_range(0.4, 1.4))
+		if step % 31 == 0:
+			_open_pause()
+			await _wait(0.05)
+			_close_pause()
+		if step % 53 == 0:
+			player.global_position = Vector3(player.global_position.x, -20.0, player.global_position.z)
+			recoveries += 1
+			await _wait(0.2)
+		if step % 71 == 0:
+			ball.call("reset_to", Vector3(200.0, 0.4, 200.0))
+		# 每步检查不变量
+		if not is_finite(player.global_position.x) or player.global_position.y < -6.0:
+			failures.append("player out of range at step %d (y=%.1f)" % [step, player.global_position.y])
+			break
+		if ball == null or not is_finite(ball.global_position.x) or ball.global_position.y < -12.0:
+			failures.append("ball out of range at step %d" % step)
+			break
+		if round_time_left < -0.01 or round_time_left > ROUND_SECONDS + 1.0:
+			failures.append("timer out of range at step %d (%.1f)" % [step, round_time_left])
+			break
+	_check(failures.is_empty(), "no invariant broke during soak (%s)" % ("; ".join(failures) if not failures.is_empty() else "ok"),
+		passes, failures)
+	_check(recoveries > 0, "fall recovery exercised %d times" % recoveries, passes, failures)
+	print("GULU SOAK SUMMARY passes=%d failures=%d" % [passes.size(), failures.size()])
+	get_tree().quit(0 if failures.is_empty() else 1)
 func _count_joy_events(action: String) -> int:
 	if not InputMap.has_action(action):
 		return 0
@@ -5684,6 +5823,12 @@ func _run_audio_test() -> void:
 	await _wait(0.1)
 	_check(absf(amb.pitch_scale - 0.8) < 0.01, "main yard uses a lower hum (%.2f)" % amb.pitch_scale,
 		passes, failures)
+	_sfx.call("set_muted", true)
+	await _wait(0.1)
+	_check(not amb.playing, "mute also stops ambience", passes, failures)
+	_sfx.call("set_muted", false)
+	await _wait(0.1)
+	_check(amb.playing, "unmute restores ambience without a map change", passes, failures)
 
 	print("GULU AUDIO SUMMARY passes=%d failures=%d" % [passes.size(), failures.size()])
 	get_tree().quit(0 if failures.is_empty() else 1)
