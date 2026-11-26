@@ -127,6 +127,7 @@ func ship() -> void:
 	station("core",Vector3(0,2.1,16),"核心已损坏。去主科研楼二层首席办公室寻找备用能源线索。")
 	station("charge",Vector3(-5,2.1,9),"飞船维护台 · 按住 E 慢充热风机和补氧，动力站未恢复时也可用。")
 	station("collection",Vector3(5,2.1,9),"生活收藏柜 · 携带纪念物按 E 收入，之后可在这里查看收藏。",false)
+	station("board",Vector3(5.6,1.9,14.8),"返回飞船主舱 · 按 E 通过加压气闸舱门回到【归航号】主舱",false)
 	for i: int in 4:
 		var cup: StaticBody3D = box(Vector3(4.5+float(i)*0.32,2.76,9),Vector3(0.23,0.3,0.23),Color("9bcdd0"),false)
 		cup.visible = false

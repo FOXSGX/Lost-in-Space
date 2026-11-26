@@ -146,15 +146,31 @@ class TacticalMinimap extends Control:
 			var canyon_rect: Rect2 = Rect2(canyon_p - canyon_sz * 0.5, canyon_sz)
 			if canyon_p.distance_to(c) < rad + 40.0:
 				draw_rect(canyon_rect, Color(0.55, 0.85, 0.95, 0.14), true)
-			# 绘制全部 11 栋建筑 + 飞船真实占地
+			# 绘制全部 15 栋大型建筑 + 坠毁“归航号”飞船剪影
 			for b: Array in FROST_MAP_BUILDINGS:
+				var bid: String = String(b[0])
 				var bp: Vector2 = _to_map(b[1] as Vector2, scale_px, c)
 				if bp.distance_to(c) > rad - 4.0:
 					continue
 				var bsz: Vector2 = (b[2] as Vector2) * scale_px
 				var bcol: Color = b[3] as Color
 				var is_dome: bool = bool(b[4])
-				if is_dome:
+				if bid == "ship":
+					# 坠毁“归航号”三角翼飞船剪影（机头朝北 -Y，一眼认出！）
+					var sw: float = maxf(bsz.x * 0.95, 7.5)
+					var sh: float = maxf(bsz.y * 0.95, 8.5)
+					var poly: PackedVector2Array = PackedVector2Array([
+						bp + Vector2(0.0, -sh),
+						bp + Vector2(sw, sh * 0.55),
+						bp + Vector2(sw * 0.32, sh * 0.82),
+						bp + Vector2(0.0, sh * 0.42),
+						bp + Vector2(-sw * 0.32, sh * 0.82),
+						bp + Vector2(-sw, sh * 0.55),
+					])
+					draw_colored_polygon(poly, Color(bcol.r, bcol.g, bcol.b, 0.45))
+					poly.append(poly[0])
+					draw_polyline(poly, bcol, 1.4, true)
+				elif is_dome:
 					var dr: float = maxf(bsz.x * 0.5, 4.0)
 					draw_circle(bp, dr, Color(bcol.r, bcol.g, bcol.b, 0.34))
 					draw_arc(bp, dr, 0.0, TAU, 16, bcol, 1.2, true)

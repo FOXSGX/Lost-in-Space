@@ -116,6 +116,7 @@ def main():
     make_hub_led("sign_repair.png", "04", "舰体维修总闸", "按 E 消耗零件抢修船体", NEON_ORANGE)
     make_hub_led("sign_workshop.png", "05", "工坊与军械台", "制作补给 · 装备 · 玩具 · 换装", NEON_ORANGE)
     make_hub_led("sign_airlock.png", "出舱", "星球登陆气闸", "降落星球后拉闸出舱探索", NEON_CORAL, arrow="down")
+    make_hub_led("sign_crashed_airlock.png", "登舱", "返回飞船主舱", "靠近按 E 进入归航号主舱", NEON_CYAN, arrow="down")
     make_hub_led("sign_training.png", "训练", "独立喷气训练舱", "右舷专用通道 · 按 E 进入练习", NEON_TEAL, arrow="right")
     make_hub_led("sign_ship_name.png", "归航", "归航号探索舰", "HOMECOMING EXPEDITION · DECK 01", NEON_CYAN)
 

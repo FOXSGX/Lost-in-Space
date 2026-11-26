@@ -29,6 +29,10 @@ const WALL_BUTTRESS_GLB: PackedScene = preload("res://assets/models/rebuild/hero
 const GEO_DOME_GLB: PackedScene = preload("res://assets/models/rebuild/hero_geo_dome.glb")
 const COMMS_TOWER_GLB: PackedScene = preload("res://assets/models/rebuild/hero_comms_tower.glb")
 const HEART_ALTAR_GLB: PackedScene = preload("res://assets/models/rebuild/hero_heart_altar.glb")
+const CRASHED_SHIP_GLB: PackedScene = preload("res://assets/models/rebuild/hero_crashed_ship.glb")
+const RETURN_HATCH_GLB: PackedScene = preload("res://assets/models/rebuild/hero_ship_return_hatch.glb")
+const LED_SCREEN_SHADER: Shader = preload("res://shaders/led_screen.gdshader")
+const CRASHED_AIRLOCK_TEX: Texture2D = preload("res://assets/textures/ship_signs/sign_crashed_airlock.png")
 
 ## 霜烬星色板：冷奶白钢构 + 锈红底漆 + 蓝灰金属 + 冰青，点缀色沿用每栋既有识别色。
 const PALETTE: Dictionary = {
@@ -561,6 +565,89 @@ func _process(_delta: float) -> void:
 		if absf(current_f - melt) > 0.01:
 			mat.set_shader_parameter("melt", melt)
 
+# ---------------------------------------------------------------- 坠毁“归航号”飞船与舱内返回主舱气闸门
+
+func _build_crashed_ship_visual(center: Vector3) -> void:
+	# 1. 隐藏旧版“方盒子飞船”的粗糙灰墙与屋顶网格（保留全部物理碰撞与可走地板，确保联机与自动化测试 100% 兼容）
+	for child: Node in world.get_children():
+		if child is StaticBody3D:
+			var body: StaticBody3D = child as StaticBody3D
+			var p: Vector3 = body.position
+			if absf(p.x) <= 7.8 and p.z >= 4.4 and p.z <= 19.6 and p.y > 1.3:
+				for sub: Node in body.get_children():
+					if sub is MeshInstance3D:
+						(sub as MeshInstance3D).visible = false
+		elif child is MeshInstance3D:
+			var mi: MeshInstance3D = child as MeshInstance3D
+			if mi.position.distance_to(Vector3(0.0, 7.1, 19.32)) < 1.2:
+				mi.visible = false
+
+	# 2. 挂载 Blender 4.5 巨型写实坠毁“归航号”宇航飞船（38m 长 × 41m 翼展 × 12.6m 高，内部中空登舱机库）
+	var ship_vis: Node3D = CRASHED_SHIP_GLB.instantiate() as Node3D
+	ship_vis.name = "HeroCrashedShip"
+	ship_vis.position = center
+	_pbr.bind_glb(ship_vis, "frost", true)
+	detail_root.add_child(ship_vis)
+	HubAtmosphereKit.build_ground_skirt(detail_root, center + Vector3(0.0, -0.55, 2.0), 21.0, 0.48)
+	detail_meshes += 1
+
+	# 3. 舱内右后侧加压气闸返回门（玩家靠近按 E 直接返回太空舱主舱！）
+	var hatch: Node3D = RETURN_HATCH_GLB.instantiate() as Node3D
+	hatch.name = "HeroShipReturnHatch"
+	hatch.position = Vector3(6.52, 0.78, 14.8)
+	hatch.rotation_degrees.y = -90.0
+	_pbr.bind_glb(hatch, "frost", true)
+	detail_root.add_child(hatch)
+	detail_meshes += 1
+
+	# 4. 气闸门正上方暗底发光科幻 LED 显示屏（无悬浮文字，鸿蒙粗体清晰指示“返回飞船主舱”）
+	var led_holder: Node3D = Node3D.new()
+	led_holder.name = "ReturnHatchLEDScreen"
+	led_holder.position = Vector3(6.22, 4.78, 14.8)
+	led_holder.rotation_degrees.y = -90.0
+	var frame_mi: MeshInstance3D = MeshInstance3D.new()
+	var frame_bm: BoxMesh = BoxMesh.new()
+	frame_bm.size = Vector3(2.96, 0.96, 0.14)
+	frame_mi.mesh = frame_bm
+	frame_mi.material_override = _pbr.build_palette("frost", false)["M_DarkSteel"] as Material
+	led_holder.add_child(frame_mi)
+	var quad_mi: MeshInstance3D = MeshInstance3D.new()
+	var qm: QuadMesh = QuadMesh.new()
+	qm.size = Vector2(2.76, 0.84)
+	quad_mi.mesh = qm
+	quad_mi.position = Vector3(0.0, 0.0, 0.08)
+	var led_mat: ShaderMaterial = ShaderMaterial.new()
+	led_mat.shader = LED_SCREEN_SHADER
+	led_mat.set_shader_parameter("screen_tex", CRASHED_AIRLOCK_TEX)
+	led_mat.set_shader_parameter("glow_boost", 1.55)
+	led_mat.set_shader_parameter("pixel_density", 110.0)
+	quad_mi.material_override = led_mat
+	led_holder.add_child(quad_mi)
+	detail_root.add_child(led_holder)
+
+	# 5. 迫降滑行雪沟 + 焦黑擦痕 + 受损引擎冒烟与紧急告警灯效（彻底消除“飞船凭空摆着”的感觉！）
+	# 中央焦黑坠落擦痕沟（船尾向南延展 34 米）
+	_box_mesh("CrashTrenchScorch", Vector3(0.0, 0.06, 40.0), Vector3(13.5, 0.14, 34.0), "rock")
+	# 迫降犁出的左右两道低矮修长积雪垄（平滑扁长，像真实机腹犁开的雪辙）
+	for sx: float in [-1.0, 1.0]:
+		for k: int in 3:
+			var mz: float = 29.5 + float(k) * 9.5
+			var mx: float = sx * (8.6 + float(k) * 0.55)
+			var ms: float = 1.15 - float(k) * 0.18
+			_snow_pillow("CrashBerm_%d_%d" % [int(sx + 2.0), k], Vector3(mx, 0.18, mz), Vector3(2.3 * ms, 0.62 * ms, 6.2 * ms))
+	# 船尾受损双主引擎冒出的阵阵蒸汽与黑灰残烟
+	HubAtmosphereKit.build_steam_vent(detail_root, Vector3(-4.4, 4.25, 29.0), Color(0.28, 0.25, 0.24, 0.56), 2.35)
+	HubAtmosphereKit.build_steam_vent(detail_root, Vector3(4.4, 4.25, 29.0), Color(0.68, 0.84, 0.94, 0.44), 1.85)
+	# 左折翼处冒出的微弱白烟
+	HubAtmosphereKit.build_steam_vent(detail_root, Vector3(-18.5, 1.8, 17.5), Color(0.76, 0.88, 0.96, 0.36), 1.25)
+
+	# 6. 坠毁飞船内外气氛照明（舱内暖白工作灯 + 气闸冰青光 + 驾驶舱与引擎余烬光）
+	_add_omni("ShipBayMainLight", Vector3(0.0, 5.9, 11.2), Color("#e6f4ff"), 2.4, 18.0)
+	_add_omni("ShipReturnHatchGlow", Vector3(5.3, 2.7, 14.8), Color("#38e8ff"), 2.1, 10.5)
+	_add_omni("ShipRampFloodLight", Vector3(0.0, 5.4, 2.2), PALETTE.warm_lamp, 2.2, 20.0)
+	_add_omni("ShipEngineEmberLeft", Vector3(-4.4, 4.2, 29.5), Color("#ff6824"), 3.2, 22.0)
+	_add_omni("ShipCockpitGlow", Vector3(0.0, 9.8, 0.2), Color("#46d8ff"), 2.0, 16.0)
+
 # ---------------------------------------------------------------- 站房细节
 
 func _build_buildings() -> void:
@@ -572,6 +659,9 @@ func _build_buildings() -> void:
 		var height: float = entry[4]
 		var door_width: float = entry[5]
 		var accent: Color = entry[6]
+		if id == "ship":
+			_build_crashed_ship_visual(center)
+			continue
 		var front_z: float = center.z + depth * 0.5
 		# 混凝土基座：把原本“浮在雪上”的方盒子压到地面上。
 		_box_mesh("Plinth_" + id, Vector3(center.x, center.y + 0.11, center.z), Vector3(width + 1.1, 0.34, depth + 1.1), "slab")

@@ -114,6 +114,11 @@ func _run() -> void:
 	await _wait_frames(8)
 	await _snap(cam, Vector3(4.5, 16.0, -591.5), Vector3(-2.4, 15.2, -602.0), 54.0, abs_out + "frost_H_heart_altar_climax.png")
 
+	# 新增视角 I：坠毁的“归航号”大型写实科幻飞船外景 + 尾焰浓烟 + 雪地撞击滑行沟
+	await _snap(cam, Vector3(-32.0, 14.0, 34.0), Vector3(0.0, 4.2, 12.0), 56.0, abs_out + "frost_I_crashed_ship_exterior.png")
+	# 新增视角 J：坠毁飞船登舱机库内部 + 发光“返回飞船主舱”加压气闸舱门与 LED 屏
+	await _snap(cam, Vector3(-1.4, 2.3, 11.4), Vector3(6.4, 2.6, 14.8), 60.0, abs_out + "frost_J_crashed_ship_interior_hatch.png")
+
 	print("VISUAL_CAPTURE_12_OK dir=" + abs_out)
 	quit(0)
 

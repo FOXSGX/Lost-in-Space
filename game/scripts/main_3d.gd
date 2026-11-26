@@ -341,6 +341,9 @@ func _ready() -> void:
     _campaign_travel.name = "CampaignTravel"
     add_child(_campaign_travel)
     _campaign_travel.setup(self)
+    if bool(ProjectSettings.get_setting("lost_in_space/auto_enter_ship", false)):
+        ProjectSettings.set_setting("lost_in_space/auto_enter_ship", false)
+        call_deferred("_create_host")
 
 func _notification(what: int) -> void:
     if what == NOTIFICATION_WM_CLOSE_REQUEST and is_host and _ship_session != null and _ship_session.campaign.enabled:

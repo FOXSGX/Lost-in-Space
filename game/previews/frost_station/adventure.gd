@@ -18,6 +18,11 @@ func create_threat(point: Vector3) -> void:
 
 func _ready() -> void:
 	super._ready()
+	# 移除父类在旧坐标 (3.2, 1.5, 12) 追加的重复登舱点，统一保留坠毁飞船加压气闸舱门 (5.6, 1.9, 14.8)
+	for i: int in range(world.stations.size() - 1, -1, -1):
+		var st: Dictionary = world.stations[i]
+		if String(st.get("kind", "")) == "board" and (st.get("point", Vector3.ZERO) as Vector3).distance_to(Vector3(3.2, 1.5, 12.0)) < 0.5:
+			world.stations.remove_at(i)
 	DisplayServer.window_set_title("迷失太空 · 霜烬星 2.0 · 极寒科考盆地")
 	if menu != null:
 		menu.theme = UIStyleKit.build_app_theme()
@@ -138,6 +143,14 @@ func handle_action(id: int, action: String) -> void:
 	super.handle_action(id,action)
 
 func use_station(id: int, entry: Dictionary) -> void:
+	if entry.kind == "board":
+		SfxKit.play_2d(self, "sfx_lever_clunk", -3.0, 0.92)
+		if embedded:
+			board_requested.emit(id)
+		elif not test_mode:
+			ProjectSettings.set_setting("lost_in_space/auto_enter_ship", true)
+			get_tree().change_scene_to_file("res://scenes/main_3d.tscn")
+		return
 	if entry.kind == "safe":
 		progress["safe_seen"] = true
 		super.use_station(id, entry)
@@ -283,6 +296,10 @@ func _process(delta: float) -> void:
 		hud_prompt.text = notice if notice_time>0 else "E 装入手持物件 / 空手取货"
 	elif world.cart.reachable(actor,world.cart.position+Vector3.UP,4.8):
 		hud_prompt.text = notice if notice_time>0 else "E 上运输车"
+	elif notice_time <= 0.0:
+		var near_st: Dictionary = nearby_station(id)
+		if String(near_st.get("kind", "")) == "board":
+			hud_prompt.text = "按 E 通过加压舱门 · 返回【归航号】飞船主舱"
 	if hud_prompt != null:
 		hud_prompt.visible = not hud_prompt.text.strip_edges().is_empty()
 	var end: Vector3
@@ -367,6 +384,7 @@ func _update_mission_compass_and_beacon(actor: SpacePlayer3D) -> void:
 	var fwd: Vector3 = -actor._camera.global_basis.z if actor._camera != null else -actor.global_basis.z
 	var targets: Array = [
 		{"label": target_lbl, "pos": target_pos, "color": target_col, "main": true},
+		{"label": "坠毁飞船", "pos": Vector3(0, 2.5, 12), "color": Color("#ffba5c"), "main": false},
 		{"label": "探险车", "pos": world.cart.global_position if world.cart != null else Vector3(45, 1, -20), "color": Color("#f4c068"), "main": false},
 		{"label": "动力站", "pos": Vector3(58, 1, -116), "color": Color("#ffaa4c"), "main": false},
 		{"label": "雷达高地", "pos": Vector3(325, 16, -75), "color": Color("#7ce8b4"), "main": false},
