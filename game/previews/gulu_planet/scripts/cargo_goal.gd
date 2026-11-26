@@ -85,9 +85,7 @@ func _build() -> void:
 
 ## 门楣招牌：贴在门楣正面的发光板，用现成 PNG（门区编号/名称）。
 func _build_sign() -> void:
-	if sign_path == "":
-		return
-	if not ResourceLoader.exists(sign_path):
+	if sign_path == "" or not ResourceLoader.exists(sign_path):
 		return
 	var tex := load(sign_path) as Texture2D
 	if tex == null:
@@ -96,17 +94,28 @@ func _build_sign() -> void:
 	mat.albedo_texture = tex
 	mat.emission_enabled = true
 	mat.emission_texture = tex
-	mat.emission_energy_multiplier = 0.55
+	mat.emission_energy_multiplier = 0.6
 	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	# 灯箱背板
+	var back := MeshInstance3D.new()
+	var back_mesh := BoxMesh.new()
+	back_mesh.size = Vector3(0.10, half_width * 0.74, half_width * 2.58)
+	back.mesh = back_mesh
+	var back_mat := StandardMaterial3D.new()
+	back_mat.albedo_color = Color("#12201f")
+	back.material_override = back_mat
+	back.position = Vector3(-0.02, GATE_HEIGHT + 0.34, 0.0)
+	add_child(back)
+	# 招牌面（贴图）
 	var quad := MeshInstance3D.new()
 	var plane := QuadMesh.new()
-	plane.size = Vector2(half_width * 1.85, half_width * 0.46)
+	plane.size = Vector2(half_width * 2.35, half_width * 0.59)
 	quad.mesh = plane
 	quad.material_override = mat
-	# 贴在门楣正面（朝 -x），略高于门洞
-	quad.position = Vector3(-0.12, GATE_HEIGHT - 0.62, 0.0)
+	quad.position = Vector3(-0.09, GATE_HEIGHT + 0.34, 0.0)
 	quad.rotation.y = -PI * 0.5
 	add_child(quad)
+
 
 func _build_model_gate() -> void:
 	var root := GATE_MODEL.instantiate() as Node3D

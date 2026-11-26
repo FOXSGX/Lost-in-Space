@@ -1062,11 +1062,11 @@ func _build_goals() -> void:
 ## 三块场地之间的连廊：地面 + 两侧护栏 + 灯带，带碰撞，玩家可以真的走过去。
 ## 路线：主装卸场东侧 (22,0) → 北场西缘 (43,0)；北场南缘 (56,9.4) → 南场北缘 (56,16.6)。
 func _build_corridors() -> void:
-	_build_corridor(Vector3(21.0, 0.0, 0.0), Vector3(43.5, 0.0, 0.0), 5.2, "CorridorAB")
-	_build_corridor(Vector3(56.0, 0.0, 8.4), Vector3(56.0, 0.0, 17.6), 5.4, "CorridorBC")
+	_build_corridor(Vector3(21.0, 0.0, 0.0), Vector3(43.5, 0.0, 0.0), 5.2, "CorridorAB", "res://assets/textures/signs/sign_to_north.png")
+	_build_corridor(Vector3(56.0, 0.0, 8.4), Vector3(56.0, 0.0, 17.6), 5.4, "CorridorBC", "res://assets/textures/signs/sign_to_south.png")
 
 
-func _build_corridor(from: Vector3, to: Vector3, width: float, tag: String) -> void:
+func _build_corridor(from: Vector3, to: Vector3, width: float, tag: String, sign_path: String = "") -> void:
 	var pivot := Node3D.new()
 	pivot.name = tag
 	var delta := to - from
@@ -1128,7 +1128,32 @@ func _build_corridor(from: Vector3, to: Vector3, width: float, tag: String) -> v
 		strip.position = Vector3(side * (width * 0.5 - 0.09), 1.08, 0.0)
 		pivot.add_child(strip)
 
-	# 顶棚：把走廊盖起来，既遮住主场景上方的岩石，也像真正的货运通道
+
+	# 入口指路牌（朝向主场景一侧）
+	if sign_path != "" and ResourceLoader.exists(sign_path):
+		var tex := load(sign_path) as Texture2D
+		var sign_mat := StandardMaterial3D.new()
+		sign_mat.albedo_texture = tex
+		sign_mat.emission_enabled = true
+		sign_mat.emission_texture = tex
+		sign_mat.emission_energy_multiplier = 0.6
+		sign_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		var board := MeshInstance3D.new()
+		var board_mesh := BoxMesh.new()
+		board_mesh.size = Vector3(2.4, 0.62, 0.10)
+		board.mesh = board_mesh
+		board.material_override = sign_mat
+		board.position = Vector3(0.0, 2.35, length * 0.5 - 0.35)
+		pivot.add_child(board)
+		var post := MeshInstance3D.new()
+		var post_mesh := CylinderMesh.new()
+		post_mesh.top_radius = 0.07
+		post_mesh.bottom_radius = 0.09
+		post_mesh.height = 2.3
+		post.mesh = post_mesh
+		post.material_override = steel
+		post.position = Vector3(0.0, 1.15, length * 0.5 - 0.35)
+		pivot.add_child(post)	# 顶棚：把走廊盖起来，既遮住主场景上方的岩石，也像真正的货运通道
 	var roof := MeshInstance3D.new()
 	var roof_mesh := BoxMesh.new()
 	roof_mesh.size = Vector3(width + 0.4, 0.18, length)
