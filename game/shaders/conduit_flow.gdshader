@@ -1,37 +1,28 @@
 shader_type spatial;
-render_mode blend_mix, depth_draw_opaque, cull_back, diffuse_burley, specular_schlick_ggx;
+render_mode unshaded, cull_back, shadows_disabled;
 
-// 物理因果能量导管着色器：支持 未通电(暗铁) / 就绪(琥珀脉冲) / 已激活(青蓝流光)
-// 严格执行软膝限幅，禁止过曝炸死白。
-
-uniform vec4 base_color : source_color = vec4(0.16, 0.20, 0.24, 1.0);
-uniform vec4 flow_color : source_color = vec4(0.16, 0.86, 1.0, 1.0);
-uniform float active_state : hint_range(0.0, 1.0) = 0.0;
-uniform float ready_state : hint_range(0.0, 1.0) = 0.0;
-uniform float flow_speed = 1.6;
-uniform float flow_freq = 2.4;
-
-varying vec3 v_world;
-
-void vertex() {
-	v_world = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
-}
+uniform vec4 color : source_color = vec4(0.0, 0.94, 1.0, 1.0);
+uniform float energy = 2.0;
+uniform float speed = 1.6;
+uniform float stripe_scale = 1.15;
+uniform float pulse = 0.25;
 
 void fragment() {
-	float along = v_world.x + v_world.z + v_world.y * 0.5;
-	float pulse = 0.5 + 0.5 * sin(along * flow_freq - TIME * flow_speed * 6.2831);
-	float band = smoothstep(0.35, 0.92, pulse);
+	// UV.y is authored in meters along the continuous curved conduit.
+	float phase = UV.y * stripe_scale - TIME * speed;
+	float wave = pow(0.5 + 0.5 * cos(phase * 6.2831853), 4.0);
+	float secondary = pow(0.5 + 0.5 * cos((phase * 2.0 + 0.35) * 6.2831853), 6.0);
+	float breath = 1.0 + pulse * (0.28 * sin(TIME * 3.6));
 
-	vec3 amber = vec3(0.95, 0.56, 0.14);
-	vec3 state_col = mix(amber, flow_color.rgb, active_state);
-	float glow_mask = max(active_state, ready_state * 0.55);
+	// Cylindrical Fresnel glass sheen so the core reads with 3D tube volume.
+	float ndotv = clamp(abs(dot(normalize(NORMAL), normalize(VIEW))), 0.0, 1.0);
+	float rim = pow(1.0 - ndotv, 2.2);
 
-	vec3 col = mix(base_color.rgb, state_col, glow_mask * (0.35 + 0.55 * band));
-	vec3 emit = state_col * glow_mask * (0.28 + 1.15 * band);
-	emit = emit / (1.0 + emit * 0.62);
+	vec3 deep_core = color.rgb * (0.22 + 0.16 * ndotv);
+	vec3 bright_packet = mix(color.rgb, vec3(1.0), 0.32) * (0.78 + 0.45 * energy);
+	vec3 rim_tint = mix(color.rgb, vec3(0.95, 0.98, 1.0), 0.25) * (0.35 + 0.25 * energy);
 
+	float packet = clamp(wave + secondary * 0.45, 0.0, 1.0);
+	vec3 col = mix(deep_core, bright_packet, packet) * breath + rim_tint * rim * 0.55;
 	ALBEDO = col;
-	ROUGHNESS = mix(0.46, 0.22, glow_mask);
-	METALLIC = mix(0.68, 0.35, glow_mask);
-	EMISSION = emit;
 }

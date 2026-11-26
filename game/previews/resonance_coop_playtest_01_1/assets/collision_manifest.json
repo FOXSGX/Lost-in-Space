@@ -1,0 +1,15 @@
+{
+  "triangles": {
+    "COLLIDER_floor": 65832,
+    "COLLIDER_solid": 436412,
+    "STEP_SOLID_0": 12,
+    "STEP_SOLID_1": 12,
+    "STEP_SOLID_2": 12,
+    "STEP_SOLID_3": 12,
+    "STEP_SOLID_4": 12,
+    "STEP_SOLID_5": 12
+  },
+  "total_triangles": 502316,
+  "policy": "Independent interaction derivative: isolate movable core/claws/lever, remove near-side cosmetic horn collision, replace two tall treads with six 0.2625m risers. Main guard geometry and exact cave collision retained.",
+  "provenance": "resonance_mining_station_01_1/assets/station_collision.glb remains unchanged."
+}

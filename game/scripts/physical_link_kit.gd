@@ -3,7 +3,7 @@ class_name PhysicalLinkKit
 
 ## 物理因果连线套件（零悬浮文字：用贴地/贴墙装甲导管 + 遮光状态灯表达状态与路径）
 
-const CONDUIT_SHADER: Shader = preload("res://shaders/conduit_flow.gdshader")
+const CONDUIT_SHADER: Shader = preload("res://shaders/hub_conduit_flow.gdshader")
 
 ## 沿多段路径铺设贴地装甲能量导管（带金属卡箍法兰，返回 ShaderMaterial 供实时切换通电状态）
 static func build_conduit_path(parent: Node3D, points: Array[Vector3], radius: float = 0.085, flow_color: Color = Color("#28dbff")) -> ShaderMaterial:

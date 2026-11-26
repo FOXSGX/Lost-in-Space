@@ -1,0 +1,222 @@
+{
+  "ok": true,
+  "format": "ogg",
+  "sample_rate": 44100,
+  "files": [
+    {
+      "name": "calibration_heat_ambient",
+      "device": "热阀",
+      "kind": "ambient",
+      "path": "C:\\Users\\ASUS\\Desktop\\迷失太空\\game\\assets\\audio\\calibration\\calibration_heat_ambient.ogg",
+      "expect": {
+        "not_silent": true,
+        "no_clipping": true,
+        "min_duration": 3.0,
+        "max_duration": 4.2,
+        "loopable": true,
+        "max_peak_db": -8.0
+      },
+      "duration_s": 3.65,
+      "peak_db": -14.0,
+      "rms_db": -27.21,
+      "dc_offset": -4.6e-05,
+      "clipping_ratio": 0.0
+    },
+    {
+      "name": "calibration_heat_success",
+      "device": "热阀",
+      "kind": "success",
+      "path": "C:\\Users\\ASUS\\Desktop\\迷失太空\\game\\assets\\audio\\calibration\\calibration_heat_success.ogg",
+      "expect": {
+        "not_silent": true,
+        "no_clipping": true,
+        "min_duration": 0.3,
+        "max_duration": 0.9
+      },
+      "duration_s": 0.6,
+      "peak_db": -2.0,
+      "rms_db": -13.33,
+      "dc_offset": -0.0,
+      "clipping_ratio": 0.0
+    },
+    {
+      "name": "calibration_heat_fail",
+      "device": "热阀",
+      "kind": "fail",
+      "path": "C:\\Users\\ASUS\\Desktop\\迷失太空\\game\\assets\\audio\\calibration\\calibration_heat_fail.ogg",
+      "expect": {
+        "not_silent": true,
+        "no_clipping": true,
+        "min_duration": 0.25,
+        "max_duration": 0.7
+      },
+      "duration_s": 0.42,
+      "peak_db": -2.0,
+      "rms_db": -13.65,
+      "dc_offset": -0.0,
+      "clipping_ratio": 0.0
+    },
+    {
+      "name": "calibration_power_ambient",
+      "device": "电源端",
+      "kind": "ambient",
+      "path": "C:\\Users\\ASUS\\Desktop\\迷失太空\\game\\assets\\audio\\calibration\\calibration_power_ambient.ogg",
+      "expect": {
+        "not_silent": true,
+        "no_clipping": true,
+        "min_duration": 3.0,
+        "max_duration": 4.2,
+        "loopable": true,
+        "max_peak_db": -8.0
+      },
+      "duration_s": 3.65,
+      "peak_db": -14.0,
+      "rms_db": -21.35,
+      "dc_offset": -0.000103,
+      "clipping_ratio": 0.0
+    },
+    {
+      "name": "calibration_power_success",
+      "device": "电源端",
+      "kind": "success",
+      "path": "C:\\Users\\ASUS\\Desktop\\迷失太空\\game\\assets\\audio\\calibration\\calibration_power_success.ogg",
+      "expect": {
+        "not_silent": true,
+        "no_clipping": true,
+        "min_duration": 0.3,
+        "max_duration": 0.9
+      },
+      "duration_s": 0.5,
+      "peak_db": -2.0,
+      "rms_db": -15.5,
+      "dc_offset": -0.0,
+      "clipping_ratio": 0.0
+    },
+    {
+      "name": "calibration_power_fail",
+      "device": "电源端",
+      "kind": "fail",
+      "path": "C:\\Users\\ASUS\\Desktop\\迷失太空\\game\\assets\\audio\\calibration\\calibration_power_fail.ogg",
+      "expect": {
+        "not_silent": true,
+        "no_clipping": true,
+        "min_duration": 0.25,
+        "max_duration": 0.7
+      },
+      "duration_s": 0.38,
+      "peak_db": -2.0,
+      "rms_db": -12.62,
+      "dc_offset": -0.0,
+      "clipping_ratio": 0.0
+    },
+    {
+      "name": "calibration_mirror_ambient",
+      "device": "镜面节点",
+      "kind": "ambient",
+      "path": "C:\\Users\\ASUS\\Desktop\\迷失太空\\game\\assets\\audio\\calibration\\calibration_mirror_ambient.ogg",
+      "expect": {
+        "not_silent": true,
+        "no_clipping": true,
+        "min_duration": 3.0,
+        "max_duration": 4.2,
+        "loopable": true,
+        "max_peak_db": -8.0
+      },
+      "duration_s": 3.65,
+      "peak_db": -14.0,
+      "rms_db": -29.81,
+      "dc_offset": -0.0,
+      "clipping_ratio": 0.0
+    },
+    {
+      "name": "calibration_mirror_success",
+      "device": "镜面节点",
+      "kind": "success",
+      "path": "C:\\Users\\ASUS\\Desktop\\迷失太空\\game\\assets\\audio\\calibration\\calibration_mirror_success.ogg",
+      "expect": {
+        "not_silent": true,
+        "no_clipping": true,
+        "min_duration": 0.3,
+        "max_duration": 0.9
+      },
+      "duration_s": 0.58,
+      "peak_db": -2.0,
+      "rms_db": -15.78,
+      "dc_offset": -0.0,
+      "clipping_ratio": 0.0
+    },
+    {
+      "name": "calibration_mirror_fail",
+      "device": "镜面节点",
+      "kind": "fail",
+      "path": "C:\\Users\\ASUS\\Desktop\\迷失太空\\game\\assets\\audio\\calibration\\calibration_mirror_fail.ogg",
+      "expect": {
+        "not_silent": true,
+        "no_clipping": true,
+        "min_duration": 0.25,
+        "max_duration": 0.7
+      },
+      "duration_s": 0.36,
+      "peak_db": -2.0,
+      "rms_db": -16.38,
+      "dc_offset": -0.0,
+      "clipping_ratio": 0.0
+    },
+    {
+      "name": "calibration_cool_ambient",
+      "device": "冷却座",
+      "kind": "ambient",
+      "path": "C:\\Users\\ASUS\\Desktop\\迷失太空\\game\\assets\\audio\\calibration\\calibration_cool_ambient.ogg",
+      "expect": {
+        "not_silent": true,
+        "no_clipping": true,
+        "min_duration": 3.0,
+        "max_duration": 4.2,
+        "loopable": true,
+        "max_peak_db": -8.0
+      },
+      "duration_s": 3.65,
+      "peak_db": -14.0,
+      "rms_db": -28.37,
+      "dc_offset": -2.7e-05,
+      "clipping_ratio": 0.0
+    },
+    {
+      "name": "calibration_cool_success",
+      "device": "冷却座",
+      "kind": "success",
+      "path": "C:\\Users\\ASUS\\Desktop\\迷失太空\\game\\assets\\audio\\calibration\\calibration_cool_success.ogg",
+      "expect": {
+        "not_silent": true,
+        "no_clipping": true,
+        "min_duration": 0.3,
+        "max_duration": 0.9
+      },
+      "duration_s": 0.62,
+      "peak_db": -2.0,
+      "rms_db": -16.7,
+      "dc_offset": 0.0,
+      "clipping_ratio": 0.0
+    },
+    {
+      "name": "calibration_cool_fail",
+      "device": "冷却座",
+      "kind": "fail",
+      "path": "C:\\Users\\ASUS\\Desktop\\迷失太空\\game\\assets\\audio\\calibration\\calibration_cool_fail.ogg",
+      "expect": {
+        "not_silent": true,
+        "no_clipping": true,
+        "min_duration": 0.25,
+        "max_duration": 0.7
+      },
+      "duration_s": 0.4,
+      "peak_db": -2.0,
+      "rms_db": -12.83,
+      "dc_offset": 0.0,
+      "clipping_ratio": 0.0
+    }
+  ],
+  "counts": {
+    "files": 12
+  }
+}

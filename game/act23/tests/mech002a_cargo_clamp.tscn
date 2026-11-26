@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://act23/tests/mech002a_cargo_clamp.gd" id="1_m"]
+
+[node name="Mech002ACargoClamp" type="Node"]
+script = ExtResource("1_m")

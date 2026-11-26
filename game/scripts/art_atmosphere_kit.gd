@@ -4,7 +4,7 @@ class_name ArtAtmosphereKit
 ## 接地、悬垂软管、假体积光束与蒸汽微粒套件（消除“模型展览馆摆拍感”）
 ## 严格适配 Godot 4.7 gl_compatibility（不依赖 SSR / SSIL / VolumetricFog）
 
-const GODRAY_SHADER: Shader = preload("res://shaders/walle_godray.gdshader")
+const GODRAY_SHADER: Shader = preload("res://shaders/hub_godray.gdshader")
 static var _skirt_tex: ImageTexture = null
 
 ## 在重型设备/建筑/岩脚铺径向接触暗晕贴片，消除生硬直角插地感

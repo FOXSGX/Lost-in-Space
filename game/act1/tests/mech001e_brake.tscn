@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://act1/tests/mech001e_brake.gd" id="1_e"]
+
+[node name="Mech001EBrake" type="Node"]
+script = ExtResource("1_e")

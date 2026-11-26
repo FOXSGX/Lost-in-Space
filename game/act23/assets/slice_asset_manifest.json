@@ -1,0 +1,75 @@
+{
+  "version": "cooperation_slice_01",
+  "derived_from": "Prototype 01.1 / 01.2 and V2.3; original manifests are historical source references",
+  "export": {
+    "blender": "5.2.2 LTS",
+    "exit_code": 0,
+    "dynamic_meshes": 31,
+    "removed_static_polygons": 5401,
+    "removed_static_collision_triangles": 11712,
+    "new_stair_collision_triangles": 72
+  },
+  "scope": "GLB accessor counts; visible draw submissions include passes and are reported separately",
+  "glb": [
+    {
+      "file": "assets\\characters\\skins\\skin_ranger.glb",
+      "bytes": 726416,
+      "meshes": 65,
+      "mesh_nodes": 65,
+      "unique_geometry_triangles": 15648,
+      "instanced_triangles": 15648,
+      "materials": 10,
+      "textures": 0,
+      "external_buffers": [],
+      "external_images": []
+    },
+    {
+      "file": "assets\\characters\\tools\\shield_dome.glb",
+      "bytes": 115424,
+      "meshes": 2,
+      "mesh_nodes": 2,
+      "unique_geometry_triangles": 1592,
+      "instanced_triangles": 1592,
+      "materials": 2,
+      "textures": 0,
+      "external_buffers": [],
+      "external_images": []
+    },
+    {
+      "file": "assets\\device_parts.glb",
+      "bytes": 982992,
+      "meshes": 31,
+      "mesh_nodes": 31,
+      "unique_geometry_triangles": 9336,
+      "instanced_triangles": 9336,
+      "materials": 6,
+      "textures": 12,
+      "external_buffers": [],
+      "external_images": []
+    },
+    {
+      "file": "assets\\station_collision.glb",
+      "bytes": 8653044,
+      "meshes": 8,
+      "mesh_nodes": 8,
+      "unique_geometry_triangles": 500668,
+      "instanced_triangles": 500668,
+      "materials": 0,
+      "textures": 0,
+      "external_buffers": [],
+      "external_images": []
+    },
+    {
+      "file": "assets\\station_static.glb",
+      "bytes": 67109528,
+      "meshes": 82,
+      "mesh_nodes": 82,
+      "unique_geometry_triangles": 551955,
+      "instanced_triangles": 551955,
+      "materials": 35,
+      "textures": 70,
+      "external_buffers": [],
+      "external_images": []
+    }
+  ]
+}

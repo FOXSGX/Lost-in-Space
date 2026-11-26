@@ -1,0 +1,101 @@
+; Engine configuration file.
+; It's best edited using the editor UI and not directly,
+; since the parameters that go here are not all obvious.
+;
+; Format:
+;   [section] ; section goes between []
+;   param=value ; assign values to parameters
+
+config_version=5
+
+[application]
+
+config/name="Lost in Space - Resonance Co-op Playtest 01.1"
+run/main_scene="res://playtest.tscn"
+config/features=PackedStringArray("4.7")
+
+[debug]
+
+file_logging/enable_file_logging.pc=false
+
+[display]
+
+window/size/viewport_width=1280
+window/size/viewport_height=800
+window/size/window_width_override=1280
+window/size/window_height_override=800
+window/stretch/mode="canvas_items"
+window/size/min_width=960
+window/size/min_height=600
+
+[editor]
+
+run/main_run_args="--script res://tests/test_editor_pacing.gd -- C:/Users/ASUS/Desktop/迷失太空/work/gameplay-iterations/20261020-resonance-coop-playtest-01-1/performance/editor-phase-a --loopback-test --profile-sections"
+
+[gui]
+
+theme/custom="res://assets/playtest_theme.tres"
+
+[input]
+
+show_help={
+"deadzone": 0.5,
+"events": []
+}
+repair={
+"deadzone": 0.5,
+"events": []
+}
+pickup={
+"deadzone": 0.5,
+"events": []
+}
+drop={
+"deadzone": 0.5,
+"events": []
+}
+deposit={
+"deadzone": 0.5,
+"events": []
+}
+mute_preview={
+"deadzone": 0.5,
+"events": []
+}
+reset_preview={
+"deadzone": 0.5,
+"events": []
+}
+brace={
+"deadzone": 0.5,
+"events": []
+}
+cancel_operation={
+"deadzone": 0.5,
+"events": []
+}
+toggle_debug={
+"deadzone": 0.5,
+"events": []
+}
+host_preview={
+"deadzone": 0.5,
+"events": []
+}
+join_preview={
+"deadzone": 0.5,
+"events": []
+}
+
+[physics]
+
+3d/physics_engine="Jolt Physics"
+common/physics_interpolation=true
+
+[rendering]
+
+renderer/rendering_method="gl_compatibility"
+renderer/rendering_method.mobile="gl_compatibility"
+shader_compiler/shader_cache/enabled=false
+anti_aliasing/quality/msaa_3d=2
+environment/defaults/default_clear_color=Color(0.01, 0.015, 0.025, 1)

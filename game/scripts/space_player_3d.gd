@@ -148,7 +148,7 @@ func _process(delta: float) -> void:
     _last_visual_position = global_position
     var controller := get_parent() as Main3D
     _update_jet_visual(controller)
-    var resonance_camera: bool = controller != null and controller.game_started and not controller.ship_active and controller.current_planet_id == "electromagnetic"
+    var resonance_camera: bool = false
     if _visual != null:
         if _camera != null:
             _visual.visible = not (controller != null and controller.ship_active)
@@ -182,17 +182,6 @@ func _input(event: InputEvent) -> void:
             _camera_yaw_target -= ship_motion.relative.x * SHIP_LOOK_SENSITIVITY
             _camera_pitch_target = clampf(_camera_pitch_target + ship_motion.relative.y * SHIP_LOOK_SENSITIVITY, -SHIP_PITCH_LIMIT, SHIP_PITCH_LIMIT)
         return
-    if controller == null or controller.current_planet_id != "electromagnetic" or controller.ship_active:
-        return
-    if event is InputEventMouseMotion and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
-        var motion: InputEventMouseMotion = event as InputEventMouseMotion
-        _apply_mouse_look(motion.relative)
-    elif event is InputEventMouseButton and (event as InputEventMouseButton).pressed:
-        Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
-        _mouse_capture_requested = true
-        Input.use_accumulated_input = false
-    elif event is InputEventKey and (event as InputEventKey).pressed and (event as InputEventKey).keycode == KEY_ESCAPE:
-        _release_resonance_mouse()
 
 func _unhandled_input(event: InputEvent) -> void:
     var controller: Main3D = get_parent() as Main3D
@@ -343,146 +332,18 @@ func configure_ship_camera() -> void:
             sensor.light_energy = 0.18
             sensor.omni_range = 5.0
     if attack_range_visual != null:
-        # 共振星采用完整第三人称合作视角，不显示攻击范围圆环；圆环会
-        # 在肩后镜头前形成大面积遮挡，且本星球没有准星需求。
-        attack_range_visual.visible = controller != null and not controller.ship_active and controller.current_planet_id != "electromagnetic"
+        attack_range_visual.visible = controller != null and not controller.ship_active
 
-func _update_planet_camera(resonance: bool, delta: float = 0.016) -> void:
+func _update_planet_camera(resonance: bool, _delta: float = 0.016) -> void:
     if _camera == null:
         return
-    if resonance and attack_range_visual != null:
+    if attack_range_visual != null and resonance:
         attack_range_visual.visible = false
-    if resonance:
-        var entering_resonance: bool = not _resonance_camera_mode
-        if entering_resonance:
-            _camera_yaw = rotation.y
-            _camera_yaw_target = _camera_yaw
-            _camera_pitch = -0.18
-            _camera_pitch_target = _camera_pitch
-            _mouse_capture_requested = true
-            Input.use_accumulated_input = false
-        if _mouse_capture_requested and Input.mouse_mode != Input.MOUSE_MODE_CAPTURED:
-            Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
-        _resonance_camera_mode = true
-        _camera_yaw = lerp_angle(_camera_yaw, _camera_yaw_target, 1.0 - exp(-THIRD_PERSON_ROTATION_SMOOTHNESS * delta))
-        _camera_pitch = lerpf(_camera_pitch, _camera_pitch_target, 1.0 - exp(-THIRD_PERSON_ROTATION_SMOOTHNESS * delta))
-        # 朝向与镜头绑定，角色站立、移动或执行装置动作时都保持面向前方。
-        rotation.y = _camera_yaw
-        _camera.projection = Camera3D.PROJECTION_PERSPECTIVE
-        _camera.fov = 62.0
-        var target: Vector3 = global_position + Vector3(0.0, 0.9, 0.0)
-        var desired_position: Vector3 = _third_person_camera_position(target)
-        # Follow first, then constrain the desired point to the cave volume,
-        # and only then resolve solid geometry.  The previous order clamped a
-        # raycast result by room index, which could push the camera through a
-        # wall and pin it at the corridor entrance.
-        desired_position = _clamp_resonance_camera(desired_position)
-        desired_position = _resolve_third_person_camera_position(target, desired_position)
-        _camera.global_position = _camera.global_position.lerp(desired_position, 1.0 - exp(-THIRD_PERSON_CAMERA_SMOOTHNESS * delta))
-        _camera.look_at(target, Vector3.UP)
-        var camera_controller := get_parent() as Main3D
-        var camera_stage: Node = null
-        if camera_controller != null:
-            camera_stage = camera_controller._resonance_stage
-        if _camera.current and camera_stage != null and camera_stage.has_method("update_camera_occlusion"):
-            camera_stage.update_camera_occlusion(_camera.global_position, target)
-    elif _resonance_camera_mode:
-        _resonance_camera_mode = false
-        _camera.projection = Camera3D.PROJECTION_ORTHOGONAL
-        _camera.size = 28.0
-        _camera.global_position = global_position + Vector3(0.0, 16.0, 15.0)
-        _camera.rotation_degrees = Vector3(-46.0, 0.0, 0.0)
-        _release_resonance_mouse()
-    elif Input.mouse_mode == Input.MOUSE_MODE_CAPTURED or _mouse_capture_requested:
-        # 处理场景切换先于相机状态更新的边界情况，避免光标卡在隐藏状态。
-        _release_resonance_mouse()
 
 func _release_resonance_mouse() -> void:
     Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
     Input.use_accumulated_input = true
     _mouse_capture_requested = false
-
-func _third_person_camera_position(target: Vector3) -> Vector3:
-    var forward: Vector3 = Vector3(-sin(_camera_yaw), 0.0, -cos(_camera_yaw))
-    var right: Vector3 = Vector3(cos(_camera_yaw), 0.0, -sin(_camera_yaw))
-    var horizontal_distance: float = cos(_camera_pitch) * THIRD_PERSON_DISTANCE
-    var vertical_offset: float = THIRD_PERSON_HEIGHT + sin(_camera_pitch) * THIRD_PERSON_DISTANCE
-    return target - forward * horizontal_distance + right * THIRD_PERSON_SHOULDER + Vector3.UP * vertical_offset
-
-func _clamp_resonance_camera(position: Vector3) -> Vector3:
-    # Broad fallback volume for non-cave resonance stages.
-    var clamped := Vector3(
-        clampf(position.x, RESONANCE_CAMERA_BOUNDS_MIN.x, RESONANCE_CAMERA_BOUNDS_MAX.x),
-        clampf(position.y, RESONANCE_CAMERA_BOUNDS_MIN.y, RESONANCE_CAMERA_BOUNDS_MAX.y),
-        clampf(position.z, RESONANCE_CAMERA_BOUNDS_MIN.z, RESONANCE_CAMERA_BOUNDS_MAX.z)
-    )
-    var controller := get_parent() as Main3D
-    if controller == null or controller._resonance_stage == null:
-        return clamped
-    var stage := controller._resonance_stage
-    if stage.has_method("clamp_cave_camera_position"):
-        # The cave chapter derives a continuous cross-section volume from the
-        # camera's own x.  It deliberately does not use cave_room/checkpoint:
-        # those values advance with tasks while the players are still standing
-        # in the previous room and must never yank the camera to another room.
-        return stage.clamp_cave_camera_position(clamped)
-    # Legacy factory stage: keep the per-zone radius envelope unchanged.
-    var focus: Vector3 = stage.zone_camera_focus()
-    if focus != Vector3.ZERO:
-        var offset := Vector2(clamped.x - focus.x, clamped.z - focus.z)
-        var distance := offset.length()
-        if distance > RESONANCE_ZONE_CAMERA_RADIUS:
-            var ratio := RESONANCE_ZONE_CAMERA_RADIUS / distance
-            clamped.x = focus.x + offset.x * ratio
-            clamped.z = focus.z + offset.y * ratio
-    return clamped
-
-func _resolve_third_person_camera_position(target: Vector3, desired_position: Vector3) -> Vector3:
-    var controller := get_parent() as Main3D
-    if controller == null or controller.get_world_3d() == null:
-        return desired_position
-    var query := PhysicsRayQueryParameters3D.create(target, desired_position)
-    query.collision_mask = 4
-    query.exclude = [get_rid()]
-    var hit: Dictionary = controller.get_world_3d().direct_space_state.intersect_ray(query)
-    if hit.is_empty():
-        return desired_position
-    var hit_position: Vector3 = hit.get("position", desired_position)
-    var direction := (desired_position - target).normalized()
-    # A collision may legitimately be closer than THIRD_PERSON_MIN_DISTANCE in
-    # a tight cave throat.  Never keep the old minimum by pushing the camera
-    # through the hit; instead pull in to the hit point with a small margin.
-    var hit_distance := target.distance_to(hit_position)
-    var safe_distance := minf(
-        target.distance_to(desired_position),
-        maxf(0.8, hit_distance - THIRD_PERSON_COLLISION_MARGIN)
-    )
-    return target + direction * safe_distance
-
-func _choose_resonance_camera_position(target: Vector3) -> Vector3:
-    var offsets: Array[Vector3] = [
-        Vector3(0.0, 11.5, 14.5),
-        Vector3(0.0, 12.5, -14.5),
-        Vector3(14.5, 10.5, 0.0),
-        Vector3(-14.5, 10.5, 0.0)
-    ]
-    var fallback: Vector3 = target + offsets[0]
-    for offset in offsets:
-        var candidate: Vector3 = target + offset
-        if _resonance_camera_ray_clear(candidate, target):
-            return candidate
-        fallback = candidate
-    return fallback
-
-func _resonance_camera_ray_clear(camera_position: Vector3, target: Vector3) -> bool:
-    var controller := get_parent() as Main3D
-    if controller == null or controller.get_world_3d() == null:
-        return true
-    var query := PhysicsRayQueryParameters3D.create(camera_position, target)
-    query.collision_mask = 4
-    query.exclude = [get_rid()]
-    var hit: Dictionary = controller.get_world_3d().direct_space_state.intersect_ray(query)
-    return hit.is_empty()
 
 func _build_camera() -> void:
     _camera = Camera3D.new()
@@ -588,11 +449,6 @@ func _physics_process(delta: float) -> void:
         controller.handle_action(peer_id, "resonance_drone")
         return
     var input_vector := Input.get_vector("move_left", "move_right", "move_up", "move_down")
-    var resonance_surface: bool = controller.current_planet_id == "electromagnetic"
-    if resonance_surface:
-        # 共振星采用完整第三人称：角色始终朝向鼠标控制的镜头前方，
-        # 即使没有移动输入也要立即更新朝向，保证交互、动画和联机同步一致。
-        rotation.y = _camera_yaw
     sprinting = Input.is_action_pressed("sprint")
     var move_speed := SPEED * (SPRINT_MULTIPLIER if sprinting else 1.0)
     if goofy_board_remaining > 0.0:
@@ -607,11 +463,7 @@ func _physics_process(delta: float) -> void:
     if scan_lock_remaining <= 0.0:
         var vertical_velocity: float = velocity.y
         vertical_velocity = _jump_velocity(vertical_velocity, delta)
-        if resonance_surface:
-            var movement: Vector3 = _third_person_movement(input_vector)
-            velocity = Vector3(movement.x * move_speed, vertical_velocity, movement.z * move_speed)
-        else:
-            velocity = Vector3(input_vector.x * move_speed, vertical_velocity, input_vector.y * move_speed)
+        velocity = Vector3(input_vector.x * move_speed, vertical_velocity, input_vector.y * move_speed)
         move_and_slide()
         # 移动反馈 - 每隔一段时间生成脚步粒子
         if velocity.length() > 0.1 and Engine.get_physics_frames() % 15 == 0:

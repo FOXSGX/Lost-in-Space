@@ -1,0 +1,9 @@
+; Act23 场景包装 — 供第一幕交接（SessionHub 五幕顺序）与 launcher 使用。
+; 内容 = 真实 Act23 模块入口（实例化 moving_cart.tscn 完整矿车章节）。
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="PackedScene" path="res://act23/act23_entry.tscn" id="1_act23"]
+
+[node name="Act23Chapter" type="Node"]
+
+[node name="Act23Entry" parent="." instance=ExtResource("1_act23")]

@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://demo/demo_ending.gd" id="1_demo_ending"]
+
+[node name="ResonanceStarDemoEnding" type="Node"]
+script = ExtResource("1_demo_ending")

@@ -1,0 +1,10 @@
+; Act23 模块入口（独立启动 / 整合测试用）
+; 与整合工程解耦：它实例化 moving_cart.tscn 的关卡本体为子节点。
+; 整合流程中，launcher 会在 SessionHub 就绪后切入该子树场景。
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="PackedScene" path="res://act23/moving_cart.tscn" id="1_stage"]
+
+[node name="Act23Entry" type="Node"]
+
+[node name="MovingCartSlice" parent="." instance=ExtResource("1_stage")]
