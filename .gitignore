@@ -31,3 +31,8 @@ Desktop.ini
 # Python 本地缓存
 __pycache__/
 *.py[cod]
+
+# 本地打包产物（体积大，不进仓库；只保留 builds/README.md 与 .gitkeep）
+/builds/**
+!/builds/.gitkeep
+!/builds/README.md

@@ -27,7 +27,7 @@ const CONTAINER_B := preload("res://assets/models/nailong/container_b.glb")
 const ATM := preload("res://scripts/core/art_atmosphere_kit.gd")
 
 const HULL := Color("#7f8e86")
-const HULL_LIGHT := Color("#b4c1b7")
+const HULL_LIGHT := Color("#CFC5AE")
 const TRIM := Color("#2f5c68")
 const TRIM_DARK := Color("#1f3f49")
 const AMBER := Color("#ffb347")
@@ -75,6 +75,8 @@ func _ready() -> void:
 	_build_pipeline_corridors()
 	_build_terrace_props()
 	_build_west_yard()
+	_build_floodlights()
+	_build_ground_markings()
 	_build_east_station()
 	_build_far_landmarks()
 	_flush_decals()
@@ -321,6 +323,57 @@ func _build_observation_deck() -> void:
 
 # ---------------------------------------------------------------- 管线走廊
 
+
+## 远端重生点的地标：两座防洪灯塔（纯视觉，无碰撞），让玩家一眼知道高台/坑底在哪。
+func _build_floodlights() -> void:
+	var spots := [
+		{"pos": Vector3(-13.2, 0.0, 18.6), "deck": 1.0, "yaw": 0.5},
+		{"pos": Vector3(-6.8, 0.0, -20.2), "deck": -1.3, "yaw": -0.4},
+	]
+	for spot in spots:
+		var base: Vector3 = spot["pos"] as Vector3
+		var deck: float = float(spot["deck"])
+		var yaw: float = float(spot["yaw"])
+		var ground := base.y + deck
+		# 底座 + 柱 + 横臂
+		_cyl(0.55, 0.5, Vector3(base.x, ground + 0.25, base.z), _mat_concrete, true, 10)
+		_cyl(0.16, 5.6, Vector3(base.x, ground + 3.0, base.z), _mat_bare, true, 8)
+		_box(Vector3(1.9, 0.12, 0.12), Vector3(base.x, ground + 5.7, base.z), _mat_frame, yaw, false)
+		# 两个灯头：朝向场地中心
+		for side in [-1.0, 1.0]:
+			var head := Vector3(base.x + cos(yaw) * side * 0.75, ground + 5.5, base.z - sin(yaw) * side * 0.75)
+			_box(Vector3(0.42, 0.26, 0.24), head, _mat_amber, yaw, false)
+		# 接地暗晕 + 碎石，避免“插进地里”
+		ATM.build_ground_skirt(self, "SkirtLight%d" % int(base.z), Vector3(base.x, ground, base.z), Vector2(2.4, 2.4))
+		ATM.build_gravel_cluster(self, "GravelLight%d" % int(base.z), Vector3(base.x, ground, base.z), 1.3, 10, 71)
+		var lamp := OmniLight3D.new()
+		lamp.position = Vector3(base.x, ground + 5.4, base.z)
+		lamp.light_color = Color("#ffcf8a")
+		lamp.light_energy = 0.55
+		lamp.omni_range = 9.0
+		add_child(lamp)
+
+## 地面导引：从场地西侧通向装货口的虚线箭头，以及坑边的警示斜纹。
+## 纯平贴片（无碰撞），让空旷的地面有“物流场地”的读图信息。
+func _build_ground_markings() -> void:
+	var amber := _kit.emissive(AMBER, 0.55, 0.35)
+	var dark := _kit.clean_paint(Color("#2a2f2e"), 0.7, 0.0)
+	# 两条车道虚线：x 从 -8 到 8，z = ±2.2
+	for side in [-1.0, 1.0]:
+		var x := -8.0
+		while x < 8.0:
+			_box(Vector3(1.2, 0.012, 0.16), Vector3(x, 0.014, side * 2.2), amber, 0.0, false)
+			x += 2.4
+	# 指向装货口的箭头（每 4 m 一组）
+	var ax := -6.0
+	while ax < 7.0:
+		for side in [-1.0, 1.0]:
+			_box(Vector3(0.5, 0.012, 0.10), Vector3(ax, 0.014, side * 1.55), amber, 0.55, false)
+			_box(Vector3(0.5, 0.012, 0.10), Vector3(ax - 0.32, 0.014, side * 1.75), amber, -0.55, false)
+		ax += 4.0
+	# 坑边警示斜纹（凹坑南侧）
+	for index in range(6):
+		_box(Vector3(1.5, 0.012, 0.22), Vector3(-7.4 + index * 1.1, 0.014, -14.4), dark, 0.7, false)
 func _build_pipeline_corridors() -> void:
 	# 南侧地面管线（维修棚前）。北侧改到货台顶面（见 _build_terrace_props）。
 	for z in [-13.2]:

@@ -13,6 +13,9 @@ signal countdown_finished
 signal resume_requested
 signal restart_requested
 signal mute_toggled
+signal stage_requested(stage_index: int)
+signal practice_requested
+signal arcade_requested
 
 const ACCENT := Color("#7dffd4")
 const AMBER := Color("#ffcf5c")
@@ -22,6 +25,10 @@ var _font: Font
 var _title_root: Control
 var _title_best: Label
 var _title_prompt: Label
+var _title_tier: Label
+var _title_progress: Label
+var _title_time: Label
+var _records_root: Control
 var _count_root: Control
 var _count_label: Label
 var _result_root: Control
@@ -40,6 +47,22 @@ var last_result_score := -1
 var last_result_goals := 0
 var last_result_shots := 0
 var last_result_saves := 0
+var last_result_objectives := 0
+## 本局三个目标：进球 3 / 连击 x4 / 订单命中 2。命中数写进 last_result_objectives。
+const OBJECTIVE_GOALS := 3
+const OBJECTIVE_COMBO := 4
+const OBJECTIVE_ORDER_HITS := 2
+
+
+func evaluate_objectives(goals: int, best_combo: int, order_hits: int) -> int:
+	var met := 0
+	if goals >= OBJECTIVE_GOALS:
+		met += 1
+	if best_combo >= OBJECTIVE_COMBO:
+		met += 1
+	if order_hits >= OBJECTIVE_ORDER_HITS:
+		met += 1
+	return met
 
 
 func setup(font: Font) -> void:
@@ -108,7 +131,7 @@ func _build_title() -> void:
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	box.add_child(title)
 
-	var sub := _label("90 秒 · 把能源球送进装货口 · 躲开奶龙", 20, Color("#c8ded8"))
+	var sub := _label("6 关 · 3 个场景 · 每关 90 秒 · 全过即通关", 20, Color("#c8ded8"))
 	sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	box.add_child(sub)
 
@@ -116,13 +139,27 @@ func _build_title() -> void:
 	spacer.custom_minimum_size = Vector2(0, 18)
 	box.add_child(spacer)
 
-	var keys := _label("WASD 移动 · 鼠标瞄准\n左键按住蓄力，松手射门 · P 暂停 · R 重开", 16, Color("#9fb8b4"))
+	var keys := _label("回车开始　·　1/2/3 难度　·　7/8/9 时段　·　4/5/6 练习　·　L 记录板　·　0 刷分", 15, Color("#9fb8b4"))
 	keys.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	box.add_child(keys)
 
 	_title_best = _label("", 16, AMBER)
 	_title_best.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	box.add_child(_title_best)
+
+	# 难度档 + 挑战进度：标题屏就把“这局在什么难度、还差几条挑战”讲清楚。
+	_title_tier = _label("难度　标准　（1 / 2 / 3 切换）", 15, Color("#9fb8b4"))
+	_title_tier.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	box.add_child(_title_tier)
+
+	_title_progress = _label("", 15, Color("#9fb8b4"))
+	_title_progress.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	box.add_child(_title_progress)
+
+	# 时段（P2）：只换光照与雾，标题屏可直接切。
+	_title_time = _label("时段　正午　（7 / 8 / 9 切换）", 15, Color("#9fb8b4"))
+	_title_time.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	box.add_child(_title_time)
 
 	var spacer2 := Control.new()
 	spacer2.custom_minimum_size = Vector2(0, 26)
@@ -135,13 +172,38 @@ func _build_title() -> void:
 	var pulse := _title_prompt.create_tween().set_loops()
 	pulse.tween_property(_title_prompt, "modulate:a", 0.45, 0.9).set_trans(Tween.TRANS_SINE)
 	pulse.tween_property(_title_prompt, "modulate:a", 1.0, 0.9).set_trans(Tween.TRANS_SINE)
+	# 关卡 / 模式直达（对齐共振星试玩版的“单幕按钮”）
+	var stage_row := HBoxContainer.new()
+	stage_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	stage_row.add_theme_constant_override("separation", 10)
+	box.add_child(stage_row)
+	for index in range(3):
+		var stage_button := _button("第 %d 关" % (index + 1))
+		stage_button.add_theme_font_size_override("font_size", 16)
+		var stage_index := index + 1
+		stage_button.pressed.connect(func() -> void: stage_requested.emit(stage_index))
+		stage_row.add_child(stage_button)
 
-	# 点击 / 回车开始
+	var mode_row := HBoxContainer.new()
+	mode_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	mode_row.add_theme_constant_override("separation", 10)
+	box.add_child(mode_row)
+	var practice_button := _button("练习关")
+	practice_button.add_theme_font_size_override("font_size", 16)
+	practice_button.pressed.connect(func() -> void: practice_requested.emit())
+	mode_row.add_child(practice_button)
+	var arcade_button := _button("刷分模式")
+	arcade_button.add_theme_font_size_override("font_size", 16)
+	arcade_button.pressed.connect(func() -> void: arcade_requested.emit())
+	mode_row.add_child(arcade_button)
+
+	# 点击 / 回车开始（catcher 在底层，按钮在上层，点按钮不会误触发“开始”）
 	var catcher := Control.new()
 	catcher.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	catcher.gui_input.connect(_on_catch_input)
 	_title_root.add_child(catcher)
-	catcher.mouse_filter = Control.MOUSE_FILTER_STOP
+	_title_root.move_child(catcher, 0)
+	catcher.mouse_filter = Control.MOUSE_FILTER_PASS
 
 
 func _build_countdown() -> void:
@@ -277,18 +339,119 @@ func _input(event: InputEvent) -> void:
 
 # ---------------------------------------------------------------- 对外接口
 
-func show_title(best: int) -> void:
+func show_title(best: int, tier_name: String = "标准", challenges_done: int = 0,
+		challenges_total: int = 10, time_name: String = "正午") -> void:
 	_title_best.text = ("最高分  %d" % best) if best > 0 else "第一次来？先踢进一个再说"
+	set_tier_label(tier_name)
+	set_time_label(time_name)
+	var tail := "　全部完成！" if challenges_total > 0 and challenges_done >= challenges_total else ""
+	_title_progress.text = "挑战进度 %d / %d%s" % [challenges_done, challenges_total, tail]
 	_title_root.visible = true
 	_title_root.modulate.a = 0.0
 	var tween := create_tween()
 	tween.tween_property(_title_root, "modulate:a", 1.0, 0.35)
 
 
+func set_tier_label(tier_name: String) -> void:
+	if _title_tier != null:
+		_title_tier.text = "难度　%s　（1 / 2 / 3 切换）" % tier_name
+
+
+func set_time_label(time_name: String) -> void:
+	if _title_time != null:
+		_title_time.text = "时段　%s　（7 / 8 / 9 切换）" % time_name
+
+
+## 记录板（P2）：三档最高分 + 挑战清单 + 当前难度/时段。纯展示，不改任何状态。
+## entries: { tiers: Array[int], names: Array[String], current: int, done: int, total: int,
+##            challenges: Array[{label:String, done:bool}], time_name: String }
+func show_records(entries: Dictionary) -> void:
+	hide_records()
+	_records_root = Control.new()
+	_records_root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	add_child(_records_root)
+
+	var dim := ColorRect.new()
+	dim.color = Color(0.02, 0.04, 0.05, 0.88)
+	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_records_root.add_child(dim)
+
+	var center := CenterContainer.new()
+	center.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_records_root.add_child(center)
+
+	var panel := PanelContainer.new()
+	panel.custom_minimum_size = Vector2(620, 0)
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(0.05, 0.10, 0.11, 1.0)
+	style.border_color = Color(0.30, 0.62, 0.58, 0.85)
+	style.set_border_width_all(2)
+	style.set_corner_radius_all(16)
+	style.set_content_margin_all(24)
+	panel.add_theme_stylebox_override("panel", style)
+	center.add_child(panel)
+
+	var column := VBoxContainer.new()
+	column.add_theme_constant_override("separation", 8)
+	panel.add_child(column)
+
+	var head := _label("记录板", 30, Color("#f2f7f5"))
+	head.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	column.add_child(head)
+
+	var tiers: Array = entries.get("tiers", [])
+	var names: Array = entries.get("names", [])
+	var current := int(entries.get("current", 1))
+	for index in range(mini(tiers.size(), names.size())):
+		var mark := "▶" if index == current else "　"
+		var line := _label("%s %s　最高分 %d" % [mark, str(names[index]), int(tiers[index])], 18,
+			AMBER if index == current else Color("#c8ded8"))
+		line.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		column.add_child(line)
+
+	var summary := _label("挑战 %d / %d　·　时段 %s" % [
+		int(entries.get("done", 0)), int(entries.get("total", 0)), str(entries.get("time_name", "正午"))],
+		16, Color("#9fb8b4"))
+	summary.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	column.add_child(summary)
+
+	var spacer := Control.new()
+	spacer.custom_minimum_size = Vector2(0, 6)
+	column.add_child(spacer)
+
+	for item in entries.get("challenges", []):
+		var done := bool(item.get("done", false))
+		var row := _label("%s  %s" % ["✔" if done else "□", str(item.get("label", ""))], 16,
+			ACCENT if done else Color("#7e9a96"))
+		row.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		column.add_child(row)
+
+	var close := _label("按 L 或 Esc 关闭", 14, Color("#9fb8b4"))
+	close.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	column.add_child(close)
+
+	# 记录板直接不透明出现：它在演示片/截图里是“定格页”，淡入反而会拍到半透明帧。
+	_records_root.modulate = Color(1, 1, 1, 1)
+
+
+func hide_records() -> void:
+	if _records_root != null and is_instance_valid(_records_root):
+		_records_root.queue_free()
+	_records_root = null
+
+
+func records_visible() -> bool:
+	return _records_root != null and is_instance_valid(_records_root) and _records_root.is_inside_tree()
+
+
 func hide_title() -> void:
 	var tween := create_tween()
 	tween.tween_property(_title_root, "modulate:a", 0.0, 0.25)
 	tween.tween_callback(func() -> void: _title_root.visible = false)
+
+
+func title_visible() -> bool:
+	return _title_root != null and _title_root.visible
 
 
 ## 3 → 2 → 1 → 开始！ 结束后发 countdown_finished。
@@ -341,11 +504,14 @@ func float_text(at: Vector2, text: String, color: Color, size: int = 28) -> void
 
 ## 结算面板：本局分数 / 最高分 / 进球 / 最佳连击 / 射门与被扑出次数。
 func show_result(score: int, best: int, goals: int, best_combo: int, is_record: bool,
-		shots: int = 0, saves: int = 0) -> void:
+		shots: int = 0, saves: int = 0, order_hits: int = 0,
+		challenges_done: int = 0, challenges_total: int = 10,
+		new_challenges: Array = []) -> void:
 	last_result_score = score
 	last_result_goals = goals
 	last_result_shots = shots
 	last_result_saves = saves
+	last_result_objectives = evaluate_objectives(goals, best_combo, order_hits)
 	var old := _result_root
 	if old != null:
 		old.queue_free()
@@ -398,6 +564,36 @@ func show_result(score: int, best: int, goals: int, best_combo: int, is_record: 
 		16, Color("#9fb8b4"))
 	extra.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	column.add_child(extra)
+
+	# 本局目标（P0-8）：三条，达成的打勾、未达成留空框，让结算页有“下一局想做到什么”。
+	var objectives_met := evaluate_objectives(goals, best_combo, order_hits)
+	var objective_title := _label("本局目标　%d / 3" % objectives_met, 15, Color("#9fb8b4"))
+	objective_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	column.add_child(objective_title)
+	var rows := [
+		["进球 ≥ %d" % OBJECTIVE_GOALS, goals >= OBJECTIVE_GOALS],
+		["最佳连击 ≥ x%d" % OBJECTIVE_COMBO, best_combo >= OBJECTIVE_COMBO],
+		["订单命中 ≥ %d" % OBJECTIVE_ORDER_HITS, order_hits >= OBJECTIVE_ORDER_HITS],
+	]
+	for row in rows:
+		var ok: bool = row[1]
+		var line := _label("%s  %s" % ["✔" if ok else "□", row[0]], 16,
+			ACCENT if ok else Color("#7e9a96"))
+		line.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		column.add_child(line)
+
+	# 挑战清单进度（本地存盘）；本局新达成的条目单独列一行。
+	var progress := _label("挑战进度 %d / %d" % [challenges_done, challenges_total], 15,
+		Color("#9fb8b4"))
+	progress.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	column.add_child(progress)
+	if not new_challenges.is_empty():
+		var labels: Array[String] = []
+		for item in new_challenges:
+			labels.append(str(item))
+		var unlocked := _label("本局解锁：%s" % ", ".join(labels), 16, AMBER)
+		unlocked.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		column.add_child(unlocked)
 
 	var spacer := Control.new()
 	spacer.custom_minimum_size = Vector2(0, 10)
