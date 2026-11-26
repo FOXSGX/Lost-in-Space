@@ -1,0 +1,1032 @@
+﻿extends Node3D
+class_name NailongEnvironment
+
+## 奶龙星环境美术升级（2026-11-18）
+##
+## 只负责「看得见的东西」：地面分区、装货口框架与坡道、窝区痕迹、岩石轮廓、灯光。
+## 玩法规则、控制器参数、装货判定 AABB（collector.gd 的 CATCH_MIN/MAX）都不在这里改。
+##
+## 方法来源：ART-SAMPLE-002 的分层金属/岩石材质与“远看构图、中看结构、近看工艺”。
+## 材质 shader 在 `shaders/aqs2_metal.gdshader` / `aqs2_rock.gdshader`，
+## 不带 2K 贴图与顶点色烘焙；运行时几何没有 UV，所以金属材质 `vertex_mask_valid = false`。
+##
+## 关键约束：
+## - 四面边界墙碰撞位置、尺寸与旧版完全一致。
+## - 装货口立柱/横梁碰撞位置与旧版完全一致；新增装饰只向门口外侧长，不进入球路。
+## - 地面装饰全部无碰撞、厚度 ≤ 2 cm，不改变球滚动。
+
+const HULL_LIGHT := Color("#b4c1b7")
+const HULL := Color("#7f8e86")
+const HULL_DARK := Color("#6d7c74")
+const TRIM := Color("#2f5c68")
+const TRIM_DARK := Color("#1f3f49")
+const GLASS := Color("#8fe3ff")
+const AMBER := Color("#ffb347")
+const CYAN := Color("#3fd8ff")
+const INTAKE := Color("#0d1a20")
+
+const GROUND := Color("#a89e89")
+const GROUND_WARM := Color("#b4aa93")
+const GROUND_COOL := Color("#9d9584")
+const SCUFF := Color("#837b6c")
+const STONE := Color("#a9a091")
+const STONE_LIGHT := Color("#bdb4a4")
+const STONE_DARK := Color("#8b8274")
+const CRATE := Color("#b98a5a")
+const CRATE_DARK := Color("#8f6640")
+const PACK := Color("#d8cbb3")
+
+const NEST_CENTER := Vector3(1.0, 0.0, -2.5)
+
+## ART-SYNC-002：地图扩大（40×30 → 64×44 → 96×64），球路与装货口位置完全不变。
+## 目标：像共振星那样“可以在地图上随意走动”，不再是一个小院。
+const YARD_HALF_X := 48.0
+const YARD_HALF_Z := 32.0
+
+## ART-SYNC-001：地面改为世界空间三级尺度的专用 shader（见文件头注释），
+## 贴地接触贴片用 MultiMesh 合并成 1 个 draw call。
+const SHADER_YARD := preload("res://shaders/gulu_yard.gdshader")
+const SHADER_DECAL := preload("res://shaders/gulu_contact_decal.gdshader")
+
+var kit: GuluArtKit
+var mat_ground: ShaderMaterial
+var mat_ground_warm: ShaderMaterial
+var mat_ground_cool: ShaderMaterial
+var mat_concrete: ShaderMaterial
+var mat_hull: StandardMaterial3D
+var mat_hull_light: StandardMaterial3D
+var mat_bay_cream: StandardMaterial3D
+var mat_mark: StandardMaterial3D
+var mat_hull_dark: StandardMaterial3D
+var mat_trim: StandardMaterial3D
+var mat_trim_dark: ShaderMaterial
+var mat_bare: ShaderMaterial
+var mat_dark_steel: ShaderMaterial
+var mat_crate: ShaderMaterial
+var mat_crate_dark: ShaderMaterial
+var mat_pack: ShaderMaterial
+var mat_rock_a: ShaderMaterial
+var mat_rock_b: ShaderMaterial
+var mat_rock_c: ShaderMaterial
+var mat_amber: StandardMaterial3D
+var mat_cyan: StandardMaterial3D
+var mat_intake_slot: ShaderMaterial
+var mat_bay_strip: StandardMaterial3D
+var mat_rubber: StandardMaterial3D
+var mat_lens: StandardMaterial3D
+var mat_glass: StandardMaterial3D
+
+var _flash := 0.0
+var _clamp_arms: Array[Node3D] = []
+var _strip_material: StandardMaterial3D
+var _bay_light: OmniLight3D
+
+# 接触贴片候选（x, z, 半径, 强度）；_flush_decals 合并成 MultiMesh。
+var _decal_spots: Array[Vector4] = []
+var mat_decal: ShaderMaterial
+
+
+func _ready() -> void:
+	_build_materials()
+	_build_ground()
+	_build_ground_detail()
+	_build_perimeter()
+	_build_terraces()
+	_build_yard()
+	_build_imported_dressing()
+	_build_scenery()
+	_build_nest()
+	_build_bay_frame()
+	_build_lights()
+	_build_air_dust()
+	_build_talus()
+	_flush_decals()
+	set_process(true)
+
+
+func _build_imported_dressing() -> void:
+	# 复用本仓库其他星球的成品模型（共振星洞穴/采矿站），只做摆位与缩放。
+	# 见 gulu_asset_dressing.gd 与 ASSETS.md；不参与玩法与碰撞。
+	var dressing := load("res://scripts/gulu_asset_dressing.gd").new() as Node3D
+	dressing.name = "ImportedDressing"
+	add_child(dressing)
+
+
+## ART-SYNC-002：场边中景设施（装卸场 / 维修棚 / 废轨矿车 / 观察台 / 管线 / 远塔）。
+## 全部在球路与边界墙之外，无碰撞、不参玩法；见 gulu_scenery.gd 头注释。
+func _build_scenery() -> void:
+	var scenery := load("res://scripts/gulu_scenery.gd").new() as Node3D
+	scenery.name = "Scenery"
+	add_child(scenery)
+
+
+func _build_materials() -> void:
+	kit = GuluArtKit.new()
+	mat_ground = _yard_material(GROUND, 0.0, 11.0)
+	mat_ground_warm = _yard_material(GROUND_WARM, 0.0, 12.0)
+	mat_ground_cool = _yard_material(Color("#5f6f68"), 1.0, 13.0)
+	mat_concrete = kit.concrete(Color("#9b9384"), 0.92, 14.0)
+	mat_decal = ShaderMaterial.new()
+	mat_decal.shader = SHADER_DECAL
+	mat_decal.set_shader_parameter("tint", Color("#2b2620"))
+	mat_decal.set_shader_parameter("strength", 0.62)
+	mat_decal.set_shader_parameter("inner", 0.08)
+	mat_decal.set_shader_parameter("outer", 0.95)
+	mat_hull = kit.clean_paint(HULL, 0.62)
+	mat_hull_light = kit.clean_paint(HULL_LIGHT, 0.58)
+	mat_bay_cream = kit.clean_paint(Color("#d2c6ae"), 0.56)
+	mat_mark = kit.clean_paint(Color("#c79a52"), 0.82)
+	mat_hull_dark = kit.clean_paint(HULL_DARK, 0.68)
+	mat_trim = kit.clean_paint(TRIM, 0.52, 0.08)
+	mat_trim_dark = kit.dark_metal(TRIM_DARK, 0.50, 25.0)
+	mat_bare = kit.bare_metal(Color("#8b979b"), 0.32, 26.0)
+	mat_dark_steel = kit.dark_metal(Color("#2f3d3a"), 0.56, 27.0)
+	mat_intake_slot = kit.dark_metal(INTAKE, 0.66, 27.5)
+	mat_crate = kit.paint(CRATE, 0.58, 0.08, 1.0, 28.0)
+	mat_crate_dark = kit.paint(CRATE_DARK, 0.62, 0.12, 1.0, 29.0)
+	mat_pack = kit.paint(PACK, 0.72, 0.0, 0.5, 30.0)
+	mat_rock_a = kit.rock(STONE, STONE_DARK, STONE_LIGHT, 0.30, 0.55, 31.0)
+	mat_rock_b = kit.rock(Color("#7f948f"), Color("#5d716d"), STONE, 0.42, 0.62, 32.0)
+	mat_rock_c = kit.rock(Color("#6f827e"), Color("#4f625f"), Color("#93a6a0"), 0.26, 0.48, 33.0)
+	mat_amber = kit.emissive(AMBER, 0.45, 0.45)
+	mat_cyan = kit.emissive(CYAN, 0.55, 0.45)
+	mat_bay_strip = kit.emissive(AMBER, 0.70, 0.42)
+	_strip_material = mat_bay_strip
+	mat_rubber = kit.rubber(Color("#1b2423"))
+	mat_lens = kit.emissive(Color("#fff0d2"), 0.55, 0.30)
+	mat_glass = kit.emissive(CYAN, 0.55, 0.20, 0.1)
+
+
+# ---------------------------------------------------------------- 装货反馈
+
+## 装货成功：夹臂向内一夹再复位，门框灯带同步闪一下（机械 + 灯光）。
+func on_loaded(_total: int) -> void:
+	_flash = 1.0
+	if _strip_material != null:
+		_strip_material.emission_energy_multiplier = 3.0
+	var hit := create_tween()
+	var back := create_tween()
+	back.tween_interval(0.40)
+	for index in range(_clamp_arms.size()):
+		var arm: Node3D = _clamp_arms[index]
+		var side := -1.0 if index == 0 else 1.0
+		hit.parallel().tween_property(arm, "rotation:x", -side * 0.34, 0.14) \
+			.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+		back.parallel().tween_property(arm, "rotation:x", 0.0, 0.36) \
+			.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+
+
+func _process(delta: float) -> void:
+	if _flash <= 0.0:
+		return
+	_flash = maxf(0.0, _flash - delta * 1.6)
+	if _strip_material != null:
+		_strip_material.emission_energy_multiplier = 0.70 + _flash * 2.6
+	if _bay_light != null:
+		_bay_light.light_energy = 0.30 + _flash * 0.60
+
+
+func _yard_material(base: Color, concrete: float, seed: float) -> ShaderMaterial:
+	var m := ShaderMaterial.new()
+	m.shader = SHADER_YARD
+	m.set_shader_parameter("base_color", base)
+	m.set_shader_parameter("warm_color", base.lightened(0.07))
+	m.set_shader_parameter("cool_color", base.darkened(0.14))
+	m.set_shader_parameter("dirt_color", Color("#7a6a52"))
+	m.set_shader_parameter("dust_color", Color("#c9bfa8"))
+	m.set_shader_parameter("compact_color", Color("#6b5f4a"))
+	m.set_shader_parameter("mineral_color", Color("#9aa8a2"))
+	m.set_shader_parameter("crack_color", Color("#3a3228"))
+	m.set_shader_parameter("concrete_mode", concrete)
+	m.set_shader_parameter("path_center_z", 0.0)
+	m.set_shader_parameter("path_half_width", 2.1 if concrete < 0.5 else 3.2)
+	m.set_shader_parameter("wear_gain", 0.70 if concrete < 0.5 else 0.35)
+	m.set_shader_parameter("rut_gain", 0.55 if concrete < 0.5 else 0.0)
+	m.set_shader_parameter("rough_base", 0.86 if concrete < 0.5 else 0.80)
+	m.set_shader_parameter("world_seed", seed)
+	return m
+
+
+## 登记一个贴地接触贴片（x, z, 半径 m, 强度）。
+func _contact(x: float, z: float, radius: float, strength: float = 0.55) -> void:
+	_decal_spots.append(Vector4(x, z, radius, strength))
+
+
+## 把登记的贴片合成一个 MultiMesh：1 个 draw call、不写深度、不投影。
+func _flush_decals() -> void:
+	if _decal_spots.is_empty():
+		return
+	var quad := QuadMesh.new()
+	quad.size = Vector2(2.0, 2.0)  # 单位半径 1 m，由实例均匀缩放
+	var mm := MultiMesh.new()
+	mm.transform_format = MultiMesh.TRANSFORM_3D
+	mm.use_colors = true
+	mm.mesh = quad
+	mm.instance_count = _decal_spots.size()
+	for i in range(_decal_spots.size()):
+		var spot := _decal_spots[i]
+		var basis := Basis(Vector3.RIGHT, -PI * 0.5).scaled(Vector3(spot.z, spot.z, spot.z))
+		mm.set_instance_transform(i, Transform3D(basis, Vector3(spot.x, 0.021, spot.y)))
+		mm.set_instance_color(i, Color(1.0, 1.0, 1.0, spot.w))
+	var node := MultiMeshInstance3D.new()
+	node.name = "ContactDecals"
+	node.multimesh = mm
+	node.material_override = mat_decal
+	node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(node)
+
+
+# ---------------------------------------------------------------- 碎石散布
+
+## 三级碎石围绕中景岩石/灯柱/场边散落（不进入球路 |z| < 3.2，不进装货平台）。
+## 全部走 MultiMesh：每级 1 个 draw call；小碎石不投影。
+func _build_talus() -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 20261124
+	var anchors: Array[Vector3] = [
+		Vector3(-12.2, 0.0, -2.0), Vector3(-13.6, 0.0, 9.8),
+		Vector3(-9.4, 0.0, 8.6), Vector3(6.2, 0.0, -9.4),
+		Vector3(-18.4, 0.0, -12.6), Vector3(-18.2, 0.0, 12.4),
+		Vector3(17.6, 0.0, -12.8), Vector3(17.4, 0.0, 12.6),
+		Vector3(0.8, 0.0, -14.0), Vector3(-6.0, 0.0, 13.8),
+		# ART-SYNC-002：地图外圈的新锚点（避开北台、下沉坑与球路）
+		Vector3(-26.0, 0.0, -18.0), Vector3(26.0, 0.0, -17.0),
+		Vector3(28.0, 0.0, 12.0), Vector3(-27.0, 0.0, 5.0),
+		Vector3(18.0, 0.0, -20.0), Vector3(-20.5, 0.0, 20.0),
+		# ART-SYNC-002b：96×64 外圈
+		Vector3(-40.0, 0.0, -12.0), Vector3(-42.0, 0.0, 14.0),
+		Vector3(41.0, 0.0, -14.0), Vector3(43.0, 0.0, 20.0),
+		Vector3(-12.0, 0.0, 28.0), Vector3(14.0, 0.0, 29.0),
+	]
+	var grades := [
+		{"radius": 0.150, "count": 26, "near": 1.6, "far": 4.4, "embed": 0.35, "shadow": true},
+		{"radius": 0.085, "count": 90, "near": 1.2, "far": 5.0, "embed": 0.34, "shadow": false},
+		{"radius": 0.045, "count": 240, "near": 0.9, "far": 5.6, "embed": 0.30, "shadow": false},
+	]
+	for gi in range(grades.size()):
+		var g: Dictionary = grades[gi]
+		var radius: float = g["radius"]
+		var mesh := kit.rock_mesh(41.0 + float(gi) * 7.3,
+			Vector3(radius * 2.0, radius * 1.3, radius * 1.8), 1)
+		var mm := MultiMesh.new()
+		mm.transform_format = MultiMesh.TRANSFORM_3D
+		mm.mesh = mesh
+		mm.instance_count = int(g["count"])
+		for i in range(int(g["count"])):
+			var pos := Vector3.ZERO
+			var ok := false
+			for _try in range(4):
+				var anchor: Vector3 = anchors[rng.randi() % anchors.size()]
+				var angle := rng.randf() * TAU
+				var dist := rng.randf_range(float(g["near"]), float(g["far"]))
+				pos = anchor + Vector3(cos(angle) * dist, 0.0, sin(angle) * dist)
+				if absf(pos.z) < 3.2:
+					continue
+				if pos.x > 10.4 or pos.x < -19.2 or absf(pos.z) > 14.2:
+					continue
+				ok = true
+				break
+			if not ok:
+				continue
+			var s := rng.randf_range(0.62, 1.30)
+			pos.y = -radius * 1.3 * float(g["embed"]) * s
+			var basis := Basis(Vector3.UP, rng.randf() * TAU).scaled(Vector3(s, s, s))
+			mm.set_instance_transform(i, Transform3D(basis, pos))
+		var node := MultiMeshInstance3D.new()
+		node.name = "Talus%d" % gi
+		node.multimesh = mm
+		node.material_override = mat_rock_b if gi % 2 == 0 else mat_rock_c
+		node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON if bool(g["shadow"]) \
+			else GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		add_child(node)
+
+
+# ---------------------------------------------------------------- 纵向层次
+
+## ART-SYNC-002：地图扩大后的第二、第三空间。
+## 北侧 1 m 货台（四级台阶可上）、南侧下沉维修坑（东侧坡道可下）。
+## 球路 z∈[-3,3] 不经过这里；台阶 0.25 m 在玩家 step assist（0.36）范围内。
+func _build_terraces() -> void:
+	# --- 北侧货台：16×8，顶面 y=1.0，位于 z 13.5..21.5
+	_box(Vector3(16.0, 1.0, 8.0), Vector3(-10.0, 0.50, 17.5), Color.WHITE, true, 0.0, Vector3.ZERO, mat_concrete)
+	_box(Vector3(15.6, 0.02, 7.6), Vector3(-10.0, 1.02, 17.5), Color.WHITE, false, 0.0, Vector3.ZERO, mat_ground_warm)
+	for i in range(4):
+		_box(Vector3(3.2, 0.25, 0.40), Vector3(-6.2, 0.125 + float(i) * 0.25, 13.3 + float(i) * 0.40),
+			Color.WHITE, true, 0.0, Vector3.ZERO, mat_concrete)
+	# 台沿护栏（细杆，不参与碰撞）
+	for x in [-17.6, -2.4]:
+		_box(Vector3(0.08, 1.0, 0.08), Vector3(x, 1.5, 13.6), Color.WHITE, false, 0.0, Vector3.ZERO, mat_trim_dark)
+	_box(Vector3(15.4, 0.08, 0.08), Vector3(-10.0, 2.0, 13.6), Color.WHITE, false, 0.0, Vector3.ZERO, mat_trim_dark)
+
+	# --- 南侧下沉维修坑：18×6，底面 y=-1.3，位于 z -15..-21
+	_box(Vector3(18.0, 0.5, 6.0), Vector3(-3.0, -1.55, -18.0), Color.WHITE, true, 0.0, Vector3.ZERO, mat_concrete)
+	# 北内壁留坡道口：x -12..2.4 一段
+	_box(Vector3(14.4, 1.3, 0.30), Vector3(-4.8, -0.65, -15.05), Color.WHITE, true, 0.0, Vector3.ZERO, mat_rock_b)
+	_box(Vector3(0.30, 1.3, 6.2), Vector3(-12.0, -0.65, -18.0), Color.WHITE, true, 0.0, Vector3.ZERO, mat_rock_b)
+	_box(Vector3(0.30, 1.3, 6.2), Vector3(6.0, -0.65, -18.0), Color.WHITE, true, 0.0, Vector3.ZERO, mat_rock_b)
+	_box(Vector3(18.0, 1.3, 0.30), Vector3(-3.0, -0.65, -20.95), Color.WHITE, true, 0.0, Vector3.ZERO, mat_rock_b)
+	# 坡道：从地面 z=-14.5 下到坑底 z=-19.5（坡度 15°）
+	var ramp := _box(Vector3(3.0, 0.16, 5.1), Vector3(4.0, -0.65, -17.0), Color.WHITE, true, 0.0,
+		Vector3(deg_to_rad(15.2), 0.0, 0.0), mat_concrete)
+	ramp.name = "PitRamp"
+	# 坑口围栏（留出坡道口）
+	for x in [-11.6, -1.0]:
+		_box(Vector3(0.07, 1.0, 0.07), Vector3(x, 0.5, -14.9), Color.WHITE, false, 0.0, Vector3.ZERO, mat_trim_dark)
+	_box(Vector3(10.6, 0.07, 0.07), Vector3(-6.3, 1.0, -14.9), Color.WHITE, false, 0.0, Vector3.ZERO, mat_trim_dark)
+
+
+# ---------------------------------------------------------------- 地面
+
+func _build_ground() -> void:
+	# ART-SYNC-002：底板扩大到 64×44；南侧下沉坑位置留洞（四块拼合，不要盖住坑口）。
+	# 坑口：x -12..6，z -21..-15。其余四块拼成完整地面。
+	_box(Vector3(YARD_HALF_X * 2.0, 0.5, YARD_HALF_Z + 15.0), Vector3(0.0, -0.25, (YARD_HALF_Z - 15.0) * 0.5), GROUND, true, 0.0, Vector3.ZERO, mat_ground)
+	_box(Vector3(YARD_HALF_X * 2.0, 0.5, YARD_HALF_Z - 21.0), Vector3(0.0, -0.25, -21.0 - (YARD_HALF_Z - 21.0) * 0.5), GROUND, true, 0.0, Vector3.ZERO, mat_ground)
+	_box(Vector3(YARD_HALF_X - 12.0, 0.5, 6.0), Vector3(-12.0 - (YARD_HALF_X - 12.0) * 0.5, -0.25, -18.0), GROUND, true, 0.0, Vector3.ZERO, mat_ground)
+	_box(Vector3(YARD_HALF_X - 6.0, 0.5, 6.0), Vector3(6.0 + (YARD_HALF_X - 6.0) * 0.5, -0.25, -18.0), GROUND, true, 0.0, Vector3.ZERO, mat_ground)
+
+	# 只保留两块大色差：暖色球场 + 深色装货平台。不再铺小砖、环线、灯带。
+	_box(Vector3(24.0, 0.012, 15.0), Vector3(0.0, 0.008, 0.0), Color("#b8ab92"), false, 0.0, Vector3.ZERO, mat_ground_warm)
+	_box(Vector3(5.4, 0.014, 7.2), Vector3(13.4, 0.010, 0.0), Color("#5f6f68"), false, 0.0, Vector3.ZERO, mat_ground_cool)
+
+	# 舱口附近只留 3 段实体短标线，给踢球方向一个参照。
+	for index in range(3):
+		var x := 9.9 + float(index) * 0.55
+		_box(Vector3(0.46, 0.006, 0.10), Vector3(x, 0.020, 0.0), AMBER, false, 0.0, Vector3.ZERO, mat_mark)
+
+	# 门前平台边缘一条低对比压条，交代“球场→平台”的边界。
+	_box(Vector3(0.08, 0.006, 6.8), Vector3(10.7, 0.020, 0.0), Color("#8f7f5f"), false)
+
+
+# ---------------------------------------------------------------- 地面细节
+
+## 只保留边线外碎石；车辙/油斑这类“旧、脏”痕迹已撤掉（不靠脏乱假装统一风格）。
+func _build_ground_detail() -> void:
+
+
+	# 场边碎石：只留在边线外（|z|>3.0），避免遮球。
+	var spots := [
+		Vector3(-9.6, 0.0, -3.4), Vector3(-2.4, 0.0, -3.6),
+		Vector3(6.8, 0.0, -3.8), Vector3(-10.4, 0.0, 3.3),
+		Vector3(-3.2, 0.0, 3.4), Vector3(5.4, 0.0, 3.2),
+	]
+	for index in range(spots.size()):
+		var radius := 0.10 + 0.10 * float(index % 3)
+		var node := MeshInstance3D.new()
+		node.mesh = kit.rock_mesh(float(index) * 1.7, Vector3(radius * 2.0, radius * 1.4, radius * 1.8), 1)
+		node.position = spots[index]
+		node.rotation.y = float(index) * 0.9
+		node.material_override = mat_rock_b if index % 2 else mat_rock_c
+		add_child(node)
+
+
+# ---------------------------------------------------------------- 边界与地形
+
+func _build_perimeter() -> void:
+	# 碰撞仍是四面隐形墙，只是随地图一起外扩（40×30 → 64×44）。
+	_solid_only(Vector3(YARD_HALF_X * 2.0, 6.0, 0.8), Vector3(0.0, 3.0, -YARD_HALF_Z))
+	_solid_only(Vector3(YARD_HALF_X * 2.0, 6.0, 0.8), Vector3(0.0, 3.0, YARD_HALF_Z))
+	_solid_only(Vector3(0.8, 6.0, YARD_HALF_Z * 2.0), Vector3(-YARD_HALF_X, 3.0, 0.0))
+	_solid_only(Vector3(0.8, 6.0, YARD_HALF_Z * 2.0), Vector3(YARD_HALF_X, 3.0, 0.0))
+
+	# 土坡底座：低、缓，不挡视线；上方交给岩脊。
+	_box(Vector3(39.4, 0.9, 2.5), Vector3(0.0, 0.42, -14.0), Color.WHITE, false, 0.0, Vector3.ZERO, mat_ground_cool)
+	_box(Vector3(39.4, 0.7, 2.3), Vector3(0.0, 0.32, 14.0), Color.WHITE, false, 0.0, Vector3.ZERO, mat_ground_warm)
+	_box(Vector3(2.5, 0.8, 29.0), Vector3(-19.2, 0.36, 0.0), Color.WHITE, false, 0.0, Vector3.ZERO, mat_ground_cool)
+
+	# 北/南/西三面的大轮廓岩脊：主块 + 肩石 + 亮顶，低多边形、分层。
+	for spot in [
+		Vector3(-17.5, 0.0, -12.4), Vector3(-10.0, 0.0, -13.4), Vector3(-2.0, 0.0, -13.0),
+		Vector3(6.5, 0.0, -13.6), Vector3(14.0, 0.0, -12.8),
+		Vector3(-16.5, 0.0, 12.6), Vector3(-8.5, 0.0, 13.2), Vector3(-0.5, 0.0, 12.8),
+		Vector3(7.5, 0.0, 13.4),
+		Vector3(-17.4, 0.0, 9.0),
+	]:
+		var size := Vector3(7.4, 3.4, 6.0) + Vector3(1.6 * sin(spot.x * 0.7), 1.2 * cos(spot.z * 0.5), 0.0)
+		_ridge(spot, size, spot.x * 0.13 + spot.z * 0.07)
+
+	# 墙外远景岩层：只做剪影和层次，不堆细节。
+	for spot in [
+		Vector3(-30.0, 0.0, -24.0), Vector3(-6.0, 0.0, -32.0), Vector3(16.0, 0.0, -28.0),
+		Vector3(34.0, 0.0, -8.0), Vector3(30.0, 0.0, 20.0), Vector3(4.0, 0.0, 34.0),
+		Vector3(-24.0, 0.0, 26.0), Vector3(-38.0, 0.0, 4.0),
+	]:
+		var far := Vector3(18.0, 14.0, 13.0) + Vector3(spot.y * 1.6, spot.y * 1.2, 0.0)
+		var node := MeshInstance3D.new()
+		node.mesh = kit.rock_mesh(spot.x * 0.17 + spot.z * 0.11, far, 1)
+		node.position = spot
+		node.rotation.y = spot.x * 0.05
+		node.material_override = mat_rock_c
+		add_child(node)
+
+
+
+
+## 中景岩石：主块 + 肩石 + 亮顶；碰撞尺寸/位置与旧版一致。
+func _rock(at: Vector3, size: Vector3, spin: float) -> void:
+	_rock_mesh(at, size * Vector3(1.0, 1.15, 1.0), spin, mat_rock_a)
+	_rock_mesh(at + Vector3(size.x * 0.22, 0.0, -size.z * 0.14),
+		size * Vector3(0.62, 0.78, 0.60), spin + 0.35, mat_rock_b)
+	_rock_mesh(at + Vector3(-size.x * 0.12, 0.0, size.z * 0.10),
+		size * Vector3(0.52, 0.44, 0.48), spin - 0.2, mat_rock_c)
+	_box_collider(size * 0.92, at + Vector3.UP * (size.y * 0.40))
+	_contact(at.x, at.z, size.x * 0.85, 0.60)
+
+
+func _ridge(at: Vector3, size: Vector3, spin: float) -> void:
+	_rock_mesh(at, size * Vector3(1.0, 1.05, 1.0), spin, mat_rock_c)
+	_rock_mesh(at + Vector3(size.x * 0.24, 0.0, -size.z * 0.18),
+		size * Vector3(0.68, 0.86, 0.66), spin + 0.5, mat_rock_b)
+	_rock_mesh(at + Vector3(-size.x * 0.26, 0.0, size.z * 0.22),
+		size * Vector3(0.54, 0.62, 0.58), spin - 0.4, mat_rock_a)
+
+
+func _rock_mesh(at: Vector3, size: Vector3, spin: float, material: Material) -> MeshInstance3D:
+	var node := MeshInstance3D.new()
+	node.mesh = kit.rock_mesh(at.x * 0.23 + at.z * 0.19 + spin, size, 2)
+	node.position = at
+	node.rotation.y = spin
+	node.material_override = material
+	add_child(node)
+	return node
+
+
+## 远景气态行星：只做剪影与色块，不参与玩法。
+func _sky_planet() -> void:
+	var planet_material := StandardMaterial3D.new()
+	planet_material.albedo_color = Color("#cfd9d4")
+	planet_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	planet_material.disable_fog = true
+	var planet := MeshInstance3D.new()
+	var sphere := SphereMesh.new()
+	sphere.radius = 9.0
+	sphere.height = 18.0
+	sphere.radial_segments = 48
+	sphere.rings = 24
+	planet.mesh = sphere
+	planet.position = Vector3(58.0, 27.0, 4.0)
+	planet.material_override = planet_material
+	add_child(planet)
+
+	var ring_material := StandardMaterial3D.new()
+	ring_material.albedo_color = Color("#b6c8c2")
+	ring_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	ring_material.disable_fog = true
+	var ring := MeshInstance3D.new()
+	var torus := TorusMesh.new()
+	torus.inner_radius = 13.0
+	torus.outer_radius = 20.0
+	torus.rings = 64
+	torus.ring_segments = 4
+	ring.mesh = torus
+	ring.position = planet.position
+	ring.rotation = Vector3(deg_to_rad(62.0), deg_to_rad(18.0), deg_to_rad(-12.0))
+	ring.material_override = ring_material
+	add_child(ring)
+
+
+# ---------------------------------------------------------------- 搬运场地
+
+func _build_yard() -> void:
+	# 场地现在要踢球：中央完全留空，只保留边线外的轮廓物。
+	_rock(Vector3(-12.2, 0.0, -2.0), Vector3(2.2, 2.6, 2.4), 0.6)
+	_rock(Vector3(-13.6, 0.0, 9.8), Vector3(2.0, 2.2, 1.8), -0.4)
+
+	# 边线货箱只留一组，作为尺度参照；不进场。
+	_crate(Vector3(-5.7, 0.0, 10.9), 1.25, 0.12)
+	_crate(Vector3(-6.2, 1.25, 11.0), 0.95, 0.45)
+
+	# 两盏工作灯：给场地一个竖向参照，也让侧光有来源。
+	_lamp_post(Vector3(-9.4, 0.0, 8.6))
+	_lamp_post(Vector3(6.2, 0.0, -9.4))
+
+
+func _crate(at: Vector3, size: float, yaw: float, tilt: float = 0.0) -> void:
+	var body := Vector3(size, size, size)
+	var node := _box(body, at + Vector3.UP * size * 0.5, CRATE, true, 0.0, Vector3(0.0, yaw, tilt), mat_crate)
+	# 上下包边 + 竖框：读成“有装配关系的货箱”，不是一块棕色方块。
+	for y in [-0.40, 0.40]:
+		_child(node, _bevel(Vector3(size * 1.03, 0.10, size * 1.03), 0.015),
+			Vector3(0.0, y * size, 0.0), CRATE_DARK, mat_crate_dark)
+	for x in [-0.40, 0.40]:
+		for z in [-0.40, 0.40]:
+			_child(node, _bevel(Vector3(0.09, size * 0.92, 0.09), 0.012),
+				Vector3(x * size, 0.0, z * size), CRATE_DARK, mat_crate_dark)
+	# 侧面检修板 + 标签
+	_child(node, _bevel(Vector3(size * 0.52, size * 0.34, 0.02), 0.008),
+		Vector3(0.0, 0.04 * size, size * 0.505), HULL_LIGHT, mat_pack)
+	_child(node, _bevel(Vector3(size * 0.24, size * 0.10, 0.012), 0.004),
+		Vector3(-0.18 * size, 0.04 * size, size * 0.518), AMBER, mat_amber)
+	_contact(at.x, at.z, size * 0.95, 0.58)
+
+
+func _cargo_gantry(at: Vector3) -> void:
+	# 两根立柱 + 一根横梁 + 斜撑：在边线外形成“装货场”的工业轮廓。
+	for side in [-1.0, 1.0]:
+		_box(Vector3(0.24, 3.2, 0.24), at + Vector3(0.0, 1.6, side * 1.05), Color.WHITE, false, 0.0, Vector3.ZERO, mat_trim_dark)
+		_box(Vector3(0.55, 0.12, 0.55), at + Vector3(0.0, 0.06, side * 1.05), Color.WHITE, false, 0.0, Vector3.ZERO, mat_bare)
+		_contact(at.x, at.z + side * 1.05, 0.50, 0.45)
+	_box(Vector3(0.28, 0.28, 2.5), at + Vector3.UP * 3.15, Color.WHITE, false, 0.0, Vector3.ZERO, mat_trim)
+	for side in [-1.0, 1.0]:
+		_box(Vector3(0.10, 0.10, 1.35), at + Vector3(0.0, 2.72, side * 0.50), Color.WHITE,
+			false, 0.0, Vector3(side * 0.62, 0.0, 0.0), mat_trim_dark)
+	# 顶部小警示灯，静态，不做闪烁系统。
+	_cyl(0.10, 0.12, 0.16, at + Vector3(0.0, 3.36, 0.0), AMBER, Vector3.ZERO, 0.55, 12, mat_amber)
+
+
+func _container(at: Vector3, size: Vector3, yaw: float, body_color: Color, frame_color: Color) -> void:
+	var body := _box(size, at + Vector3.UP * size.y * 0.5, body_color, true, 0.0, Vector3(0.0, yaw, 0.0), kit.clean_paint(body_color, 0.66))
+	var frame := kit.clean_paint(frame_color, 0.54, 0.08)
+	# 端部框架 + 上下导轨
+	for x in [-0.5, 0.5]:
+		_child(body, _bevel(Vector3(0.10, size.y * 1.02, size.z * 1.02), 0.02), Vector3(x * size.x, 0.0, 0.0), frame_color, frame)
+	for y in [-0.44, 0.44]:
+		_child(body, _bevel(Vector3(size.x * 1.01, 0.10, size.z * 1.01), 0.02), Vector3(0.0, y * size.y, 0.0), frame_color, frame)
+	# 侧面瓦楞：少量竖肋，不铺满高频
+	for index in range(5):
+		var x := (-0.32 + float(index) * 0.16) * size.x
+		_child(body, _bevel(Vector3(size.x * 0.045, size.y * 0.86, 0.035), 0.008), Vector3(x, 0.0, size.z * 0.505), frame_color, frame)
+	# 门端：两条锁杆 + 小铭牌
+	var door_x := size.x * 0.505
+	for z in [-0.16, 0.16]:
+		_child(body, _bevel(Vector3(0.035, size.y * 0.82, 0.06), 0.008), Vector3(door_x, 0.0, z * size.z), AMBER, mat_amber)
+	_child(body, _bevel(Vector3(0.02, 0.26, 0.9), 0.006), Vector3(door_x + 0.01, 0.16 * size.y, 0.0), HULL_LIGHT, kit.clean_paint(HULL_LIGHT, 0.5))
+	_contact(at.x, at.z, maxf(size.x, size.z) * 0.72, 0.50)
+
+
+func _yard_gantry(at: Vector3) -> void:
+	# 跨场门架：两根立柱在 z±10.8（主球路之外），横梁在 6.6 m 高。
+	var frame := kit.clean_paint(TRIM, 0.50, 0.08)
+	var cream := kit.clean_paint(HULL_LIGHT, 0.58, 0.04)
+	for side in [-1.0, 1.0]:
+		_box(Vector3(0.55, 6.8, 0.55), at + Vector3(0.0, 3.4, side * 10.8), Color.WHITE, true, 0.0, Vector3.ZERO, frame)
+		_box(Vector3(0.95, 0.20, 0.95), at + Vector3(0.0, 0.10, side * 10.8), Color.WHITE, false, 0.0, Vector3.ZERO, cream)
+		_contact(at.x, at.z + side * 10.8, 0.95, 0.55)
+		for y in [2.2, 4.8]:
+			_box(Vector3(0.12, 0.35, 0.85), at + Vector3(0.0, y, side * 10.8), Color.WHITE, false, 0.0, Vector3.ZERO, mat_amber)
+	_box(Vector3(0.62, 0.70, 21.4), at + Vector3.UP * 6.65, Color.WHITE, false, 0.0, Vector3.ZERO, cream)
+	_box(Vector3(0.50, 0.12, 21.0), at + Vector3(0.0, 6.24, 0.0), Color.WHITE, false, 0.0, Vector3.ZERO, frame)
+	# 从横梁垂到装货口的两根拉索/线缆，交代“吊装设备”的用途。
+	for side in [-1.0, 1.0]:
+		var cable := CylinderMesh.new()
+		cable.top_radius = 0.035
+		cable.bottom_radius = 0.035
+		cable.height = 3.2
+		var node := MeshInstance3D.new()
+		node.mesh = cable
+		node.position = Vector3(11.9, 5.2, side * 1.7)
+		node.rotation = Vector3(0.0, 0.0, -0.42)
+		node.material_override = mat_trim_dark
+		add_child(node)
+	# 顶部两盏小警示灯（静态）。
+	for side in [-1.0, 1.0]:
+		_cyl(0.10, 0.12, 0.16, at + Vector3(0.0, 7.10, side * 10.8), AMBER, Vector3.ZERO, 0.5, 12, mat_amber)
+
+
+func _lamp_post(at: Vector3) -> void:
+	_cyl(0.11, 0.15, 3.1, at + Vector3.UP * 1.55, TRIM_DARK, Vector3.ZERO, 0.0, 12, mat_trim_dark)
+	_box(Vector3(0.20, 0.10, 0.20), at + Vector3.UP * 0.16, Color.WHITE, false, 0.0, Vector3.ZERO, mat_bare)
+	_box(Vector3(0.52, 0.16, 0.34), at + Vector3.UP * 3.14, Color.WHITE, false, 0.0, Vector3.ZERO, mat_trim)
+	_box(Vector3(0.34, 0.05, 0.24), at + Vector3.UP * 3.03, Color.WHITE, false, 0.0, Vector3.ZERO, mat_lens)
+	var light := OmniLight3D.new()
+	light.position = at + Vector3.UP * 2.95
+	light.light_color = Color("#ffe0b0")
+	light.light_energy = 0.42
+	light.omni_range = 7.5
+	add_child(light)
+	_contact(at.x, at.z, 0.42, 0.50)
+
+
+# ---------------------------------------------------------------- 生物窝
+
+func _build_nest() -> void:
+	var c := NEST_CENTER
+	# 凹陷：深色底盘 + 抬起的边缘石，靠明暗和轮廓读成「被它压出来的坑」。
+	var floor_mesh := CylinderMesh.new()
+	floor_mesh.top_radius = 4.1
+	floor_mesh.bottom_radius = 3.6
+	floor_mesh.height = 0.08
+	floor_mesh.radial_segments = 36
+	_add(floor_mesh, c + Vector3.UP * 0.03, Color.WHITE, 0.0, Vector3.ZERO, Vector3.ONE, mat_dark_steel)
+	_ring(4.05, 4.32, c + Vector3.UP * 0.09, STONE_DARK, Vector3.ZERO, 0.0, mat_rock_b)
+
+	for index in range(11):
+		var angle := TAU * float(index) / 11.0
+		var radius := 4.30 + 0.30 * sin(float(index) * 2.1)
+		var tone := mat_rock_a if index % 3 else mat_rock_b
+		_rock_mesh(c + Vector3(cos(angle) * radius, 0.0, sin(angle) * radius),
+			Vector3(0.95, 0.34, 0.72), angle, tone)
+
+	# 被压扁的货箱：窝后侧两块当背靠，其余平摊开，不堆成杂物山。
+	_flattened_crate(c + Vector3(-2.4, 0.0, -2.2), Vector3(1.5, 0.22, 1.1), 0.5)
+	_flattened_crate(c + Vector3(1.5, 0.0, -3.2), Vector3(1.7, 0.20, 1.2), -0.3)
+	_flattened_crate(c + Vector3(2.9, 0.0, 0.6), Vector3(1.2, 0.18, 0.9), 1.1, false)
+	_flattened_crate(c + Vector3(-1.2, 0.0, 2.4), Vector3(1.0, 0.16, 0.8), -0.9, false)
+
+	# 窝里躺着几罐被压瘪的燃料：证明它真的抢过东西。
+	_crushed_can(c + Vector3(-1.4, 0.0, 0.9), 0.7)
+	_crushed_can(c + Vector3(-0.6, 0.0, 1.7), -0.4)
+	_crushed_can(c + Vector3(1.9, 0.0, -0.6), 1.4)
+
+	# 拖拽痕迹：从窝口朝装货口方向拉出去。
+	for index in range(4):
+		var offset := -1.5 + float(index) * 1.05
+		_box(Vector3(4.6 + float(index) * 0.6, 0.006, 0.30),
+			c + Vector3(2.9 + float(index) * 2.4, 0.075, offset), SCUFF,
+			false, 0.0, Vector3(0.0, 0.14 - float(index) * 0.09, 0.0))
+
+	# 散落包装：只撒薄片，不挡路。
+	for index in range(14):
+		var angle := TAU * float(index) / 14.0 + 0.4
+		var radius := 1.4 + 2.2 * fmod(float(index) * 0.37, 1.0)
+		var spot := c + Vector3(cos(angle) * radius, 0.05, sin(angle) * radius)
+		var plate := Vector3(0.34 + 0.1 * float(index % 3), 0.02, 0.24)
+		_box(plate, spot, PACK, false, 0.0, Vector3(0.0, angle * 1.7, 0.0), mat_pack)
+
+	# 窝后侧挡板：给它一个背靠，同时压住窝区的轮廓。
+	for index in range(3):
+		_box(Vector3(2.2, 0.9, 0.14),
+			c + Vector3(-1.6 + float(index) * 1.9, 0.5 + 0.1 * float(index), -4.9 - float(index) * 0.5),
+			CRATE_DARK, false, 0.0, Vector3(0.0, 0.3 - float(index) * 0.25, 0.12), mat_crate_dark)
+
+
+func _flattened_crate(at: Vector3, size: Vector3, yaw: float, solid: bool = true) -> void:
+	var node := _box(size, at + Vector3.UP * size.y * 0.5, CRATE, solid, 0.0, Vector3(0.0, yaw, 0.0), mat_crate)
+	_child(node, _bevel(Vector3(size.x * 1.02, 0.05, size.z * 0.16), 0.01), Vector3(0.0, 0.02, 0.0), CRATE_DARK, mat_crate_dark)
+	_child(node, _bevel(Vector3(size.x * 0.5, 0.01, size.z * 0.3), 0.004),
+		Vector3(size.x * 0.12, size.y * 0.5 + 0.005, 0.0), PACK, mat_pack)
+
+
+## 窝里被压瘪的燃料罐：只有形体和一块能量窗，不抢眼。
+func _crushed_can(at: Vector3, yaw: float) -> void:
+	var node := _box(Vector3(0.46, 0.15, 0.34), at + Vector3.UP * 0.075, AMBER, false, 0.0, Vector3(0.0, yaw, 0.0), mat_amber)
+	_child(node, _bevel(Vector3(0.48, 0.03, 0.36), 0.006), Vector3(0.0, 0.085, 0.0), TRIM, mat_trim)
+	_child(node, _bevel(Vector3(0.26, 0.02, 0.02), 0.004), Vector3(0.0, 0.02, 0.17), CYAN, mat_cyan)
+
+
+# ---------------------------------------------------------------- 装货口
+
+func _build_bay_frame() -> void:
+	# 门框碰撞：与旧版逐值一致（立柱 0.70×3.80×0.55 @ x13.92 z±3.02；横梁 0.64×0.46×6.30 @ y3.60）。
+	for side in [-1.0, 1.0]:
+		_box(Vector3(0.70, 3.80, 0.55), Vector3(13.92, 1.90, side * 3.02), HULL, true, 0.0, Vector3.ZERO, mat_hull, true)
+		_box(Vector3(0.74, 0.18, 0.60), Vector3(13.90, 3.82, side * 3.02), TRIM, false, 0.0, Vector3.ZERO, mat_trim)
+		# 立柱外侧的检修面板 + 四颗螺栓，说明“这块可以拆”。
+		_panel(Vector3(0.02, 1.05, 0.44), Vector3(13.555, 2.25, side * 3.02), TRIM, 0.0)
+		for y in [1.82, 2.68]:
+			_bolt(Vector3(13.535, y, side * 3.02 - 0.17), 0.0, 0.035)
+			_bolt(Vector3(13.535, y, side * 3.02 + 0.17), 0.0, 0.035)
+		# 底部防撞块（橡胶），贴地，不进入门洞。
+		_box(Vector3(0.20, 0.55, 0.28), Vector3(13.53, 0.28, side * 3.24), Color.WHITE, false, 0.0, Vector3.ZERO, mat_rubber)
+		# 竖向缓冲条：在门洞外侧 z=±3.38，球路在 ±2.4，不碰。
+		var bumper := CapsuleMesh.new()
+		bumper.radius = 0.07
+		bumper.height = 2.60
+		bumper.radial_segments = 12
+		bumper.rings = 4
+		_add(bumper, Vector3(13.24, 1.62, side * 3.40), Color.WHITE, 0.0, Vector3.ZERO, Vector3.ONE, mat_rubber)
+	# 横梁
+	_box(Vector3(0.64, 0.46, 6.30), Vector3(13.90, 3.60, 0.0), HULL, true, 0.0, Vector3.ZERO, mat_hull, true)
+	# 横梁与船体之间的连接座（承力路径）
+	_box(Vector3(0.50, 0.92, 4.20), Vector3(14.15, 4.10, 0.0), Color.WHITE, false, 0.0, Vector3.ZERO, mat_hull_light)
+	for z in [-2.0, 0.0, 2.0]:
+		_box(Vector3(0.58, 0.10, 0.26), Vector3(13.98, 3.92, z), TRIM, false, 0.0, Vector3.ZERO, mat_trim)
+
+	# 圆角门拱：内沿严格等于旧门口（5.34 m 宽 × 3.37 m 高），只向外长。
+	var arch := MeshInstance3D.new()
+	arch.mesh = kit.arch(7.00, 4.05, 5.34, 3.37, 0.38, 0.42, 0.16)
+	arch.position = Vector3(13.30, 0.0, 0.0)
+	arch.material_override = mat_bay_cream
+	add_child(arch)
+	# 拱背与立柱/横梁之间的垫块，避免“悬浮面板”。
+	for z in [-3.24, -2.92, 2.92, 3.24]:
+		_box(Vector3(0.30, 0.16, 0.16), Vector3(13.52, 3.60, z), Color.WHITE, false, 0.0, Vector3.ZERO, mat_trim_dark)
+	for z in [-3.24, 3.24]:
+		for y in [0.60, 1.60, 2.60]:
+			_box(Vector3(0.26, 0.14, 0.14), Vector3(13.52, y, z), Color.WHITE, false, 0.0, Vector3.ZERO, mat_trim_dark)
+
+	# 内沿深色密封条：内尺寸与门洞一致，只贴在拱的前表面，不缩口。
+	var liner := MeshInstance3D.new()
+	liner.mesh = kit.arch(5.48, 3.49, 5.34, 3.37, 0.055, 0.10, 0.05)
+	liner.position = Vector3(13.105, 0.0, 0.0)
+	liner.material_override = mat_rubber
+	add_child(liner)
+
+
+
+	# 门拱上的六角螺栓：只在需要装配的节点出现。
+	for y in [0.55, 1.55, 2.55]:
+		for side in [-1.0, 1.0]:
+			_bolt(Vector3(13.085, y, side * 3.26), 0.0, 0.048)
+	for z in [-2.35, -1.18, 0.0, 1.18, 2.35]:
+		_bolt(Vector3(13.085, 3.965, z), 0.0, 0.042)
+
+	# 顶檐：向玩家方向出挑 0.55 m，底面装两盏工作灯。
+	_box(Vector3(0.62, 0.18, 6.55), Vector3(13.05, 3.50, 0.0), Color.WHITE, false, 0.0, Vector3.ZERO, mat_bay_cream)
+	var lip := CylinderMesh.new()
+	lip.top_radius = 0.085
+	lip.bottom_radius = 0.085
+	lip.height = 6.55
+	lip.radial_segments = 16
+	_add(lip, Vector3(12.75, 3.50, 0.0), Color.WHITE, 0.0, Vector3(PI * 0.5, 0.0, 0.0), Vector3.ONE, mat_bare)
+	for side in [-1.0, 1.0]:
+		_work_lamp(Vector3(13.02, 3.38, side * 1.86), side < 0.0)
+
+	# 状态灯箱：三格指示灯放在横梁正面，背板做凹槽。
+	_box(Vector3(0.07, 0.56, 2.75), Vector3(13.035, 3.66, 0.0), INTAKE, false, 0.0, Vector3.ZERO, mat_dark_steel)
+	_box(Vector3(0.03, 0.44, 2.55), Vector3(12.995, 3.66, 0.0), Color.WHITE, false, 0.0, Vector3.ZERO, mat_trim_dark)
+	for index in range(3):
+		var z := -0.9 + float(index) * 0.9
+		_box(Vector3(0.02, 0.32, 0.32), Vector3(12.985, 3.66, z), INTAKE, false, 0.0, Vector3.ZERO, mat_intake_slot)
+		_box(Vector3(0.015, 0.36, 0.36), Vector3(12.995, 3.66, z), TRIM, false, 0.0, Vector3.ZERO, mat_trim)
+
+	# 门框内侧警示条：贴在立柱内侧面，宽 7 cm，球门内沿仍为 z=±2.67。
+	for side in [-1.0, 1.0]:
+		_box(Vector3(0.045, 2.95, 0.075), Vector3(13.555, 1.55, side * 2.705), AMBER, false, 0.0, Vector3.ZERO, mat_bay_strip)
+
+	# 接货平台内的金属底板 + 入口压条（无碰撞，保持球直接滚入）。
+	_box(Vector3(4.10, 0.02, 5.20), Vector3(13.55, 0.020, 0.0), Color.WHITE, false, 0.0, Vector3.ZERO, mat_bare)
+	_box(Vector3(0.06, 0.03, 5.20), Vector3(11.52, 0.030, 0.0), TRIM, false, 0.0, Vector3.ZERO, mat_trim)
+	for side in [-1.0, 1.0]:
+		_box(Vector3(2.4, 0.07, 0.07), Vector3(12.65, 0.72, side * 2.72), TRIM, false, 0.0, Vector3.ZERO, mat_trim)
+		for index in range(3):
+			_box(Vector3(0.07, 0.70, 0.07), Vector3(11.55 + float(index) * 1.05, 0.35, side * 2.72), TRIM, false, 0.0, Vector3.ZERO, mat_trim)
+
+	# 夹持机构：装货成功时向内一夹再复位（on_loaded）。
+	for index in range(2):
+		var side := -1.0 if index == 0 else 1.0
+		var pivot := Node3D.new()
+		pivot.position = Vector3(13.30, 3.16, side * 2.10)
+		add_child(pivot)
+		_child(pivot, _bevel(Vector3(0.17, 0.95, 0.17), 0.02), Vector3(0.0, -0.48, 0.0), TRIM, mat_trim)
+		_child(pivot, _bevel(Vector3(0.13, 0.16, 0.34), 0.015), Vector3(0.0, -0.98, -side * 0.06), AMBER, mat_amber)
+		_clamp_arms.append(pivot)
+
+
+	# 门口地标：两根高光柱 + 顶部横梁 + 信标，让装货口在出生点就能被认出来。
+	for side in [-1.0, 1.0]:
+		_box(Vector3(0.42, 6.2, 0.42), Vector3(13.55, 3.10, side * 3.86), Color.WHITE, true, 0.0, Vector3.ZERO, mat_bay_cream)
+		_box(Vector3(0.62, 0.22, 0.62), Vector3(13.55, 0.11, side * 3.86), Color.WHITE, false, 0.0, Vector3.ZERO, mat_trim_dark)
+	_box(Vector3(0.50, 0.50, 8.30), Vector3(13.55, 6.20, 0.0), Color.WHITE, false, 0.0, Vector3.ZERO, mat_bay_cream)
+	_cyl(0.16, 0.22, 0.55, Vector3(13.55, 6.65, 0.0), AMBER, Vector3.ZERO, 0.65, 12, mat_amber)
+
+
+func _panel(size: Vector3, at: Vector3, color: Color, yaw: float) -> void:
+	_box(size, at, color, false, 0.0, Vector3(0.0, yaw, 0.0), mat_trim)
+	# 面板四周的压条
+	_box(Vector3(size.x, 0.03, 0.03), at + Vector3(0.0, size.y * 0.5, 0.0), TRIM_DARK, false,
+		0.0, Vector3(0.0, yaw, 0.0), mat_trim_dark)
+	_box(Vector3(size.x, 0.03, 0.03), at - Vector3(0.0, size.y * 0.5, 0.0), TRIM_DARK, false,
+		0.0, Vector3(0.0, yaw, 0.0), mat_trim_dark)
+
+
+func _work_lamp(at: Vector3, cast_shadow: bool = false) -> void:
+	# 灯具本体 + 透镜 + 聚光：灯有可见来源，不是凭空亮。
+	_cyl(0.16, 0.20, 0.18, at, TRIM_DARK, Vector3.ZERO, 0.0, 14, mat_trim_dark)
+	_cyl(0.14, 0.14, 0.04, at - Vector3.UP * 0.09, Color.WHITE, Vector3.ZERO, 0.0, 14, mat_lens)
+	var spot := SpotLight3D.new()
+	spot.position = at - Vector3.UP * 0.12
+	spot.rotation_degrees = Vector3(-90.0, 0.0, 0.0)
+	spot.light_color = Color("#ffe3b8")
+	spot.light_energy = 0.9
+	spot.spot_range = 11.0
+	spot.spot_angle = 48.0
+	spot.spot_attenuation = 0.9
+	spot.shadow_enabled = cast_shadow
+	add_child(spot)
+
+
+# ---------------------------------------------------------------- 灯光
+
+func _build_lights() -> void:
+	# 舱口工作灯（暖）：把门框、坡道和奶龙从地面里拉出来。
+	_bay_light = OmniLight3D.new()
+	_bay_light.position = Vector3(12.2, 3.05, 0.0)
+	_bay_light.light_color = Color("#ffe3b8")
+	_bay_light.light_energy = 0.30
+	_bay_light.omni_range = 9.5
+	add_child(_bay_light)
+
+	# 窝区冷补光：让奶龙轮廓从深色地面里分出来。
+	var nest_fill := OmniLight3D.new()
+	nest_fill.position = NEST_CENTER + Vector3.UP * 4.4
+	nest_fill.light_color = Color("#cfe9e4")
+	nest_fill.light_energy = 0.34
+	nest_fill.omni_range = 10.5
+	add_child(nest_fill)
+
+	# 落地信标（保留原场景的竖向参照）。
+	var beacon := CylinderMesh.new()
+	beacon.top_radius = 0.18
+	beacon.bottom_radius = 0.50
+	beacon.height = 2.6
+	_add(beacon, Vector3(-14.0, 1.3, -11.0), TRIM, 0.0, Vector3.ZERO, Vector3.ONE, mat_trim)
+	var beacon_light := OmniLight3D.new()
+	beacon_light.position = Vector3(-14.0, 2.9, -11.0)
+	beacon_light.light_color = CYAN
+	beacon_light.light_energy = 1.0
+	beacon_light.omni_range = 7.0
+	add_child(beacon_light)
+
+
+# ---------------------------------------------------------------- 空气感
+
+## 漂浮尘埃：只做氛围，不参与任何碰撞。粒子数很小（220），开销可忽略。
+func _build_air_dust() -> void:
+	var particles := GPUParticles3D.new()
+	particles.name = "AirDust"
+	particles.amount = 220
+	particles.lifetime = 16.0
+	particles.preprocess = 9.0
+	particles.position = Vector3(0.0, 4.5, 0.0)
+	particles.visibility_aabb = AABB(Vector3(-24.0, -4.0, -18.0), Vector3(48.0, 14.0, 36.0))
+
+	var process := ParticleProcessMaterial.new()
+	process.emission_shape = ParticleProcessMaterial.EMISSION_SHAPE_BOX
+	process.emission_box_extents = Vector3(20.0, 4.5, 14.0)
+	process.direction = Vector3(1.0, 0.2, 0.35)
+	process.spread = 180.0
+	process.initial_velocity_min = 0.04
+	process.initial_velocity_max = 0.30
+	process.gravity = Vector3(0.0, -0.02, 0.0)
+	process.scale_min = 0.6
+	process.scale_max = 1.6
+
+	var gradient := Gradient.new()
+	gradient.set_color(0, Color(1.0, 0.95, 0.84, 0.0))
+	gradient.set_color(1, Color(1.0, 0.95, 0.84, 0.0))
+	gradient.add_point(0.22, Color(1.0, 0.95, 0.84, 0.20))
+	gradient.add_point(0.78, Color(1.0, 0.95, 0.84, 0.16))
+	var ramp := GradientTexture1D.new()
+	ramp.gradient = gradient
+	process.color_ramp = ramp
+	particles.process_material = process
+
+	var quad := QuadMesh.new()
+	quad.size = Vector2(0.055, 0.055)
+	var mat := StandardMaterial3D.new()
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	mat.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
+	mat.vertex_color_use_as_albedo = true
+	mat.disable_receive_shadows = true
+	quad.material = mat
+	particles.draw_pass_1 = quad
+	add_child(particles)
+
+
+# ---------------------------------------------------------------- 基础工具
+
+const WHITE := Color(1.0, 1.0, 1.0, 1.0)
+
+func _mat(color: Color, emission: float = 0.0, roughness: float = 0.93) -> StandardMaterial3D:
+	# 旧接口保留：只给不需要分层材质的极小件用。
+	var material := StandardMaterial3D.new()
+	material.albedo_color = color
+	material.roughness = roughness
+	material.metallic = 0.03
+	material.metallic_specular = 0.20
+	if emission > 0.0:
+		material.emission_enabled = true
+		material.emission = color
+		material.emission_energy_multiplier = emission
+	return material
+
+
+func _add(mesh: Mesh, at: Vector3, color: Color, emission: float = 0.0,
+		rot: Vector3 = Vector3.ZERO, scale: Vector3 = Vector3.ONE,
+		material: Material = null) -> MeshInstance3D:
+	var instance := MeshInstance3D.new()
+	instance.mesh = mesh
+	instance.position = at
+	instance.rotation = rot
+	instance.scale = scale
+	instance.material_override = material if material != null else _mat(color, emission)
+	add_child(instance)
+	return instance
+
+
+func _child(parent: Node3D, mesh: Mesh, at: Vector3, color: Color, material: Material) -> MeshInstance3D:
+	var instance := MeshInstance3D.new()
+	instance.mesh = mesh
+	instance.position = at
+	instance.material_override = material
+	parent.add_child(instance)
+	return instance
+
+
+func _bevel(size: Vector3, bevel: float = 0.025) -> ArrayMesh:
+	return kit.beveled_box(size, bevel)
+
+
+func _box(size: Vector3, at: Vector3, color: Color, solid: bool = false,
+		emission: float = 0.0, rot: Vector3 = Vector3.ZERO,
+		material: Material = null, metal_frame: bool = false) -> MeshInstance3D:
+	var mesh: Mesh = kit.beveled_box(size, minf(0.04, minf(size.x, minf(size.y, size.z)) * 0.18))
+	var node := _add(mesh, at, color, emission, rot, Vector3.ONE, material)
+	if solid:
+		_box_collider(size, at, rot, metal_frame)
+	return node
+
+
+func _sphere(at: Vector3, size: Vector3, color: Color, rot: Vector3 = Vector3.ZERO) -> MeshInstance3D:
+	# 旧接口保留：只用于极小装饰，不再用于岩石。
+	var mesh := SphereMesh.new()
+	mesh.radius = 0.5
+	mesh.height = 1.0
+	mesh.radial_segments = 16
+	mesh.rings = 8
+	return _add(mesh, at, color, 0.0, rot, size, mat_rock_b)
+
+
+func _cyl(r_top: float, r_bottom: float, height: float, at: Vector3, color: Color,
+		rot: Vector3 = Vector3.ZERO, emission: float = 0.0, segments: int = 16,
+		material: Material = null) -> MeshInstance3D:
+	var mesh := CylinderMesh.new()
+	mesh.top_radius = r_top
+	mesh.bottom_radius = r_bottom
+	mesh.height = height
+	mesh.radial_segments = segments
+	return _add(mesh, at, color, emission, rot, Vector3.ONE, material)
+
+
+func _ring(inner: float, outer: float, at: Vector3, color: Color,
+		rot: Vector3 = Vector3.ZERO, emission: float = 0.0,
+		material: Material = null) -> MeshInstance3D:
+	var mesh := TorusMesh.new()
+	mesh.inner_radius = inner
+	mesh.outer_radius = outer
+	mesh.rings = 40
+	mesh.ring_segments = 10
+	return _add(mesh, at, color, emission, rot, Vector3.ONE, material)
+
+
+func _bolt(at: Vector3, yaw: float, radius: float = 0.04) -> void:
+	# 六角头 + 垫圈：yaw 只用于货箱表面，门框用轴 X。
+	var head := CylinderMesh.new()
+	head.top_radius = radius
+	head.bottom_radius = radius
+	head.height = radius * 0.9
+	head.radial_segments = 6
+	var node := MeshInstance3D.new()
+	node.mesh = head
+	node.position = at
+	node.rotation = Vector3(0.0, 0.0, PI * 0.5)
+	node.material_override = mat_bare
+	add_child(node)
+	var washer := CylinderMesh.new()
+	washer.top_radius = radius * 1.55
+	washer.bottom_radius = radius * 1.55
+	washer.height = radius * 0.25
+	washer.radial_segments = 12
+	var w := MeshInstance3D.new()
+	w.mesh = washer
+	w.position = at
+	w.rotation = Vector3(0.0, 0.0, PI * 0.5)
+	w.material_override = mat_trim_dark
+	add_child(w)
+
+
+func _box_collider(size: Vector3, at: Vector3, rot: Vector3 = Vector3.ZERO, metal_frame: bool = false) -> void:
+	var body := StaticBody3D.new()
+	if metal_frame:
+		body.add_to_group("goal_metal")
+	body.position = at
+	body.rotation = rot
+	body.collision_layer = 2
+	body.collision_mask = 0
+	var shape := CollisionShape3D.new()
+	var box := BoxShape3D.new()
+	box.size = size
+	shape.shape = box
+	body.add_child(shape)
+	add_child(body)
+
+
+func _solid_only(size: Vector3, at: Vector3) -> void:
+	_box_collider(size, at)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

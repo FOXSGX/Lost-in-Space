@@ -163,12 +163,6 @@ func _process(_delta: float) -> void:
     if controller == null:
         return
     var live: bool = controller.ship_active or controller.game_started
-    if controller.is_host and controller.game_started and controller.current_planet_id == "electromagnetic":
-        var changed: bool = false
-        for id: int in controller.players:
-            changed = sync_heavy(id) or changed
-        if changed:
-            publish()
     _bar.visible = live and not controller._settings_visible and not controller.market_visible and not controller.is_journal_visible() and not controller._ship_session.has_panel()
     _equipment_column.visible = _bar.visible
     if not live:
@@ -541,7 +535,6 @@ func sync_heavy(peer_id: int) -> bool:
         if add_item(peer_id, wanted, player.carrying_id, {}, true):
             changed = true
         else:
-            controller._resonance_stage.handle_action(peer_id, "drop")
             controller._ship_session._notify(peer_id, "需要一个空物品格才能搬运任务设备。")
     return changed
 
@@ -926,15 +919,6 @@ func context_planet_action(peer_id: int) -> String:
     for mate: SpacePlayer3D in controller.players.values():
         if mate.peer_id != peer_id and mate.downed and controller._flat_distance(player.position, mate.position) <= controller.REVIVE_RANGE:
             return "revive"
-    if controller.current_planet_id == "electromagnetic":
-        var held_target: Dictionary = controller._resonance_stage.get_stage_action_target(peer_id, "pickup")
-        if player.carrying >= 3 and not held_target.is_empty() and float(held_target.get("distance", 0.0)) <= 4.0:
-            return "pickup"
-        var repair_target: Dictionary = controller._resonance_stage.get_stage_action_target(peer_id, "repair")
-        if not repair_target.is_empty():
-            return "repair"
-        var pickup_target: Dictionary = controller._resonance_stage.get_stage_action_target(peer_id, "pickup")
-        return "pickup" if not pickup_target.is_empty() and float(pickup_target.get("distance", 0.0)) <= 4.0 else "repair"
     if controller.current_planet_id != "demo":
         return "repair"
     if controller._field_interactions != null:
@@ -1167,5 +1151,3 @@ func close_choice() -> void:
     if controller != null:
         if controller.ship_active:
             controller._refresh_ship_pointer()
-        elif controller.game_started and controller.current_planet_id == "electromagnetic":
-            Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
