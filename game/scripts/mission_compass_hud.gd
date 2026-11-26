@@ -11,7 +11,7 @@ const COMPASS_W: float = 440.0
 const COMPASS_H: float = 34.0
 const MINIMAP_SIZE: float = 188.0
 
-# 霜烬星 11 栋建筑 + 飞船的真实平面轮廓数据（用于左下角实时雷达小地图）
+# 霜烬星 15 栋大型建筑 + 飞船（合计 16 座建筑群）真实平面轮廓数据（左下角实时雷达小地图）
 const FROST_MAP_BUILDINGS: Array = [
 	["ship", Vector2(0.0, 12.0), Vector2(14.0, 14.0), Color("#ffba5c"), false],
 	["main", Vector2(0.0, -110.0), Vector2(60.0, 32.0), Color("#4ce8ff"), false],
@@ -20,11 +20,16 @@ const FROST_MAP_BUILDINGS: Array = [
 	["power", Vector2(58.0, -116.0), Vector2(26.0, 28.0), Color("#ffae42"), false],
 	["garage", Vector2(46.0, -22.0), Vector2(44.0, 28.0), Color("#d6b472"), false],
 	["warehouse", Vector2(-43.0, -22.0), Vector2(40.0, 28.0), Color("#90c0c8"), false],
-	["greenhouse", Vector2(-88.0, -108.0), Vector2(17.0, 17.0), Color("#42f09c"), true],
-	["comms_hub", Vector2(98.0, -96.0), Vector2(18.0, 18.0), Color("#4ce8ff"), false],
-	["cargo_depot", Vector2(-96.0, -28.0), Vector2(26.0, 22.0), Color("#f0a448"), false],
-	["north_fort", Vector2(58.0, -155.0), Vector2(16.0, 14.0), Color("#f0a448"), false],
-	["south_outpost", Vector2(-115.0, 85.0), Vector2(17.0, 17.0), Color("#42f09c"), true],
+	["greenhouse", Vector2(-108.0, -112.0), Vector2(32.0, 32.0), Color("#42f09c"), true],
+	["comms_hub", Vector2(112.0, -108.0), Vector2(34.0, 30.0), Color("#4ce8ff"), false],
+	["cargo_depot", Vector2(-108.0, -32.0), Vector2(42.0, 32.0), Color("#f0a448"), false],
+	["mech_hangar", Vector2(112.0, -34.0), Vector2(42.0, 34.0), Color("#f0a448"), false],
+	["observatory", Vector2(-164.0, -78.0), Vector2(32.0, 32.0), Color("#58e0ff"), true],
+	["reactor_hall", Vector2(166.0, -76.0), Vector2(38.0, 34.0), Color("#ffae42"), false],
+	["drill_station", Vector2(-72.0, -166.0), Vector2(36.0, 28.0), Color("#72c5ce"), false],
+	["north_fort", Vector2(74.0, -166.0), Vector2(34.0, 28.0), Color("#f0a448"), false],
+	["south_hub", Vector2(72.0, 42.0), Vector2(40.0, 30.0), Color("#58d6b8"), false],
+	["south_outpost", Vector2(-84.0, 44.0), Vector2(32.0, 32.0), Color("#42f09c"), true],
 ]
 
 class VisorOverlay extends Control:
@@ -133,7 +138,7 @@ class TacticalMinimap extends Control:
 		draw_line(c, c + sweep_dir * rad, Color(0.38, 0.94, 1.0, 0.45), 1.4)
 
 		# 3. 实时绘制真实场景布局（霜烬星 11 栋建筑群 / 归航号船舱分区）
-		var scale_px: float = (rad / 165.0) if mode == "frost" else (rad / 20.0)
+		var scale_px: float = (rad / 245.0) if mode == "frost" else (rad / 20.0)
 		if mode == "frost":
 			# 绘制北部巨兽骨架峡谷走廊轮廓
 			var canyon_p: Vector2 = _to_map(Vector2(0.0, -250.0), scale_px, c)

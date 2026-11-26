@@ -30,7 +30,8 @@ func build(_small: bool = false) -> void:
 	art.world = self
 	add_child(art)
 	art.set_process(false)
-	box(Vector3(0,-0.5,-80),Vector3(228,1,260),ROCK)
+	# 404×310m 宽阔平整极地科考城主地坪（容纳全部 15 栋大型建筑 + 飞船与宽阔车行大道）
+	box(Vector3(0,-0.5,-60),Vector3(404,1,310),ROCK)
 	for x: int in range(-6,7):
 		for z: int in range(-16,4):
 			var covered: bool = false
@@ -337,110 +338,187 @@ func extra_shell(id: String, center: Vector3, width: float, depth: float, tint: 
 	landmarks[id] = center + Vector3(0, 0.35, depth / 2.0 + 3.0)
 
 func _build_expanded_town_buildings() -> void:
-	# 建筑 #7：极地温室穹顶 (Greenhouse Dome) — 位于 (-88, 0, -108)，可步入式玻璃穹顶，内部自动回温！
-	var gh: Vector3 = Vector3(-88.0, 0.0, -108.0)
-	extra_rooms["greenhouse"] = {"center": gh, "width": 16.0, "depth": 16.0}
-	box(gh + Vector3(0, 0.12, 0), Vector3(17.5, 0.24, 17.5), Color("748d8a"))
-	lamp(gh + Vector3(0, 4.6, 0), Color("ffe2a8"), 20.0)
-	furniture("table-large", gh + Vector3(0, 0.24, -2.2), Vector3(4.2, 1.0, 2.0))
-	supply("thermos", gh + Vector3(-1.2, 1.4, -2.2))
-	supply("thermos", gh + Vector3(1.2, 1.4, -2.2))
-	supply("bounce_pad", gh + Vector3(2.8, 1.2, 2.0))
-	supply("flare", gh + Vector3(-2.8, 1.2, 2.0))
-	supply("keepsake", gh + Vector3(0.0, 1.4, -2.2))
-	landmarks["greenhouse"] = gh + Vector3(0, 0.35, 11.5)
+	# 宽阔极地车环城大道（东西双干道 + 南北双干道，串联全部 15 栋大型建筑群！）
+	for x_seg: int in range(-180, 185, 24):
+		box(Vector3(float(x_seg), 0.16, -54.0), Vector3(22.0, 0.12, 11.0), Color("667b86"))
+		box(Vector3(float(x_seg), 0.16, -138.0), Vector3(22.0, 0.12, 11.0), Color("667b86"))
+	for z_seg: int in range(-170, 55, 22):
+		box(Vector3(-76.0, 0.16, float(z_seg)), Vector3(11.0, 0.12, 20.0), Color("667b86"))
+		box(Vector3(82.0, 0.16, float(z_seg)), Vector3(11.0, 0.12, 20.0), Color("667b86"))
 
-	# 建筑 #8：高空通讯灯塔站 (Comms Hub & Tower) — 位于 (98, 0, -96)，可步入式电台机房 + 19m 通讯高塔
-	var ch: Vector3 = Vector3(98.0, 0.0, -96.0)
-	extra_shell("comms_hub", ch, 18.0, 18.0, Color("6ec7cf"), 7.0, 7.0)
-	furniture("computer-wide", ch + Vector3(-4.5, 0.2, -5.0), Vector3(4.0, 1.3, 1.6))
-	furniture("computer-screen", ch + Vector3(4.5, 0.2, -5.0), Vector3(2.2, 1.2, 1.2))
-	station("charge", ch + Vector3(4.5, 1.4, -3.2), "通讯站应急补给台 · 按住 E 补氧与充能。", false)
-	supply("boombox", ch + Vector3(-3.8, 1.4, 1.8))
-	supply("flare", ch + Vector3(-1.2, 1.4, 2.2))
-	supply("suction", ch + Vector3(2.5, 1.4, 2.2))
-	supply("thermos", ch + Vector3(4.5, 1.4, 1.8))
+	# 建筑 #7：巨型极地生态穹顶温室 (32×32m，高 14.5m，内部恒温暖房 + 发光植物园！)
+	var gh: Vector3 = Vector3(-108.0, 0.0, -112.0)
+	extra_rooms["greenhouse"] = {"center": gh, "width": 30.0, "depth": 30.0}
+	box(gh + Vector3(0, 0.14, 0), Vector3(32.0, 0.28, 32.0), Color("748d8a"))
+	lamp(gh + Vector3(0, 6.2, 0), Color("ffe2a8"), 30.0)
+	furniture("table-large", gh + Vector3(0, 0.28, -4.0), Vector3(6.2, 1.1, 2.8))
+	furniture("table-large", gh + Vector3(-8.0, 0.28, 2.0), Vector3(4.8, 1.1, 2.2))
+	furniture("table-large", gh + Vector3(8.0, 0.28, 2.0), Vector3(4.8, 1.1, 2.2))
+	supply("thermos", gh + Vector3(-1.5, 1.5, -4.0))
+	supply("thermos", gh + Vector3(1.5, 1.5, -4.0))
+	supply("bounce_pad", gh + Vector3(6.5, 1.3, 5.0))
+	supply("flare", gh + Vector3(-6.5, 1.3, 5.0))
+	supply("keepsake", gh + Vector3(0.0, 1.5, -4.0))
+	landmarks["greenhouse"] = gh + Vector3(0, 0.35, 18.0)
 
-	# 建筑 #9：西线货运中转站 (West Cargo Depot) — 位于 (-96, 0, -28)，12m 宽车库大门直通西线冰缝桥
-	var cd: Vector3 = Vector3(-96.0, 0.0, -28.0)
-	extra_shell("cargo_depot", cd, 26.0, 22.0, Color("e0a458"), 12.0, 7.5)
-	for x_off: float in [-8.5, 8.5]:
-		furniture("container-wide", cd + Vector3(x_off, 0.2, -5.5), Vector3(3.4, 1.2, 1.6))
-		furniture("container-tall", cd + Vector3(x_off, 0.2, 3.5), Vector3(2.2, 2.6, 1.6))
-	supply("bumper_orb", cd + Vector3(-4.0, 1.3, 0.0))
-	supply("bounce_pad", cd + Vector3(4.0, 1.3, 0.0))
-	supply("oxygen", cd + Vector3(-8.0, 1.6, -5.5))
-	supply("medical", cd + Vector3(8.0, 1.6, -5.5))
-	supply("crate", cd + Vector3(0.0, 1.2, -6.5))
-	supply("thermos", cd + Vector3(0.0, 1.2, 4.0))
+	# 建筑 #8：高空通讯灯塔总部 (34×30×10m 巨型指挥电台楼 + 26m 通讯高塔！)
+	var ch: Vector3 = Vector3(112.0, 0.0, -108.0)
+	extra_shell("comms_hub", ch, 34.0, 30.0, Color("6ec7cf"), 10.0, 10.0)
+	partition(ch + Vector3(0, 0, -4.0), 32.0, 4.2, 6.0)
+	furniture("computer-wide", ch + Vector3(-9.0, 0.2, -9.0), Vector3(5.5, 1.5, 2.0))
+	furniture("computer-wide", ch + Vector3(9.0, 0.2, -9.0), Vector3(5.5, 1.5, 2.0))
+	furniture("table-display-planet", ch + Vector3(0.0, 0.2, -8.0), Vector3(3.6, 2.0, 3.6))
+	station("charge", ch + Vector3(10.0, 1.4, 3.0), "通讯总部应急补给台 · 按住 E 补氧与充能。", false)
+	supply("boombox", ch + Vector3(-7.0, 1.4, 4.0))
+	supply("flare", ch + Vector3(-3.0, 1.4, 5.0))
+	supply("suction", ch + Vector3(3.0, 1.4, 5.0))
+	supply("thermos", ch + Vector3(7.0, 1.4, 5.0))
+
+	# 建筑 #9：西线重型货运总站 (42×32×10m，14m 超大极地车穿行库门！)
+	var cd: Vector3 = Vector3(-108.0, 0.0, -32.0)
+	extra_shell("cargo_depot", cd, 42.0, 32.0, Color("e0a458"), 14.0, 10.0)
+	for x_off: float in [-14.0, -7.0, 7.0, 14.0]:
+		furniture("container-wide", cd + Vector3(x_off, 0.2, -9.0), Vector3(4.2, 1.4, 2.0))
+		furniture("container-tall", cd + Vector3(x_off, 0.2, 5.0), Vector3(2.8, 3.2, 2.0))
+	supply("bumper_orb", cd + Vector3(-5.0, 1.3, 0.0))
+	supply("bounce_pad", cd + Vector3(5.0, 1.3, 0.0))
+	supply("oxygen", cd + Vector3(-13.5, 1.8, -9.0))
+	supply("medical", cd + Vector3(13.5, 1.8, -9.0))
+	supply("crate", cd + Vector3(0.0, 1.2, -10.5))
+	supply("thermos", cd + Vector3(0.0, 1.2, 6.0))
+
+	# 建筑 #10：东线极地机甲维修厂 (42×34×11m 巨型机库维修大厅！)
+	var mh: Vector3 = Vector3(112.0, 0.0, -34.0)
+	extra_shell("mech_hangar", mh, 42.0, 34.0, Color("e89e4e"), 14.0, 11.0)
+	for sx: float in [-13.5, 13.5]:
+		furniture("table-large", mh + Vector3(sx, 0.2, -8.0), Vector3(6.5, 1.2, 2.8))
+		furniture("container-tall", mh + Vector3(sx, 0.2, 6.0), Vector3(3.0, 3.4, 2.2))
+	station("charge", mh + Vector3(-12.0, 1.4, -5.0), "机甲维修厂重型充能台 · 按住 E 补氧与充能。", false)
+	supply("suction", mh + Vector3(-13.0, 1.6, -8.0))
+	supply("cell", mh + Vector3(13.0, 1.6, -8.0))
+	supply("bounce_pad", mh + Vector3(-4.0, 1.3, 2.0))
+	supply("bumper_orb", mh + Vector3(4.0, 1.3, 2.0))
+	supply("thermos", mh + Vector3(0.0, 1.3, -10.0))
+
+	# 建筑 #11：西翼天文观测大穹顶 (32×32m 巨型观测圆顶 + 24m 极地观测塔！)
+	var obs: Vector3 = Vector3(-164.0, 0.0, -78.0)
+	extra_rooms["observatory"] = {"center": obs, "width": 30.0, "depth": 30.0}
+	box(obs + Vector3(0, 0.14, 0), Vector3(32.0, 0.28, 32.0), Color("6d8692"))
+	lamp(obs + Vector3(0, 6.4, 0), Color("bfe8ff"), 30.0)
+	furniture("table-display-planet", obs + Vector3(0, 0.28, 0.0), Vector3(4.5, 2.4, 4.5))
+	supply("flare", obs + Vector3(-6.0, 1.3, 5.0))
+	supply("bounce_pad", obs + Vector3(6.0, 1.3, 5.0))
+	supply("keepsake", obs + Vector3(0.0, 1.3, 7.5))
+	supply("thermos", obs + Vector3(-5.0, 1.3, -5.0))
+	landmarks["observatory"] = obs + Vector3(0, 0.35, 18.0)
+
+	# 建筑 #12：东翼地热反应堆电厂 (38×34×12m 超大型双涡轮电厂！)
+	var rh: Vector3 = Vector3(166.0, 0.0, -76.0)
+	extra_shell("reactor_hall", rh, 38.0, 34.0, Color("f0a848"), 12.0, 12.0)
+	for sx: float in [-9.0, 9.0]:
+		box(rh + Vector3(sx, 2.8, -6.0), Vector3(5.0, 5.2, 6.0), Color("7b999e"))
+		furniture("computer-system", rh + Vector3(sx, 0.2, 6.0), Vector3(3.2, 2.4, 1.6))
+	station("charge", rh + Vector3(0.0, 1.4, -11.0), "反应堆电厂高压补给台 · 按住 E 补氧与充能。", false)
+	supply("cell", rh + Vector3(-11.0, 1.4, 8.0))
+	supply("heater", rh + Vector3(11.0, 1.4, 8.0), {"charge": 180.0})
+	supply("boombox", rh + Vector3(0.0, 1.4, 4.0))
+	supply("thermos", rh + Vector3(0.0, 1.4, -4.0))
+
+	# 建筑 #13：西北冰川钻探中心 (36×28×10m 峡谷西翼大型科考堡垒！)
+	var dr: Vector3 = Vector3(-72.0, 0.0, -166.0)
+	extra_shell("drill_station", dr, 36.0, 28.0, Color("72c5ce"), 10.0, 10.0)
+	furniture("table-large", dr + Vector3(-9.0, 0.2, -6.0), Vector3(6.0, 1.2, 2.6))
+	furniture("container-wide", dr + Vector3(9.0, 0.2, -6.0), Vector3(5.0, 1.4, 2.2))
+	supply("suction", dr + Vector3(-9.0, 1.6, -6.0))
+	supply("oxygen", dr + Vector3(9.0, 1.8, -6.0))
+	supply("medical", dr + Vector3(0.0, 1.3, -8.0))
+	supply("bumper_orb", dr + Vector3(-5.0, 1.3, 4.0))
+	supply("flare", dr + Vector3(5.0, 1.3, 4.0))
+
+	# 建筑 #14：南区星港物流枢纽 (40×30×9.5m 停机坪东侧大型补给库！)
+	var sh: Vector3 = Vector3(72.0, 0.0, 42.0)
+	extra_shell("south_hub", sh, 40.0, 30.0, Color("84c6b4"), 14.0, 9.5)
+	for sx: float in [-12.0, 12.0]:
+		furniture("container-wide", sh + Vector3(sx, 0.2, -6.0), Vector3(5.0, 1.4, 2.2))
+		furniture("table-large", sh + Vector3(sx, 0.2, 5.0), Vector3(5.5, 1.1, 2.4))
+	supply("bounce_pad", sh + Vector3(-5.0, 1.3, 0.0))
+	supply("boombox", sh + Vector3(5.0, 1.3, 0.0))
+	supply("bumper_orb", sh + Vector3(0.0, 1.3, -6.0))
+	supply("oxygen", sh + Vector3(-12.0, 1.8, -6.0))
+	supply("thermos", sh + Vector3(12.0, 1.8, -6.0))
+	supply("chips", sh + Vector3(0.0, 1.3, 6.0))
+
+	# 建筑 #15：西南极光特技生态基地 (32×32m 巨型圆顶 + 18m 极地飞车大跳台！)
+	var so: Vector3 = Vector3(-84.0, 0.0, 44.0)
+	extra_rooms["south_outpost"] = {"center": so, "width": 30.0, "depth": 30.0}
+	box(so + Vector3(0, 0.14, 0), Vector3(32.0, 0.28, 32.0), Color("687c85"))
+	ramp(so + Vector3(24.0, 0.1, 14.0), so + Vector3(24.0, 4.6, -8.0), 9.0)
+	lamp(so + Vector3(0, 6.2, 0), Color("ffe0a8"), 30.0)
+	supply("bounce_pad", so + Vector3(0.0, 1.3, 8.0))
+	supply("bumper_orb", so + Vector3(-5.0, 1.3, 0.0))
+	supply("boombox", so + Vector3(5.0, 1.3, 0.0))
+	supply("thermos", so + Vector3(0.0, 1.3, -5.0))
+	supply("oxygen", so + Vector3(-8.0, 1.3, -5.0))
+	landmarks["south_outpost"] = so + Vector3(0, 0.35, 18.0)
 
 func _build_outer_basin_expedition() -> void:
-	# 建筑 #10：北峡谷前哨堡垒（位于 X=58, Z=-155，远离 X=36 东侧主公路，升级为完整可步入式保温堡垒）
-	var outpost: Vector3 = Vector3(58.0, 0.0, -155.0)
-	extra_shell("north_fort", outpost, 16.0, 14.0, Color("e6a256"), 6.5, 6.5)
-	station("charge", outpost + Vector3(3.5, 1.4, -2.5), "北哨前哨堡垒 · 动力恢复后可在此补氧与充能。", false)
+	# 建筑 #16：北峡谷大型前哨要塞（34×28×9.5m，位于 X=74, Z=-166，远离 X=36 东侧主公路！）
+	var outpost: Vector3 = Vector3(74.0, 0.0, -166.0)
+	extra_shell("north_fort", outpost, 34.0, 28.0, Color("e6a256"), 10.0, 9.5)
+	station("charge", outpost + Vector3(8.5, 1.4, -4.5), "北哨前哨要塞 · 动力恢复后可在此补氧与充能。", false)
 	stations[-1].district_power = true
-	supply("cell", outpost + Vector3(-3.5, 1.1, -2.5))
-	supply("flare", outpost + Vector3(-3.5, 1.1, 2.0))
-	supply("thermos", outpost + Vector3(0.0, 1.1, -2.5))
-	supply("bounce_pad", outpost + Vector3(3.5, 1.1, 2.0))
-	power_lights.append(district_lamp(outpost + Vector3(0, 4.0, 8.2)))
-	landmarks["north_outpost"] = outpost + Vector3(-12, 0.4, 0)
+	supply("cell", outpost + Vector3(-8.5, 1.1, -4.5))
+	supply("flare", outpost + Vector3(-8.5, 1.1, 4.0))
+	supply("thermos", outpost + Vector3(0.0, 1.1, -4.5))
+	supply("bounce_pad", outpost + Vector3(8.5, 1.1, 4.0))
+	power_lights.append(district_lamp(outpost + Vector3(0, 4.5, 15.5)))
+	landmarks["north_outpost"] = outpost + Vector3(-18, 0.4, 0)
 
-	# 2. 西线 · 钢构冰缝大桥（X = -135, Z = -72）与坠毁轨道探测舱（X = -210, Z = -90）
+	# 外围远征地标 A · 西线钢构冰缝大桥（X = -255, Z = -72）与坠毁轨道探测舱（X = -340, Z = -90）
 	var bridge_y: float = 0.65
-	box(Vector3(-135, bridge_y, -72), Vector3(42, 0.45, 11.5), Color("586c77"))
-	for side_z: float in [-5.5, 5.5]:
-		box(Vector3(-135, bridge_y + 0.75, -72 + side_z), Vector3(42, 1.1, 0.28), Color("d49a4c"))
-	# 冰缝底部发光冰晶带（纯视觉）
-	box(Vector3(-135, -6.5, -72), Vector3(14, 0.8, 95), Color("4da8bf"), false)
+	box(Vector3(-255, bridge_y, -72), Vector3(48, 0.50, 13.0), Color("586c77"))
+	for side_z: float in [-6.2, 6.2]:
+		box(Vector3(-255, bridge_y + 0.85, -72 + side_z), Vector3(48, 1.2, 0.32), Color("d49a4c"))
+	box(Vector3(-255, -7.5, -72), Vector3(16, 0.8, 115), Color("4da8bf"), false)
 
-	var pod_pos: Vector3 = Vector3(-210, BASIN_TERRAIN.sample_height(-210, -90), -90)
-	box(pod_pos + Vector3(0, 0.3, 0), Vector3(18, 0.6, 18), Color("5f7480"))
-	var pod_hull: StaticBody3D = box(pod_pos + Vector3(0, 2.1, -2), Vector3(6.5, 3.4, 8.2), Color("7d8d94"))
+	var pod_pos: Vector3 = Vector3(-340, BASIN_TERRAIN.sample_height(-340, -90), -90)
+	box(pod_pos + Vector3(0, 0.3, 0), Vector3(22, 0.6, 22), Color("5f7480"))
+	var pod_hull: StaticBody3D = box(pod_pos + Vector3(0, 2.4, -2), Vector3(8.0, 4.2, 10.0), Color("7d8d94"))
 	pod_hull.rotation_degrees = Vector3(8.0, 24.0, -11.0)
-	station("west_probe", pod_pos + Vector3(5.2, 1.4, 2.5), "坠毁探测舱黑匣子 · E 读取外围冰川地质遥测并解锁补给。", false, false)
-	supply("keepsake", pod_pos + Vector3(-5.0, 1.4, 3.0))
-	supply("cell", pod_pos + Vector3(-3.0, 1.4, 4.5))
-	supply("cell", pod_pos + Vector3(2.5, 1.4, 5.2))
-	supply("crate", pod_pos + Vector3(6.5, 1.2, -2.5))
-	radar_lights.append(_beacon_post(pod_pos + Vector3(0, 0.6, 8.0), Color("#6be0f0")))
-	landmarks["west_probe"] = pod_pos + Vector3(0, 1.0, 10.0)
+	station("west_probe", pod_pos + Vector3(6.2, 1.4, 2.5), "坠毁探测舱黑匣子 · E 读取外围冰川地质遥测并解锁补给。", false, false)
+	supply("keepsake", pod_pos + Vector3(-6.0, 1.4, 3.0))
+	supply("cell", pod_pos + Vector3(-3.0, 1.4, 5.5))
+	supply("cell", pod_pos + Vector3(3.0, 1.4, 6.2))
+	supply("crate", pod_pos + Vector3(7.5, 1.2, -2.5))
+	radar_lights.append(_beacon_post(pod_pos + Vector3(0, 0.6, 9.5), Color("#6be0f0")))
+	landmarks["west_probe"] = pod_pos + Vector3(0, 1.0, 12.0)
 
-	# 3. 东线 · 气象雷达高地（中心 (215, -75)，海拔 +14m，盘山雪坡直达）
-	var radar_pos: Vector3 = Vector3(215, BASIN_TERRAIN.sample_height(215, -75), -75)
-	box(radar_pos + Vector3(0, 0.3, 0), Vector3(26, 0.6, 26), Color("677b86"))
-	box(radar_pos + Vector3(0, 6.5, -5), Vector3(4.2, 12.5, 4.2), Color("7c8b92"))
-	var dish: StaticBody3D = box(radar_pos + Vector3(0, 13.8, -5), Vector3(9.5, 4.2, 1.2), Color("c9c2b2"), false)
-	dish.rotation_degrees = Vector3(-22.0, 35.0, 0.0)
-	station("radar_tower", radar_pos + Vector3(0, 1.5, 3.5), "气象雷达主塔 · E 重启全盆地航标灯并同步外围物资坐标。", false, false)
-	station("charge", radar_pos + Vector3(7.5, 1.5, 0.0), "雷达站应急补氧台 · 按住 E 补氧与充能。", false)
-	supply("keepsake", radar_pos + Vector3(-7.0, 1.5, 2.0))
-	supply("chips", radar_pos + Vector3(-7.0, 1.5, -2.0))
-	supply("medical", radar_pos + Vector3(7.0, 1.5, -4.0))
-	radar_lights.append(_beacon_post(radar_pos + Vector3(0, 15.8, -5.0), Color("#ffba5c")))
-	landmarks["east_radar"] = radar_pos + Vector3(-12, 1.0, 8.0)
+	# 外围远征地标 B · 东线气象雷达高地（(325, -75)，海拔 +16m，盘山雪坡直达）
+	var radar_pos: Vector3 = Vector3(325, BASIN_TERRAIN.sample_height(325, -75), -75)
+	box(radar_pos + Vector3(0, 0.3, 0), Vector3(32, 0.6, 32), Color("677b86"))
+	station("radar_tower", radar_pos + Vector3(0, 1.5, 5.5), "气象雷达主塔 · E 重启全盆地航标灯并同步外围物资坐标。", false, false)
+	station("charge", radar_pos + Vector3(9.5, 1.5, 0.0), "雷达站应急补氧台 · 按住 E 补氧与充能。", false)
+	supply("keepsake", radar_pos + Vector3(-9.0, 1.5, 2.0))
+	supply("chips", radar_pos + Vector3(-9.0, 1.5, -2.0))
+	supply("medical", radar_pos + Vector3(9.0, 1.5, -4.0))
+	radar_lights.append(_beacon_post(radar_pos + Vector3(0, 16.5, -6.0), Color("#ffba5c")))
+	landmarks["east_radar"] = radar_pos + Vector3(-14, 1.0, 10.0)
 
-	# 建筑 #11：南翼极光特技科考站（X = -115, Z = 85，升级为穹顶基地 + 极地特技雪坡跳台！）
-	var drop_pos: Vector3 = Vector3(-115, BASIN_TERRAIN.sample_height(-115, 85), 85)
-	extra_rooms["south_outpost"] = {"center": drop_pos, "width": 16.0, "depth": 16.0}
-	box(drop_pos + Vector3(0, 0.25, 0), Vector3(18, 0.5, 18), Color("687c85"))
-	ramp(drop_pos + Vector3(14, 0.2, 10), drop_pos + Vector3(14, 3.4, -6), 7.5)
-	lamp(drop_pos + Vector3(0, 4.5, 0), Color("ffe0a8"), 18.0)
-	supply("cell", drop_pos + Vector3(3.5, 1.2, 3.0))
-	supply("oxygen", drop_pos + Vector3(-3.5, 1.2, 3.0))
-	supply("bounce_pad", drop_pos + Vector3(0.0, 1.2, 4.2))
-	supply("bumper_orb", drop_pos + Vector3(-2.5, 1.2, -2.0))
-	supply("boombox", drop_pos + Vector3(2.5, 1.2, -2.0))
-	supply("thermos", drop_pos + Vector3(0.0, 1.2, 0.0))
-	radar_lights.append(_beacon_post(drop_pos + Vector3(0, 8.2, 0), Color("#6be0f0")))
+	# 外围远征地标 C · 远南极地空投补给站（X = -185, Z = 165）
+	var drop_pos: Vector3 = Vector3(-185, BASIN_TERRAIN.sample_height(-185, 165), 165)
+	box(drop_pos + Vector3(0, 0.3, 0), Vector3(20, 0.6, 20), Color("687c85"))
+	box(drop_pos + Vector3(0, 2.0, 0), Vector3(4.5, 3.2, 4.5), Color("d99848"))
+	supply("cell", drop_pos + Vector3(4.5, 1.2, 4.0))
+	supply("oxygen", drop_pos + Vector3(-4.5, 1.2, 4.0))
+	supply("bounce_pad", drop_pos + Vector3(0.0, 1.2, 5.5))
+	radar_lights.append(_beacon_post(drop_pos + Vector3(0, 3.8, 0), Color("#6be0f0")))
 	landmarks["south_drop"] = drop_pos + Vector3(10, 0.8, 0)
 
-	# 5. 全盆地公路航标灯桩（平时微亮，重启雷达后全亮穿透风雪）
+	# 全盆地公路航标灯桩
 	var route_points: Array[Vector2] = [
-		Vector2(-90, -58), Vector2(-115, -66), Vector2(-160, -78), Vector2(-188, -84),
-		Vector2(92, -30), Vector2(128, -42), Vector2(165, -56), Vector2(195, -68),
-		Vector2(43, -125), Vector2(43, -165), Vector2(-65, 38), Vector2(-92, 62),
+		Vector2(-190, -68), Vector2(-225, -72), Vector2(-285, -78), Vector2(-318, -84),
+		Vector2(205, -42), Vector2(245, -52), Vector2(285, -64),
+		Vector2(43, -125), Vector2(43, -165), Vector2(-120, 95), Vector2(-155, 130),
 	]
 	for pt: Vector2 in route_points:
 		var py: float = BASIN_TERRAIN.sample_height(pt.x, pt.y)
@@ -468,20 +546,25 @@ func location(point: Vector3) -> String:
 		var off2: Vector3 = point - er.center
 		if absf(off2.x) < float(er.width) / 2.0 and absf(off2.z) < float(er.depth) / 2.0:
 			return {
-				"greenhouse": "极地温室穹顶 · 恒温暖房",
-				"comms_hub": "高空通讯灯塔站",
-				"cargo_depot": "西线货运中转站",
-				"north_fort": "北峡谷前哨堡垒",
-				"south_outpost": "南翼极光特技科考站",
+				"greenhouse": "巨型极地生态穹顶温室 · 恒温暖房",
+				"comms_hub": "高空通讯灯塔总部",
+				"cargo_depot": "西线重型货运总站",
+				"mech_hangar": "东线极地机甲维修厂",
+				"observatory": "西翼天文观测大穹顶",
+				"reactor_hall": "东翼地热反应堆电厂",
+				"drill_station": "西北冰川钻探中心",
+				"south_hub": "南区星港物流枢纽",
+				"north_fort": "北峡谷大型前哨要塞",
+				"south_outpost": "西南极光特技生态基地",
 			}.get(id2, id2)
 	if point.z < -180:
 		return "骨骸遗迹"
-	if point.x < -110 and point.z < 10:
+	if point.x < -210 and point.z < 30:
 		return "西线 · 冻裂冰缝与探测舱"
-	if point.x > 110:
+	if point.x > 210:
 		return "东线 · 气象雷达高地"
-	if point.z > 45:
+	if point.z > 85:
 		return "南线 · 极地空投雪原"
 	if point.z < -135:
-		return "北线 · 冰原公路与北哨"
-	return "科考站 · 作业院"
+		return "北线 · 冰原公路与前哨要塞"
+	return "极地科考城 · 中心大道"

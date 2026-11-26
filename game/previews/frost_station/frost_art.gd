@@ -51,7 +51,7 @@ const PALETTE: Dictionary = {
 	"key_light": Color("#ffe2c6"),
 }
 
-## 十栋站房 + 飞船（原有 6 栋 + 扩建 3 栋壳体建筑，另有 2 座玻璃穹顶独立挂载）：
+## 十三座大型壳体建筑 + 飞船（另有 3 座 32m 巨型玻璃穹顶独立挂载，合计 16 座大型建筑群！）：
 const BUILDINGS: Array = [
 	# id, 中心, 宽, 深, 檐高, 门宽, 识别色
 	["ship", Vector3(0, 0.7, 12), 14.0, 14.0, 7.0, 6.0, Color("#e5b676")],
@@ -61,9 +61,13 @@ const BUILDINGS: Array = [
 	["power", Vector3(58, 0.0, -116), 26.0, 28.0, 7.0, 7.0, Color("#e1ae65")],
 	["garage", Vector3(46, 0.0, -22), 44.0, 28.0, 7.0, 12.0, Color("#d8b47a")],
 	["warehouse", Vector3(-43, 0.0, -22), 40.0, 28.0, 7.0, 10.0, Color("#b8be9b")],
-	["comms_hub", Vector3(98, 0.0, -96), 18.0, 18.0, 7.0, 7.0, Color("#6ec7cf")],
-	["cargo_depot", Vector3(-96, 0.0, -28), 26.0, 22.0, 7.5, 12.0, Color("#e0a458")],
-	["north_fort", Vector3(58, 0.0, -155), 16.0, 14.0, 6.5, 6.5, Color("#e6a256")],
+	["comms_hub", Vector3(112, 0.0, -108), 34.0, 30.0, 10.0, 10.0, Color("#6ec7cf")],
+	["cargo_depot", Vector3(-108, 0.0, -32), 42.0, 32.0, 10.0, 14.0, Color("#e0a458")],
+	["mech_hangar", Vector3(112, 0.0, -34), 42.0, 34.0, 11.0, 14.0, Color("#e89e4e")],
+	["reactor_hall", Vector3(166, 0.0, -76), 38.0, 34.0, 12.0, 12.0, Color("#f0a848")],
+	["drill_station", Vector3(-72, 0.0, -166), 36.0, 28.0, 10.0, 10.0, Color("#72c5ce")],
+	["south_hub", Vector3(72, 0.0, 42), 40.0, 30.0, 9.5, 14.0, Color("#84c6b4")],
+	["north_fort", Vector3(74, 0.0, -166), 34.0, 28.0, 9.5, 10.0, Color("#e6a256")],
 ]
 
 const BONE_TINTS: Array = [Color("#c6b69a")]
@@ -900,11 +904,14 @@ func _build_hero_landmarks_and_conduits() -> void:
 	_add_omni("HeartAltarAmberRim", Vector3(-2.4, 13.5, -598.5), Color("#ffae42"), 2.2, 22.0)
 	detail_meshes += 1
 
-	# 2. 地热涡轮发电机英雄件（动力站外侧、北哨中继站、东线气象雷达高地）
+	# 2. 地热涡轮发电机英雄件（动力站、东翼反应堆电厂双机组、北哨要塞、机甲维修厂、东雷达高地）
 	var gen_spots: Array = [
 		[Vector3(64.0, 0.0, -100.0), 1.0, true],
-		[Vector3(71.0, 0.0, -155.0), 0.78, true],
-		[Vector3(222.0, 14.2, -82.0), 0.92, true],
+		[Vector3(96.0, 0.0, -166.0), 1.05, true],
+		[Vector3(190.0, 0.0, -64.0), 1.25, true],
+		[Vector3(190.0, 0.0, -88.0), 1.25, true],
+		[Vector3(138.0, 0.0, -26.0), 1.05, true],
+		[Vector3(334.0, 16.2, -84.0), 1.15, true],
 	]
 	for idx: int in gen_spots.size():
 		var gp: Vector3 = gen_spots[idx][0]
@@ -916,14 +923,15 @@ func _build_hero_landmarks_and_conduits() -> void:
 		_pbr.bind_glb(gen, "frost", true)
 		detail_root.add_child(gen)
 		HubAtmosphereKit.build_ground_skirt(detail_root, gp, 2.8 * gs, 0.50)
-		HubAtmosphereKit.build_steam_vent(detail_root, gp + Vector3(0.0, 5.0 * gs, 0.0), Color(0.85, 0.94, 1.0, 0.34), 1.0)
-		_add_omni("GeoGenGlow_%d" % idx, gp + Vector3(0.0, 1.8 * gs, 1.8 * gs), Color("#ff9842"), 1.8, 14.0)
+		HubAtmosphereKit.build_steam_vent(detail_root, gp + Vector3(0.0, 5.0 * gs, 0.0), Color(0.85, 0.94, 1.0, 0.34), 1.1)
+		_add_omni("GeoGenGlow_%d" % idx, gp + Vector3(0.0, 1.8 * gs, 1.8 * gs), Color("#ff9842"), 1.8, 16.0)
 		detail_meshes += 1
 
-	# 2.5 新增极地玻璃穹顶温室 (#7 & #11) 与 19m 高空通讯气象塔 (#8 & 东雷达高地)
+	# 2.5 三座 30m 巨型玻璃生态/观测穹顶 (#7 温室, #11 天文台, #15 南翼生态基地) + 三座 26m 高空通讯雷达巨塔！
 	for dome_info: Array in [
-		["GreenhouseDome", Vector3(-88.0, 0.12, -108.0), 1.0],
-		["SouthOutpostDome", Vector3(-115.0, 2.65, 85.0), 0.96],
+		["GreenhouseMegaDome", Vector3(-108.0, 0.14, -112.0), 1.88],
+		["ObservatoryMegaDome", Vector3(-164.0, 0.14, -78.0), 1.82],
+		["SouthOutpostMegaDome", Vector3(-84.0, 0.14, 44.0), 1.80],
 	]:
 		var dm: Node3D = GEO_DOME_GLB.instantiate() as Node3D
 		dm.name = String(dome_info[0])
@@ -931,13 +939,14 @@ func _build_hero_landmarks_and_conduits() -> void:
 		dm.scale = Vector3.ONE * float(dome_info[2])
 		_pbr.bind_glb(dm, "frost", true)
 		detail_root.add_child(dm)
-		HubAtmosphereKit.build_ground_skirt(detail_root, dome_info[1], 9.2, 0.48)
-		_add_omni(String(dome_info[0]) + "_WarmGlow", (dome_info[1] as Vector3) + Vector3(0.0, 3.8, 0.0), Color("#ffcb78"), 2.4, 24.0)
+		HubAtmosphereKit.build_ground_skirt(detail_root, dome_info[1], 16.5, 0.48)
+		_add_omni(String(dome_info[0]) + "_WarmGlow", (dome_info[1] as Vector3) + Vector3(0.0, 6.2, 0.0), Color("#ffcb78"), 2.8, 34.0)
 		detail_meshes += 1
 
 	for tower_info: Array in [
-		["CommsHubTower", Vector3(98.0, 0.0, -109.5), 1.0, 18.0],
-		["EastRadarTower", Vector3(215.0, 14.3, -80.5), 1.12, -25.0],
+		["CommsHubMegaTower", Vector3(112.0, 0.0, -130.0), 1.38, 18.0],
+		["ObservatoryTower", Vector3(-164.0, 0.0, -104.0), 1.25, -30.0],
+		["EastRadarMegaTower", Vector3(325.0, 16.2, -82.0), 1.45, -25.0],
 	]:
 		var tw: Node3D = COMMS_TOWER_GLB.instantiate() as Node3D
 		tw.name = String(tower_info[0])
@@ -946,17 +955,17 @@ func _build_hero_landmarks_and_conduits() -> void:
 		tw.rotation_degrees.y = float(tower_info[3])
 		_pbr.bind_glb(tw, "frost", true)
 		detail_root.add_child(tw)
-		HubAtmosphereKit.build_ground_skirt(detail_root, tower_info[1], 4.8, 0.50)
-		_add_omni(String(tower_info[0]) + "_Beacon", (tower_info[1] as Vector3) + Vector3(0.0, 19.2 * float(tower_info[2]), 0.0), Color("#ff5030"), 2.8, 30.0)
+		HubAtmosphereKit.build_ground_skirt(detail_root, tower_info[1], 6.0, 0.50)
+		_add_omni(String(tower_info[0]) + "_Beacon", (tower_info[1] as Vector3) + Vector3(0.0, 19.2 * float(tower_info[2]), 0.0), Color("#ff5030"), 3.2, 36.0)
 		detail_meshes += 1
 
 	# 3. 英雄级解理玄武岩巨石 + 不等边三层光学蓝冰晶簇（接地暗晕 + 实用冷青光）
 	var rock_spots: Array = [
 		[Vector3(-32.0, 0.0, -52.0), 1.15, 25.0], [Vector3(34.0, 0.0, -90.0), 1.05, -40.0],
-		[Vector3(-68.0, 0.0, -98.0), 1.45, 70.0], [Vector3(74.0, 0.0, -44.0), 1.35, 110.0],
-		[Vector3(-28.0, 0.0, -158.0), 1.65, 15.0], [Vector3(24.0, 0.0, -162.0), 1.40, -65.0],
-		[Vector3(-106.0, 0.0, -54.0), 1.55, 35.0], [Vector3(-164.0, 0.5, -96.0), 1.65, -22.0],
-		[Vector3(145.0, 6.2, -32.0), 1.50, 82.0], [Vector3(188.0, 11.8, -58.0), 1.60, -18.0],
+		[Vector3(-68.0, 0.0, -92.0), 1.35, 70.0], [Vector3(70.0, 0.0, -44.0), 1.25, 110.0],
+		[Vector3(-28.0, 0.0, -158.0), 1.55, 15.0], [Vector3(24.0, 0.0, -162.0), 1.35, -65.0],
+		[Vector3(-212.0, 0.4, -52.0), 1.75, 35.0], [Vector3(-224.0, 0.8, -118.0), 1.80, -22.0],
+		[Vector3(222.0, 4.2, -32.0), 1.65, 82.0], [Vector3(276.0, 12.2, -58.0), 1.75, -18.0],
 	]
 	for idx: int in rock_spots.size():
 		var rp: Vector3 = rock_spots[idx][0]
@@ -973,9 +982,9 @@ func _build_hero_landmarks_and_conduits() -> void:
 
 	var spire_spots: Array = [
 		[Vector3(-25.0, 0.0, -48.0), 1.15, 12.0], [Vector3(26.0, 0.0, -86.0), 1.05, -35.0],
-		[Vector3(-20.0, 0.0, -166.0), 1.65, 48.0], [Vector3(22.0, 0.0, -172.0), 1.70, -25.0],
-		[Vector3(-124.0, -1.2, -62.0), 1.85, 15.0], [Vector3(-146.0, -1.2, -82.0), 1.90, -52.0],
-		[Vector3(-202.0, 1.4, -78.0), 1.45, 72.0], [Vector3(204.0, 14.0, -64.0), 1.55, -18.0],
+		[Vector3(-20.0, 0.0, -166.0), 1.55, 48.0], [Vector3(22.0, 0.0, -172.0), 1.60, -25.0],
+		[Vector3(-244.0, -1.2, -62.0), 1.95, 15.0], [Vector3(-264.0, -1.2, -88.0), 2.00, -52.0],
+		[Vector3(-322.0, 2.0, -78.0), 1.55, 72.0], [Vector3(312.0, 16.0, -64.0), 1.65, -18.0],
 	]
 	for idx: int in spire_spots.size():
 		var sp: Vector3 = spire_spots[idx][0]
@@ -995,8 +1004,8 @@ func _build_hero_landmarks_and_conduits() -> void:
 	# 4. 关键交互点的英雄拉杆控制台装饰（纯视觉，零碰撞干扰）
 	for entry: Array in [
 		[Vector3(50.0, 0.1, -108.0), 0.0],
-		[Vector3(215.0, 14.5, -71.5), 0.0],
-		[Vector3(-204.8, 1.8, -87.5), -PI * 0.5],
+		[Vector3(325.0, 16.5, -71.5), 0.0],
+		[Vector3(-334.8, 2.3, -87.5), -PI * 0.5],
 	]:
 		var lc: Node3D = LEVER_GLB.instantiate() as Node3D
 		lc.position = entry[0]
@@ -1004,7 +1013,7 @@ func _build_hero_landmarks_and_conduits() -> void:
 		_pbr.bind_glb(lc, "frost", true)
 		detail_root.add_child(lc)
 
-	# 5. 跨雪原物理因果装甲导管（看得见的因果连线：不用读文字就能沿着发光导管找到动力站/主楼/北哨/雷达塔）
+	# 5. 跨雪原物理因果装甲导管（看得见的因果连线：把 16 座建筑连成完整极地大基地）
 	_power_conduit_mats.append(HubPhysicalLinkKit.build_conduit_path(detail_root, [
 		Vector3(58.0, 0.35, -100.0), Vector3(32.0, 0.35, -92.0), Vector3(12.0, 0.35, -92.0)
 	], 0.14, Color("#ffae42")))
@@ -1015,18 +1024,24 @@ func _build_hero_landmarks_and_conduits() -> void:
 		Vector3(0.0, 0.35, -12.0), Vector3(0.0, 0.35, -50.0), Vector3(0.0, 0.35, -90.0)
 	], 0.13, Color("#28dbff")))
 	_radar_conduit_mats.append(HubPhysicalLinkKit.build_conduit_path(detail_root, [
-		Vector3(64.0, 0.35, -100.0), Vector3(115.0, 4.2, -52.0), Vector3(170.0, 9.8, -62.0), Vector3(215.0, 14.6, -72.0)
+		Vector3(186.0, 0.35, -74.0), Vector3(228.0, 4.8, -74.0), Vector3(276.0, 11.4, -74.0), Vector3(325.0, 16.4, -72.0)
 	], 0.14, Color("#28dbff")))
-	# 新增连接极地温室、货运站与通讯灯塔的发光能量导管，让 11 栋建筑连成完整极地小镇
+	# 连接大基地东西南北区的主干发光能量导管
 	_power_conduit_mats.append(HubPhysicalLinkKit.build_conduit_path(detail_root, [
-		Vector3(-30.0, 0.35, -108.0), Vector3(-62.0, 0.35, -108.0), Vector3(-80.0, 0.35, -108.0)
+		Vector3(-30.0, 0.35, -112.0), Vector3(-76.0, 0.35, -112.0), Vector3(-94.0, 0.35, -112.0)
 	], 0.14, Color("#ffae42")))
 	_power_conduit_mats.append(HubPhysicalLinkKit.build_conduit_path(detail_root, [
-		Vector3(71.0, 0.35, -108.0), Vector3(88.0, 0.35, -96.0)
+		Vector3(71.0, 0.35, -108.0), Vector3(95.0, 0.35, -108.0)
 	], 0.14, Color("#28dbff")))
 	_power_conduit_mats.append(HubPhysicalLinkKit.build_conduit_path(detail_root, [
-		Vector3(-63.0, 0.35, -28.0), Vector3(-82.0, 0.35, -28.0)
+		Vector3(-63.0, 0.35, -32.0), Vector3(-86.0, 0.35, -32.0)
 	], 0.14, Color("#ffae42")))
+	_power_conduit_mats.append(HubPhysicalLinkKit.build_conduit_path(detail_root, [
+		Vector3(129.0, 0.35, -108.0), Vector3(146.0, 0.35, -76.0)
+	], 0.14, Color("#ffae42")))
+	_power_conduit_mats.append(HubPhysicalLinkKit.build_conduit_path(detail_root, [
+		Vector3(-124.0, 0.35, -112.0), Vector3(-148.0, 0.35, -78.0)
+	], 0.14, Color("#28dbff")))
 
 # ---------------------------------------------------------------- 空气
 

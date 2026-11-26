@@ -104,8 +104,8 @@ func _physics_process(delta: float) -> void:
 		if body == null:
 			continue
 		if controller.is_host:
-			# 适配 720×920m 完整极地盆地与 11 栋建筑群，不再误删 74m 外的物品
-			if body.position.y < -18.0 or absf(body.position.x) > 345.0 or body.position.z > 205.0 or body.position.z < -905.0:
+			# 适配 1040×1160m 完整极地盆地与 16 座大型建筑群
+			if body.position.y < -18.0 or absf(body.position.x) > 505.0 or body.position.z > 360.0 or body.position.z < -905.0:
 				body.position = entry.get("safe_position", Vector3(0, 1, 0))
 				body.linear_velocity = Vector3.ZERO
 			entry.position = body.position

@@ -369,7 +369,7 @@ func _update_mission_compass_and_beacon(actor: SpacePlayer3D) -> void:
 		{"label": target_lbl, "pos": target_pos, "color": target_col, "main": true},
 		{"label": "探险车", "pos": world.cart.global_position if world.cart != null else Vector3(45, 1, -20), "color": Color("#f4c068"), "main": false},
 		{"label": "动力站", "pos": Vector3(58, 1, -116), "color": Color("#ffaa4c"), "main": false},
-		{"label": "雷达高地", "pos": Vector3(215, 15, -75), "color": Color("#7ce8b4"), "main": false},
-		{"label": "探测舱", "pos": Vector3(-210, 2, -90), "color": Color("#78d4f0"), "main": false},
+		{"label": "雷达高地", "pos": Vector3(325, 16, -75), "color": Color("#7ce8b4"), "main": false},
+		{"label": "探测舱", "pos": Vector3(-340, 2, -90), "color": Color("#78d4f0"), "main": false},
 	]
 	compass_hud.update_guidance(actor.global_position, fwd, stage_t, m_title, m_detail, sides, targets)

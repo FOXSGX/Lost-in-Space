@@ -43,11 +43,11 @@ func setup(owner_director: Node3D, owner_world: Node3D) -> void:
 
 func _spawn_preset_toys() -> void:
 	deploy_bounce_pad(Vector3(-24.0, 0.0, -90.0), 0, true)
-	deploy_bounce_pad(Vector3(-76.0, 0.0, -96.0), 0, true)
-	var sy: float = BASIN_TERRAIN.sample_height(-102.0, 76.0)
-	deploy_bounce_pad(Vector3(-102.0, sy, 76.0), 0, true)
+	deploy_bounce_pad(Vector3(-88.0, 0.0, -98.0), 0, true)
+	deploy_bounce_pad(Vector3(-60.0, 0.0, 44.0), 0, true)
+	deploy_bounce_pad(Vector3(82.0, 0.0, -54.0), 0, true)
 	deploy_boombox(Vector3(14.0, 0.0, -44.0), 0, true)
-	for orb_pos: Vector3 in [Vector3(-14.0, 1.0, -44.0), Vector3(-86.0, 1.0, -24.0), Vector3(88.0, 1.0, -88.0)]:
+	for orb_pos: Vector3 in [Vector3(-14.0, 1.0, -44.0), Vector3(-76.0, 1.0, -32.0), Vector3(82.0, 1.0, -34.0), Vector3(50.0, 1.0, 42.0)]:
 		_create_bumper_orb_body(orb_pos, Vector3.ZERO, true)
 
 func _spawn_helper_bot() -> void:
@@ -74,9 +74,9 @@ func _spawn_helper_bot() -> void:
 func _spawn_canisters() -> void:
 	var pts: Array[Vector3] = [
 		Vector3(-35.0, 1.0, -16.0), Vector3(-54.0, 1.0, -16.0), Vector3(38.0, 1.0, -34.0),
-		Vector3(44.0, 1.0, -148.0), Vector3(-196.0, 2.5, -86.0), Vector3(204.0, 15.2, -68.0),
-		Vector3(12.0, 1.0, -172.0), Vector3(-12.0, 1.0, -172.0), Vector3(-88.0, 1.0, -24.0),
-		Vector3(88.0, 1.0, -98.0),
+		Vector3(44.0, 1.0, -148.0), Vector3(-332.0, 2.8, -86.0), Vector3(318.0, 17.2, -68.0),
+		Vector3(12.0, 1.0, -172.0), Vector3(-12.0, 1.0, -172.0), Vector3(-80.0, 1.0, -52.0),
+		Vector3(82.0, 1.0, -96.0),
 	]
 	for idx: int in pts.size():
 		var rb: RigidBody3D = RigidBody3D.new()
@@ -100,8 +100,8 @@ func _spawn_canisters() -> void:
 
 func _spawn_geysers() -> void:
 	var spots: Array = [
-		[Vector3(-76.0, 0.2, -52.0), 15.0], [Vector3(-110.0, 0.4, -74.0), 16.5],
-		[Vector3(118.0, 4.2, -40.0), 16.0], [Vector3(26.0, 0.2, -158.0), 14.5],
+		[Vector3(-76.0, 0.2, -72.0), 15.0], [Vector3(-136.0, 0.2, -56.0), 16.5],
+		[Vector3(142.0, 0.2, -16.0), 16.0], [Vector3(26.0, 0.2, -158.0), 14.5],
 		[Vector3(-24.0, 0.2, -168.0), 16.0],
 	]
 	var ring_mat: Material = _pbr.build_palette("frost", false)["M_CastSteel"] as Material
@@ -129,8 +129,8 @@ func _spawn_geysers() -> void:
 
 func _spawn_drones() -> void:
 	var routes: Array = [
-		[Vector3(-188.0, 4.2, -88.0), 14.0], [Vector3(198.0, 17.5, -72.0), 13.0],
-		[Vector3(-102.0, 5.2, 78.0), 14.0], [Vector3(-14.0, 4.5, -198.0), 12.0],
+		[Vector3(-318.0, 5.2, -88.0), 14.0], [Vector3(308.0, 19.5, -72.0), 13.0],
+		[Vector3(-172.0, 6.2, 152.0), 14.0], [Vector3(-14.0, 4.5, -198.0), 12.0],
 	]
 	for idx: int in routes.size():
 		var center: Vector3 = routes[idx][0]
@@ -165,7 +165,7 @@ func _spawn_drones() -> void:
 
 func _spawn_thermal_cores() -> void:
 	var pts: Array[Vector3] = [
-		Vector3(46.0, 1.2, -104.0), Vector3(48.0, 1.2, -152.0), Vector3(210.0, 15.2, -72.0),
+		Vector3(46.0, 1.2, -104.0), Vector3(48.0, 1.2, -152.0), Vector3(320.0, 17.2, -72.0),
 	]
 	for idx: int in pts.size():
 		var rb: RigidBody3D = RigidBody3D.new()
@@ -430,10 +430,11 @@ func _tick_helper_bot_ai(delta: float) -> void:
 		root.rotation.y = lerp_angle(root.rotation.y, atan2(-step.x, -step.z), clampf(delta * 5.0, 0.0, 1.0))
 
 func _tick_greenhouse_warmth(delta: float) -> void:
+	# 三座 30m 巨型玻璃穹顶（生态温室 / 天文观测穹顶 / 南翼特技基地）内部均带恒温暖气！
 	for actor: Node3D in director.players.values():
 		if actor is SpacePlayer3D and not actor.downed:
 			var p: Vector3 = actor.position
-			if p.distance_to(Vector3(-88.0, 0.0, -108.0)) < 8.5 or p.distance_to(Vector3(-115.0, 2.5, 85.0)) < 8.5:
+			if p.distance_to(Vector3(-108.0, 0.0, -112.0)) < 15.5 or p.distance_to(Vector3(-164.0, 0.0, -78.0)) < 15.5 or p.distance_to(Vector3(-84.0, 0.0, 44.0)) < 15.5:
 				actor.warmth = minf(1.5, actor.warmth + delta * 0.35)
 
 func _tick_bounce_pads(delta: float) -> void:

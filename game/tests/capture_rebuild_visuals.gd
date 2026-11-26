@@ -85,8 +85,8 @@ func _run() -> void:
 	await _snap(cam, Vector3(10.5, 2.2, -42.5), Vector3(16.0, 1.05, -48.0), 46.0, abs_out + "frost_C_rover_closeup.png")
 	await _snap(cam, Vector3(14.0, 7.5, -148.0), Vector3(4.0, 6.5, -195.0), 54.0, abs_out + "frost_D_canyon_ice.png")
 
-	# 新增视角 E：11 栋极地建筑群全貌（玻璃温室穹顶 + 高空通讯灯塔 + 货运中转站 + 主建筑群）
-	await _snap(cam, Vector3(-118.0, 32.0, 26.0), Vector3(-8.0, 4.0, -96.0), 58.0, abs_out + "frost_E_expanded_town.png")
+	# 新增视角 E：16 座超大型极地科考城鸟瞰全景（3 座 30m 巨型玻璃穹顶 + 13 栋大型建筑 + 26m 通讯塔 + 巨兽峡谷）
+	await _snap(cam, Vector3(-195.0, 68.0, 118.0), Vector3(8.0, 4.0, -76.0), 60.0, abs_out + "frost_E_expanded_town.png")
 	# 新增视角 F：精细物品与 5 件新创意玩具雪地近距离陈列特写（氧气瓶/医疗箱/热枪/弹跳垫/信号弹/音响/碰碰球/保温壶）
 	var showcase: Node3D = Node3D.new()
 	showcase.name = "ItemShowcaseTemp"
