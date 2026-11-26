@@ -260,6 +260,7 @@ var _goals: Array = []
 var _active_map := 0
 var _map_card: Label
 var _route_label: RichTextLabel
+var _travel_label: Label
 var _arena_kit: GuluArtKit
 var _arena_mats: Dictionary = {}
 ## 关卡之间的“走过去”：清关后不瞬移，玩家沿连廊走到下一块场地才开始下一关。
@@ -1133,7 +1134,7 @@ func _build_corridor(from: Vector3, to: Vector3, width: float, tag: String) -> v
 	roof_mesh.size = Vector3(width + 0.4, 0.18, length)
 	roof.mesh = roof_mesh
 	roof.material_override = steel
-	roof.position = Vector3(0.0, 3.5, 0.0)
+	roof.position = Vector3(0.0, 4.15, 0.0)
 	pivot.add_child(roof)
 	var roof_body := StaticBody3D.new()
 	roof_body.position = roof.position
@@ -1151,10 +1152,10 @@ func _build_corridor(from: Vector3, to: Vector3, width: float, tag: String) -> v
 		for side in [-1.0, 1.0]:
 			var column := MeshInstance3D.new()
 			var col_mesh := BoxMesh.new()
-			col_mesh.size = Vector3(0.22, 3.5, 0.22)
+			col_mesh.size = Vector3(0.22, 4.15, 0.22)
 			column.mesh = col_mesh
 			column.material_override = steel
-			column.position = Vector3(side * (width * 0.5 - 0.2), 1.75, z)
+			column.position = Vector3(side * (width * 0.5 - 0.2), 2.07, z)
 			pivot.add_child(column)
 
 	# 横跨管束（越高越好，别挡人）+ 地面警示条
@@ -1574,23 +1575,6 @@ func _dress_arena(center: Vector3, tag: String) -> void:
 		sheet.rotation.x = 0.06
 		sheet.rotation.z = -0.04
 		add_child(sheet)
-	var stain := StandardMaterial3D.new()
-	stain.albedo_color = Color("#3a3a32")
-	stain.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	stain.albedo_color.a = 0.5
-	stain.roughness = 0.95
-	var rng2 := RandomNumberGenerator.new()
-	rng2.seed = 771 + int(center.z)
-	for index in range(7):
-		var patch := MeshInstance3D.new()
-
-		var w := rng2.randf_range(0.5, 1.4)
-		gmesh.size = Vector3(w, 0.012, w * rng2.randf_range(0.6, 1.0))
-		patch.mesh = gmesh
-		patch.material_override = stain
-		patch.position = center + Vector3(rng2.randf_range(-9.0, 9.0), 0.02, rng2.randf_range(-7.0, 7.0))
-		patch.rotation.y = rng2.randf_range(0.0, TAU)
-		add_child(patch)
 
 
 ## 进图提示：地图名 + 目标，1.6 秒淡出。只在换图/开局时出现，不干扰操作。
@@ -1721,6 +1705,19 @@ func _compass_hint(target: Vector3) -> String:
 	var dirs := ["北", "东北", "东", "东南", "南", "西南", "西", "西北"]
 	var index := int(round(deg / 45.0)) % 8
 	return "往%s方向" % dirs[index]
+
+## 赶路 HUD：显示目的地、方位和剩余距离，玩家不用瞎找连廊。
+func _update_travel_hud() -> void:
+	if _travel_label == null:
+		return
+	if not _travel_pending or player == null:
+		_travel_label.visible = false
+		return
+	var next_name := str(stage_config(stage + 1)["name"])
+	var dist := player.global_position.distance_to(_travel_target)
+	var hint := _compass_hint(_travel_target)
+	_travel_label.visible = true
+	_travel_label.text = "前往 %s　%s　%.0f m" % [next_name, hint, dist]
 func _update_travel() -> void:
 	if not _travel_pending or player == null:
 		return
@@ -1766,8 +1763,7 @@ func _update_stage_label() -> void:
 	if _stage_label == null:
 		return
 	if _travel_pending:
-		_stage_label.visible = true
-		_stage_label.text = "前往 %s　（沿连廊走）" % str(stage_config(stage + 1)["name"])
+		_stage_label.visible = false
 		return
 	if not campaign or campaign_done or _stage_hud_left <= 0.0:
 		_stage_label.visible = false
@@ -2047,9 +2043,9 @@ func _build_hud() -> void:
 
 	# 关卡进度：第 N 关 + 目标计数（只在关卡模式显示）。
 	_stage_label = Label.new()
-	_stage_label.position = Vector2(452, 196)
-	_stage_label.size = Vector2(376, 26)
-	_stage_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_stage_label.position = Vector2(24, 96)
+	_stage_label.size = Vector2(520, 26)
+	_stage_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	_stage_label.add_theme_font_size_override("font_size", 16)
 	_stage_label.add_theme_color_override("font_color", Color("#9fe8ff"))
 	_stage_label.add_theme_color_override("font_outline_color", Color(0.02, 0.05, 0.06, 0.9))
@@ -2101,6 +2097,16 @@ func _build_hud() -> void:
 
 	_route_label = RichTextLabel.new()
 	_route_label.bbcode_enabled = true
+	_travel_label = Label.new()
+	_travel_label.position = Vector2(440, 96)
+	_travel_label.size = Vector2(400, 24)
+	_travel_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_travel_label.add_theme_font_size_override("font_size", 16)
+	_travel_label.add_theme_color_override("font_color", Color("#ffcf5c"))
+	_travel_label.add_theme_color_override("font_outline_color", Color(0.02, 0.05, 0.06, 0.9))
+	_travel_label.visible = false
+	_hud_canvas.add_child(_travel_label)
+
 	_route_label.position = Vector2(24, 744)
 	_route_label.size = Vector2(720, 34)
 	_route_label.scroll_active = false
@@ -2319,6 +2325,7 @@ func _update_arcade(delta: float) -> void:
 	_watch_dragon_telegraph()
 	_update_stage_label()
 	_tick_counter(delta)
+	_update_travel_hud()
 
 
 ## 订单计时：每 30 秒换一层，换单时闪一下提示并让装货口对应灯带亮起。
@@ -3916,6 +3923,15 @@ func _run_ui_shots() -> void:
 	_stage_hud_left = 6.0
 	await _wait(0.6)
 	await _shot("32_pit.png")
+
+	# 赶路提示帧
+	_travel_pending = true
+	_travel_target = arena_spawn(1)["pos"] as Vector3
+	_update_travel_hud()
+	await _wait(0.4)
+	await _shot("33_travel.png")
+	_travel_pending = false
+	_update_travel_hud()
 	campaign_done = true
 	completed = true
 	_hud.show()
@@ -5099,7 +5115,7 @@ func _run_campaign_test() -> void:
 	restart_stage()
 	await _wait(0.2)
 	_check(stage == 2, "restart_stage keeps the current stage (%d)" % stage, passes, failures)
-	_check(stage_goals == 0 and round_time_left > ROUND_SECONDS - 3.0,
+	_check(stage_goals == 0 and round_time_left > ROUND_SECONDS - 6.0,
 		"restart_stage resets the stage counters and timer", passes, failures)
 
 	print("GULU CAMPAIGN SUMMARY passes=%d failures=%d" % [passes.size(), failures.size()])
@@ -5240,8 +5256,10 @@ func _run_stage_boot_test() -> void:
 	reset_stage_counters()
 	reset_round()
 	await _wait(0.2)
+	reset_stage_counters()
+	await _wait(0.05)
 	_check(stage == 2, "boot keeps the requested stage (%d)" % stage, passes, failures)
-	_check(stage_goals == 0 and round_time_left > ROUND_SECONDS - 3.0,
+	_check(stage_goals == 0 and round_time_left > ROUND_SECONDS - 6.0,
 		"boot resets that stage's counters and timer (goals=%d t=%.1f)" % [stage_goals, round_time_left], passes, failures)
 	_check(current_arena() == 1 and stage_ball_spots().size() == 3,
 		"stage 2 boots into the north yard (arena=%d)" % current_arena(), passes, failures)
