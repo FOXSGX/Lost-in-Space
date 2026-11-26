@@ -99,20 +99,20 @@ func _build_sign() -> void:
 	# 灯箱背板
 	var back := MeshInstance3D.new()
 	var back_mesh := BoxMesh.new()
-	back_mesh.size = Vector3(0.10, half_width * 0.74, half_width * 2.58)
+	back_mesh.size = Vector3(0.10, half_width * 1.16, half_width * 2.28)
 	back.mesh = back_mesh
 	var back_mat := StandardMaterial3D.new()
 	back_mat.albedo_color = Color("#12201f")
 	back.material_override = back_mat
-	back.position = Vector3(-0.02, GATE_HEIGHT + 0.34, 0.0)
+	back.position = Vector3(-0.02, GATE_HEIGHT + 0.62, 0.0)
 	add_child(back)
 	# 招牌面（贴图）
 	var quad := MeshInstance3D.new()
 	var plane := QuadMesh.new()
-	plane.size = Vector2(half_width * 2.35, half_width * 0.59)
+	plane.size = Vector2(half_width * 2.1, half_width * 1.05)
 	quad.mesh = plane
 	quad.material_override = mat
-	quad.position = Vector3(-0.09, GATE_HEIGHT + 0.34, 0.0)
+	quad.position = Vector3(-0.09, GATE_HEIGHT + 0.62, 0.0)
 	quad.rotation.y = -PI * 0.5
 	add_child(quad)
 

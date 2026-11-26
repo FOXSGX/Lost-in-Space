@@ -1140,10 +1140,10 @@ func _build_corridor(from: Vector3, to: Vector3, width: float, tag: String, sign
 		sign_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 		var board := MeshInstance3D.new()
 		var board_mesh := BoxMesh.new()
-		board_mesh.size = Vector3(2.4, 0.62, 0.10)
+		board_mesh.size = Vector3(2.4, 1.20, 0.10)
 		board.mesh = board_mesh
 		board.material_override = sign_mat
-		board.position = Vector3(0.0, 2.35, length * 0.5 - 0.35)
+		board.position = Vector3(0.0, 2.55, length * 0.5 - 0.35)
 		pivot.add_child(board)
 		var post := MeshInstance3D.new()
 		var post_mesh := CylinderMesh.new()
