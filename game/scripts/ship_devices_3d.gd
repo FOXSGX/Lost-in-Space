@@ -146,8 +146,9 @@ func pulse_lever(device_id: String) -> void:
 			var tw: Tween = create_tween()
 			tw.tween_property(handle, "rotation_degrees:x", -48.0, 0.14).set_trans(Tween.TRANS_BACK)
 			tw.tween_property(handle, "rotation_degrees:x", 24.0, 0.28).set_trans(Tween.TRANS_SINE)
+			SfxKit.play_3d(self, "sfx_lever_clunk", handle.global_position, -4.0)
 	if status_lamps.has(device_id):
-		PhysicalLinkKit.set_lamp_state(status_lamps[device_id], "active")
+		HubPhysicalLinkKit.set_lamp_state(status_lamps[device_id], "active")
 
 func _process(_delta: float) -> void:
 	if session == null:
@@ -157,7 +158,7 @@ func _process(_delta: float) -> void:
 			continue
 		var owner: int = int(session.station_owners.get(int(device.item), 0))
 		if status_lamps.has(device.id):
-			PhysicalLinkKit.set_lamp_state(status_lamps[device.id], "active" if owner != 0 else "ready")
+			HubPhysicalLinkKit.set_lamp_state(status_lamps[device.id], "active" if owner != 0 else "ready")
 
 func _build(device: Dictionary) -> void:
 	var terminal: Node3D = Node3D.new()
@@ -168,11 +169,11 @@ func _build(device: Dictionary) -> void:
 
 	# 驾驶席与中央星图台由 ShipHubArt 装配全套 Blender 英雄 GLB，此处只挂实体状态灯（零悬浮 Label3D）
 	if String(device.kind) == "pilot":
-		status_lamps[device.id] = PhysicalLinkKit.build_status_lamp(terminal, Vector3(0.0, 1.38, -0.58))
+		status_lamps[device.id] = HubPhysicalLinkKit.build_status_lamp(terminal, Vector3(0.0, 1.38, -0.58))
 		return
 	if String(device.kind) == "route":
-		status_lamps[device.id] = PhysicalLinkKit.build_status_lamp(terminal, Vector3(0.0, 1.10, -0.95))
-		PhysicalLinkKit.set_lamp_state(status_lamps[device.id], "active")
+		status_lamps[device.id] = HubPhysicalLinkKit.build_status_lamp(terminal, Vector3(0.0, 1.10, -0.95))
+		HubPhysicalLinkKit.set_lamp_state(status_lamps[device.id], "active")
 		return
 
 	# 所有独立功能台置于交互锚点后方 0.62m，保持锚点站立区无遮挡
@@ -194,7 +195,7 @@ func _build(device: Dictionary) -> void:
 	model.position = body_offset
 	_pbr.bind_glb(model, "ship", true)
 	terminal.add_child(model)
-	ArtAtmosphereKit.build_ground_skirt(terminal, body_offset, 1.25 if String(device.kind) == "workshop" else 0.88, 0.44)
+	HubAtmosphereKit.build_ground_skirt(terminal, body_offset, 1.25 if String(device.kind) == "workshop" else 0.88, 0.44)
 	_add_box_collider(terminal, body_offset + Vector3(0.0, collider_sz.y * 0.5, 0.0), collider_sz)
 
 	# 实体可动工业橙拉杆（安装于 hero_lever_console 顶部闸槽）
@@ -208,8 +209,8 @@ func _build(device: Dictionary) -> void:
 		_add_cyl(pivot, Vector3(0.0, 0.18, 0.0), 0.022, 0.36, bar_mat)
 		_add_box(pivot, Vector3(0.0, 0.38, 0.0), Vector3(0.24, 0.065, 0.065), grip_mat)
 		lever_handles[String(device.id)] = pivot
-		status_lamps[device.id] = PhysicalLinkKit.build_status_lamp(terminal, body_offset + Vector3(-0.34, 1.24, -0.14))
-		PhysicalLinkKit.set_lamp_state(status_lamps[device.id], "ready")
+		status_lamps[device.id] = HubPhysicalLinkKit.build_status_lamp(terminal, body_offset + Vector3(-0.34, 1.24, -0.14))
+		HubPhysicalLinkKit.set_lamp_state(status_lamps[device.id], "ready")
 
 	# 贴壳 <= 2cm 纯图铭牌（绝对零悬浮文字）
 	var display: MeshInstance3D = MeshInstance3D.new()

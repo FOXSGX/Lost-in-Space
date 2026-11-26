@@ -471,7 +471,7 @@ func _physics_process(delta: float) -> void:
     var map_half := controller.get_active_map_size() * 0.5 - Vector2(1.0, 1.0)
     global_position.x = clampf(global_position.x, -map_half.x, map_half.x)
     global_position.z = clampf(global_position.z, -map_half.y, map_half.y)
-    for action in ["interact", "item_drop", "slot_1", "slot_2"]:
+    for action in ["interact", "item_drop", "slot_1", "slot_2", "slot_3", "slot_4"]:
         if Input.is_action_just_pressed(action):
             controller.handle_action(peer_id, action)
     if scan_lock_remaining <= 0.0 and Time.get_ticks_msec() >= controller._items.suppress_use_until:
@@ -574,7 +574,7 @@ func _tick_ship(controller: Main3D) -> void:
     var bounds := ShipHub3D.WALK_BOUNDS if ship.in_hub else Vector2(9.9, 6.2)
     global_position.x = clampf(global_position.x, -bounds.x, bounds.x)
     global_position.z = clampf(global_position.z, -bounds.y, bounds.y)
-    for action: String in ["interact", "item_drop", "slot_1", "slot_2"]:
+    for action: String in ["interact", "item_drop", "slot_1", "slot_2", "slot_3", "slot_4"]:
         if Input.is_action_just_pressed(action):
             controller.handle_action(peer_id, action)
     if Input.is_action_just_pressed("scan"):

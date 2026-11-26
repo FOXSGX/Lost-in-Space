@@ -168,15 +168,15 @@ func _build_hero_architecture() -> void:
 	# 1. 五道 Blender 锻造承压主龙骨拱架（宽 13.5m × 高 4.8m，带工业橙柱靴、奶油白立柱与顶部铜管）
 	for z: float in [-11.4, -5.6, 0.2, 6.2, 12.0]:
 		var arch: Node3D = _spawn_hero(RIB_ARCH, "ShipRibArch_%.0f" % z, Vector3(0.0, 0.0, z))
-		ArtAtmosphereKit.build_ground_skirt(self, Vector3(-6.45, 0.0, z), 1.35, 0.48)
-		ArtAtmosphereKit.build_ground_skirt(self, Vector3(6.45, 0.0, z), 1.35, 0.48)
+		HubAtmosphereKit.build_ground_skirt(self, Vector3(-6.45, 0.0, z), 1.35, 0.48)
+		HubAtmosphereKit.build_ground_skirt(self, Vector3(6.45, 0.0, z), 1.35, 0.48)
 		if absf(z) < 8.0:
-			ArtAtmosphereKit.build_godray_cone(self, Vector3(0.0, 4.42, z), 4.2, 1.0, 2.8, Color("#c8e8ff"), 0.09)
+			HubAtmosphereKit.build_godray_cone(self, Vector3(0.0, 4.42, z), 4.2, 1.0, 2.8, Color("#c8e8ff"), 0.09)
 		arch.visible = true
 
 	# 2. 中央英雄全息星图台（位于 (0, 0, -0.34)）
 	var table: Node3D = _spawn_hero(STAR_TABLE, "HeroStarTable", Vector3(0.0, 0.0, -0.34))
-	ArtAtmosphereKit.build_ground_skirt(self, Vector3(0.0, 0.0, -0.34), 2.15, 0.52)
+	HubAtmosphereKit.build_ground_skirt(self, Vector3(0.0, 0.0, -0.34), 2.15, 0.52)
 	_star_ring_node = Node3D.new()
 	_star_ring_node.name = "OrbitHoloSpinner"
 	_star_ring_node.position = Vector3(0.0, 1.62, -0.34)
@@ -199,35 +199,35 @@ func _build_hero_architecture() -> void:
 	for index: int in 4:
 		var px: float = ShipDevices3D.PILOT_X[index]
 		_spawn_hero(PILOT_POD, "HeroPilotPod_%d" % index, Vector3(px, 0.61, -13.55))
-		ArtAtmosphereKit.build_ground_skirt(self, Vector3(px, 0.61, -13.55), 1.1, 0.38)
+		HubAtmosphereKit.build_ground_skirt(self, Vector3(px, 0.61, -13.55), 1.1, 0.38)
 
 	# 4. 左右尾部引擎核心机组（强化探索飞船的重工压迫感与蒸汽生命力）
 	for sx: float in [-1.0, 1.0]:
 		var gpos: Vector3 = Vector3(sx * 11.2, 0.0, 12.2)
 		var gen: Node3D = _spawn_hero(GEO_GEN, "ShipEngineCore_%d" % int(sx), gpos)
 		gen.scale = Vector3.ONE * 0.78
-		ArtAtmosphereKit.build_ground_skirt(self, gpos, 2.2, 0.52)
-		ArtAtmosphereKit.build_steam_vent(self, gpos + Vector3(0.0, 3.8, 0.0), Color(0.84, 0.94, 1.0, 0.22), 0.65)
+		HubAtmosphereKit.build_ground_skirt(self, gpos, 2.2, 0.52)
+		HubAtmosphereKit.build_steam_vent(self, gpos + Vector3(0.0, 3.8, 0.0), Color(0.84, 0.94, 1.0, 0.22), 0.65)
 		_omni("EngineCoreGlow_%d" % int(sx), gpos + Vector3(0.0, 1.6, -1.6), Color("#ff9842"), 1.4, 8.0)
 
 func _build_conduits_and_atmosphere() -> void:
 	# 贴地装甲因果能量导管：从星图台辐射连向 4 座驾驶席与 4 处核心环线站（绕开中央主走道）
 	_conduit_mats.clear()
-	_conduit_mats.append(PhysicalLinkKit.build_conduit_path(self, [
+	_conduit_mats.append(HubPhysicalLinkKit.build_conduit_path(self, [
 		Vector3(-1.3, 0.07, -0.34), Vector3(-4.8, 0.07, -0.34), Vector3(-4.8, 0.07, 2.2)
 	], 0.075, Color("#28dbff")))
-	_conduit_mats.append(PhysicalLinkKit.build_conduit_path(self, [
+	_conduit_mats.append(HubPhysicalLinkKit.build_conduit_path(self, [
 		Vector3(-4.8, 0.07, -0.34), Vector3(-4.8, 0.07, -2.5)
 	], 0.075, Color("#28dbff")))
-	_conduit_mats.append(PhysicalLinkKit.build_conduit_path(self, [
+	_conduit_mats.append(HubPhysicalLinkKit.build_conduit_path(self, [
 		Vector3(1.3, 0.07, -0.34), Vector3(4.8, 0.07, -0.34), Vector3(4.8, 0.07, 2.2)
 	], 0.075, Color("#f4a432")))
-	_conduit_mats.append(PhysicalLinkKit.build_conduit_path(self, [
+	_conduit_mats.append(HubPhysicalLinkKit.build_conduit_path(self, [
 		Vector3(4.8, 0.07, -0.34), Vector3(4.8, 0.07, -2.5)
 	], 0.075, Color("#f4a432")))
 	# 星图台 → 舰桥四驾驶席主供能管线（紧贴甲板 y=0.05 铺设，遇舰桥台阶垂直攀升，零悬空斜线）
 	for px: float in ShipDevices3D.PILOT_X:
-		_conduit_mats.append(PhysicalLinkKit.build_conduit_path(self, [
+		_conduit_mats.append(HubPhysicalLinkKit.build_conduit_path(self, [
 			Vector3(px * 0.20, 0.05, -1.65),
 			Vector3(px, 0.05, -5.8),
 			Vector3(px, 0.05, -12.78),
@@ -236,19 +236,19 @@ func _build_conduits_and_atmosphere() -> void:
 		], 0.06, Color("#28dbff")))
 
 	# 星图台 → 右舷独立训练舱通道的青色引导导管（直观把训练舱与后方出舱气闸区分开）
-	_conduit_mats.append(PhysicalLinkKit.build_conduit_path(self, [
+	_conduit_mats.append(HubPhysicalLinkKit.build_conduit_path(self, [
 		Vector3(1.3, 0.06, 1.0), Vector3(3.1, 0.06, 6.2), Vector3(3.1, 0.06, 10.18), Vector3(5.8, 0.06, 10.18)
 	], 0.065, Color("#3ce8b4")))
 
 	# 顶部悬链线软管（打破呆板横平竖直）
 	for sx: float in [-1.0, 1.0]:
-		ArtAtmosphereKit.build_catenary_hose(self, Vector3(sx * 5.9, 3.6, -5.6), Vector3(sx * 5.9, 3.6, 0.2), 0.55, 0.045)
-		ArtAtmosphereKit.build_catenary_hose(self, Vector3(sx * 5.9, 3.6, 0.2), Vector3(sx * 5.9, 3.6, 6.2), 0.52, 0.042)
-		ArtAtmosphereKit.build_catenary_hose(self, Vector3(sx * 5.9, 3.2, 6.2), Vector3(sx * 5.9, 3.2, 12.0), 0.48, 0.040)
+		HubAtmosphereKit.build_catenary_hose(self, Vector3(sx * 5.9, 3.6, -5.6), Vector3(sx * 5.9, 3.6, 0.2), 0.55, 0.045)
+		HubAtmosphereKit.build_catenary_hose(self, Vector3(sx * 5.9, 3.6, 0.2), Vector3(sx * 5.9, 3.6, 6.2), 0.52, 0.042)
+		HubAtmosphereKit.build_catenary_hose(self, Vector3(sx * 5.9, 3.2, 6.2), Vector3(sx * 5.9, 3.2, 12.0), 0.48, 0.040)
 
 	# 气闸泄压微蒸汽
-	ArtAtmosphereKit.build_steam_vent(self, Vector3(-1.8, 0.2, 14.6), Color(0.86, 0.94, 1.0, 0.24), 0.55)
-	ArtAtmosphereKit.build_steam_vent(self, Vector3(1.8, 0.2, 14.6), Color(0.86, 0.94, 1.0, 0.24), 0.55)
+	HubAtmosphereKit.build_steam_vent(self, Vector3(-1.8, 0.2, 14.6), Color(0.86, 0.94, 1.0, 0.24), 0.55)
+	HubAtmosphereKit.build_steam_vent(self, Vector3(1.8, 0.2, 14.6), Color(0.86, 0.94, 1.0, 0.24), 0.55)
 
 func _build_cabin_physics_toys() -> void:
 	# 在主舱休息区放置可踢、可推撞的 Jolt 真实刚体工业箱、复古音响、碰碰球、氧气瓶与热可可壶
@@ -322,8 +322,8 @@ func _build_signboards_and_training_entry() -> void:
 	# 给右舷训练舱入口加上独立青绿门灯与壁挂金属指示牌
 	_mount_wall_plaque("PlaqueTrainingBay", "res://assets/textures/ship_signs/sign_training.png", Vector3(6.18, 3.22, 10.18), -PI * 0.5, 1.15)
 	_omni("TrainingEntryBeacon", Vector3(5.3, 2.9, 10.18), Color("#46e8b8"), 1.85, 8.0)
-	PhysicalLinkKit.build_status_lamp(self, Vector3(6.15, 2.35, 8.85))
-	PhysicalLinkKit.build_status_lamp(self, Vector3(6.15, 2.35, 11.50))
+	HubPhysicalLinkKit.build_status_lamp(self, Vector3(6.15, 2.35, 8.85))
+	HubPhysicalLinkKit.build_status_lamp(self, Vector3(6.15, 2.35, 11.50))
 
 func _mount_hanging_sign(node_name: String, tex_path: String, pos: Vector3, yaw: float, sc: float) -> void:
 	var holder: Node3D = Node3D.new()

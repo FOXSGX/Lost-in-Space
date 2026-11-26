@@ -102,7 +102,19 @@ func _run() -> void:
 	await _wait_frames(4)
 	await _snap(cam, Vector3(-1.9, 1.85, -28.0), Vector3(-1.9, 0.50, -32.8), 52.0, abs_out + "frost_F_items_and_toys_closeup.png")
 
-	print("VISUAL_CAPTURE_10_OK dir=" + abs_out)
+	# 新增视角 G：呆萌科考小机器人“小霜” + 4 格物品栏 + 体温/氧气微条 + 头盔微结霜验收
+	if frost.players.has(1):
+		(frost.players[1] as SpacePlayer3D).warmth = 0.42
+	await _wait_frames(12)
+	await _snap(cam, Vector3(-5.8, 1.35, -31.2), Vector3(-8.5, 0.72, -34.0), 46.0, abs_out + "frost_G_helper_bot_and_visor_frost.png")
+
+	# 新增视角 H：巨兽遗迹最深处 · 冰封巨兽心脏密钥祭坛
+	if frost.players.has(1):
+		(frost.players[1] as SpacePlayer3D).warmth = 1.0
+	await _wait_frames(8)
+	await _snap(cam, Vector3(4.5, 16.0, -591.5), Vector3(-2.4, 15.2, -602.0), 54.0, abs_out + "frost_H_heart_altar_climax.png")
+
+	print("VISUAL_CAPTURE_12_OK dir=" + abs_out)
 	quit(0)
 
 func _wait_frames(n: int) -> void:

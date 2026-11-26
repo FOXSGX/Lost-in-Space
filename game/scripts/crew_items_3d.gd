@@ -1,7 +1,7 @@
 extends Node
 class_name CrewItems3D
 
-const CAPACITY: int = 2
+const CAPACITY: int = 4
 const EQUIPMENT_CAPACITY: int = 2
 const JET_REFILL_DELAY: float = 0.3
 const JET_REFILL_RATE: float = 1.0
@@ -81,16 +81,26 @@ func _build_ui() -> void:
     add_child(_layer)
     _bar = Control.new()
     _bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
-    controller._place_hud(_bar, Control.PRESET_CENTER_BOTTOM, Vector2(-74, -92), Vector2(148, 68))
+    var bar_w: float = float(CAPACITY) * 78.0 - 10.0
+    controller._place_hud(_bar, Control.PRESET_CENTER_BOTTOM, Vector2(-bar_w * 0.5, -92), Vector2(bar_w, 68))
     _layer.add_child(_bar)
     for index: int in CAPACITY:
         var panel: Panel = Panel.new()
-        panel.position = Vector2(index * 80, 0)
+        panel.position = Vector2(index * 78, 0)
         panel.size = Vector2(68, 68)
         panel.add_theme_stylebox_override("panel", UIStyleKit.visor_slot(index == 0, false))
         panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
         _bar.add_child(panel)
         _cells.append(panel)
+        var key_tag: Label = Label.new()
+        key_tag.text = str(index + 1)
+        key_tag.position = Vector2(5, 2)
+        key_tag.size = Vector2(18, 16)
+        key_tag.add_theme_font_override("font", UIStyleKit.FONT_BOLD)
+        key_tag.add_theme_font_size_override("font_size", 10)
+        key_tag.add_theme_color_override("font_color", UIStyleKit.VISOR_MUTED)
+        key_tag.mouse_filter = Control.MOUSE_FILTER_IGNORE
+        panel.add_child(key_tag)
         var icon: TextureRect = TextureRect.new()
         icon.position = Vector2(12, 10)
         icon.size = Vector2(44, 44)
@@ -118,7 +128,7 @@ func _build_equipment_ui() -> void:
     _equipment_column.add_theme_constant_override("separation", 10)
     _equipment_column.mouse_filter = Control.MOUSE_FILTER_IGNORE
     # 整齐排在左上角生命体征下方，为左下角战术雷达小地图让出充裕空间
-    controller._place_hud(_equipment_column, Control.PRESET_TOP_LEFT, Vector2(20, 88), Vector2(68, 146))
+    controller._place_hud(_equipment_column, Control.PRESET_TOP_LEFT, Vector2(20, 112), Vector2(68, 146))
     _layer.add_child(_equipment_column)
     for index: int in EQUIPMENT_CAPACITY:
         _build_equipment_cell()
@@ -219,7 +229,9 @@ func _process(_delta: float) -> void:
 
 func ensure_bag(peer_id: int) -> Dictionary:
     if not bags.has(peer_id):
-        var slots: Array = [{}, {}]
+        var slots: Array = []
+        for _i: int in CAPACITY:
+            slots.append({})
         var legacy: Dictionary = controller._ship_session.packs.get(peer_id, {})
         var cursor: int = 0
         for kind: String in SUPPLIES:
@@ -229,6 +241,8 @@ func ensure_bag(peer_id: int) -> Dictionary:
                     cursor += 1
         bags[peer_id] = {"slots": slots, "selected": 0}
     var bag: Dictionary = bags[peer_id]
+    while (bag.slots as Array).size() < CAPACITY:
+        (bag.slots as Array).append({})
     if not bag.has("equipment"):
         bag.equipment = [{}, {}]
         if bool(bag.get("oxygen_mounted", false)):
@@ -779,11 +793,15 @@ func handle_action(peer_id: int, action: String) -> void:
             _pending_choices.erase(peer_id)
             controller.handle_action(peer_id, choice)
         return
-    if action in ["slot_1", "slot_2", "slot_next", "slot_previous"]:
+    if action in ["slot_1", "slot_2", "slot_3", "slot_4", "slot_next", "slot_previous"]:
         var field: String = "equipment_selected" if bool(bag.equipment_active) else "selected"
         var capacity: int = EQUIPMENT_CAPACITY if bool(bag.equipment_active) else CAPACITY
         var direction: int = -1 if action == "slot_previous" else 1
-        bag[field] = posmod(int(bag[field]) + direction, capacity) if action in ["slot_next", "slot_previous"] else (0 if action == "slot_1" else 1)
+        if action in ["slot_next", "slot_previous"]:
+            bag[field] = posmod(int(bag[field]) + direction, capacity)
+        else:
+            var idx_map: Dictionary = {"slot_1": 0, "slot_2": 1, "slot_3": 2, "slot_4": 3}
+            bag[field] = clampi(int(idx_map.get(action, 0)), 0, capacity - 1)
         publish()
         return
     if action == "item_drop":

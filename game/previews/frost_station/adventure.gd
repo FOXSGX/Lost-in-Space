@@ -145,10 +145,12 @@ func use_station(id: int, entry: Dictionary) -> void:
 	if entry.kind == "district_power":
 		progress.district_power = true
 		world.apply_power(true)
+		SfxKit.play_2d(self, "sfx_lever_clunk", -4.0)
 		tell(id,"旁路已恢复 · 作业院与北哨中继站亮灯供暖，维护台可慢充补氧")
 	elif entry.kind == "radar_tower":
 		progress["radar_online"] = true
 		world.apply_radar(true)
+		SfxKit.play_2d(self, "sfx_lever_clunk", -4.0, 1.1)
 		if players.has(id):
 			players[id].warmth = minf(1.5, players[id].warmth + 0.4)
 		tell(id,"气象雷达已重启 · 全盆地冰原公路航标灯全部点亮！")
@@ -245,6 +247,8 @@ func snapshot() -> Dictionary:
 	var data: Dictionary = super.snapshot()
 	data.surface_schema = 4
 	data.cart = world.cart.state()
+	if sandbox != null and sandbox.has_method("sandbox_snapshot"):
+		data["sandbox"] = sandbox.sandbox_snapshot()
 	var rays: Dictionary = {}
 	for id: int in grabbed:
 		if is_instance_valid(grabbed[id]):rays[id] = grabbed[id].position
@@ -255,6 +259,8 @@ func apply_frost_state(data: Dictionary) -> void:
 	if int(data.get("surface_schema",0))!=4:return
 	super.apply_frost_state(data)
 	world.cart.apply_state(data.get("cart",{}))
+	if sandbox != null and sandbox.has_method("apply_sandbox_snapshot") and data.has("sandbox"):
+		sandbox.apply_sandbox_snapshot(data["sandbox"] as Dictionary)
 	world.apply_progress(progress)
 	set_meta("grab_rays",data.get("grab_rays",{}))
 

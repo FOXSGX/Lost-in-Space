@@ -620,7 +620,7 @@ func handle_request(peer_id: int, action: String, item := "") -> void:
             if item == "oxygen":
                 keep_oxygen_levels([amount])
         else:
-            _notify(peer_id, "库存不足、物品栏已满（共 2 格），或没有可存回的物品。")
+            _notify(peer_id, "库存不足、物品栏已满（共 4 格），或没有可存回的物品。")
             return
         result_message = ("已领取 1 件" if action == "take" else "已存回 1 件") + String(ITEM_NAMES[item]) + "。"
     elif action == "craft" and ITEM_COSTS.has(item) and near_device.get("kind", "") in ["craft", "workshop"]:

@@ -1,5 +1,5 @@
 extends RefCounted
-class_name PhysicalLinkKit
+class_name HubPhysicalLinkKit
 
 ## 物理因果连线套件（零悬浮文字：用贴地/贴墙装甲导管 + 遮光状态灯表达状态与路径）
 

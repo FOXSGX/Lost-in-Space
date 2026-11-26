@@ -199,7 +199,7 @@ func _input(event: InputEvent) -> void:
 		return
 	if event is InputEventKey and event.pressed and not event.echo and event.physical_keycode == KEY_TAB:
 		handle_action(multiplayer.get_unique_id(),"toggle_equipment")
-	for action: String in ["interact","item_drop","slot_1","slot_2","item_use"]:
+	for action: String in ["interact","item_drop","slot_1","slot_2","slot_3","slot_4","item_use"]:
 		if event.is_action_pressed(action) and not event.is_echo():
 			handle_action(multiplayer.get_unique_id(),action)
 
@@ -294,7 +294,7 @@ func handle_action(id: int, action: String) -> void:
 		var entry: Dictionary = nearby_station(id)
 		if not entry.is_empty():
 			use_station(id,entry)
-	elif action in ["item_drop","slot_1","slot_2","slot_next","slot_previous","toggle_equipment","item_use"]:
+	elif action in ["item_drop","slot_1","slot_2","slot_3","slot_4","slot_next","slot_previous","toggle_equipment","item_use"]:
 		_items.handle_action(id,action)
 
 func nearby_station(id: int) -> Dictionary:

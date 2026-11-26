@@ -79,12 +79,13 @@ func run_check() -> void:
     ship.request("interact")
     check(not ship.has_panel(), "储物仍弹出按钮面板")
     var inventory_before := int(ship.stock.medical)
-    ship.request("take", "medical")
-    ship.request("take", "medical")
-    ship.request("take", "medical")
-    check(int(ship.packs[1].medical) == 2 and int(ship.stock.medical) == inventory_before - 2, "领取上限或共享库存错误")
+    for _t: int in CrewItems3D.CAPACITY + 1:
+        ship.request("take", "medical")
+    check(int(ship.packs[1].medical) == CrewItems3D.CAPACITY and int(ship.stock.medical) == inventory_before - CrewItems3D.CAPACITY, "领取上限或共享库存错误")
     ship.request("store", "medical")
-    check(int(ship.packs[1].medical) == 1 and int(ship.stock.medical) == inventory_before - 1, "存回物资不守恒")
+    check(int(ship.packs[1].medical) == CrewItems3D.CAPACITY - 1 and int(ship.stock.medical) == inventory_before - (CrewItems3D.CAPACITY - 1), "存回物资不守恒")
+    for _s: int in CrewItems3D.CAPACITY - 2:
+        ship.request("store", "medical")
     ship.request("take", "oxygen")
     ship.close_panel()
     player.teleport_to(ShipHub3D.REPAIR)

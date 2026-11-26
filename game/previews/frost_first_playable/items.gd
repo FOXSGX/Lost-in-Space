@@ -69,7 +69,7 @@ func pickup(peer_id: int, entry: Dictionary) -> bool:
 	for current: Dictionary in drops:
 		if current.uid == entry.get("uid", ""):
 			if not add_item(peer_id, current.kind, -1, current, true):
-				controller.show_notice("两格已满 · G 放下选中物品")
+				controller.show_notice("四格已满 · G 放下选中物品")
 				return false
 			drops.erase(current)
 			publish()

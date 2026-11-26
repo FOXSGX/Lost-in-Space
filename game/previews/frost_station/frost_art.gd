@@ -28,6 +28,7 @@ const ARCTIC_ROOF_GLB: PackedScene = preload("res://assets/models/rebuild/hero_a
 const WALL_BUTTRESS_GLB: PackedScene = preload("res://assets/models/rebuild/hero_wall_buttress.glb")
 const GEO_DOME_GLB: PackedScene = preload("res://assets/models/rebuild/hero_geo_dome.glb")
 const COMMS_TOWER_GLB: PackedScene = preload("res://assets/models/rebuild/hero_comms_tower.glb")
+const HEART_ALTAR_GLB: PackedScene = preload("res://assets/models/rebuild/hero_heart_altar.glb")
 
 ## 霜烬星色板：冷奶白钢构 + 锈红底漆 + 蓝灰金属 + 冰青，点缀色沿用每栋既有识别色。
 const PALETTE: Dictionary = {
@@ -139,7 +140,7 @@ func _open_fossil_canyon() -> void:
 
 func _build_objective_beacon() -> void:
 	# 3D 物理主线天空光柱（无悬浮文字，400m 外清晰指向当前主线目标）
-	_objective_beacon = ArtAtmosphereKit.build_godray_cone(detail_root, Vector3(-5.0, 68.0, -120.0), 68.0, 1.4, 3.8, Color("#4ef0ff"), 0.14)
+	_objective_beacon = HubAtmosphereKit.build_godray_cone(detail_root, Vector3(-5.0, 68.0, -120.0), 68.0, 1.4, 3.8, Color("#4ef0ff"), 0.14)
 	_objective_beacon.name = "ActiveObjectiveBeacon"
 	_objective_beacon_mat = _objective_beacon.material_override as ShaderMaterial
 
@@ -587,7 +588,7 @@ func _build_buildings() -> void:
 		porch.scale = Vector3(sx_fit, 1.0, 1.0)
 		_pbr.bind_glb(porch, "frost", true)
 		detail_root.add_child(porch)
-		ArtAtmosphereKit.build_ground_skirt(detail_root, Vector3(center.x, center.y, front_z + 1.1), door_width * 0.65, 0.45)
+		HubAtmosphereKit.build_ground_skirt(detail_root, Vector3(center.x, center.y, front_z + 1.1), door_width * 0.65, 0.45)
 		detail_meshes += 1
 		# 门口机装工作灯真实光源
 		_add_omni("DoorLamp_" + id, Vector3(center.x, center.y + 3.25, front_z + 1.8), PALETTE.warm_lamp, 1.25, 13.0)
@@ -886,7 +887,18 @@ func _build_hero_landmarks_and_conduits() -> void:
 		detail_root.add_child(cl)
 		detail_meshes += 1
 	# 骨口巨拱下的极地光柱（克制假体积光）
-	ArtAtmosphereKit.build_godray_cone(detail_root, Vector3(0.0, 28.0, -184.0), 28.0, 5.5, 13.5, Color("#8ce4ff"), 0.09)
+	HubAtmosphereKit.build_godray_cone(detail_root, Vector3(0.0, 28.0, -184.0), 28.0, 5.5, 13.5, Color("#8ce4ff"), 0.09)
+
+	# 1.5 巨兽遗迹最深处 · 冰封巨兽心脏密钥祭坛（终点高潮地标，位于遗迹密钥 (-2.4, 12.9, -602) 处）
+	var altar: Node3D = HEART_ALTAR_GLB.instantiate() as Node3D
+	altar.name = "HeroLeviathanHeartAltar"
+	altar.position = Vector3(-2.4, 11.45, -602.0)
+	_pbr.bind_glb(altar, "frost", true)
+	detail_root.add_child(altar)
+	HubAtmosphereKit.build_godray_cone(detail_root, Vector3(-2.4, 34.0, -602.0), 23.0, 2.2, 6.2, Color("#56ecff"), 0.13)
+	_add_omni("HeartAltarCyanGlow", Vector3(-2.4, 16.5, -602.0), Color("#42eaff"), 3.2, 28.0)
+	_add_omni("HeartAltarAmberRim", Vector3(-2.4, 13.5, -598.5), Color("#ffae42"), 2.2, 22.0)
+	detail_meshes += 1
 
 	# 2. 地热涡轮发电机英雄件（动力站外侧、北哨中继站、东线气象雷达高地）
 	var gen_spots: Array = [
@@ -903,8 +915,8 @@ func _build_hero_landmarks_and_conduits() -> void:
 		gen.scale = Vector3.ONE * gs
 		_pbr.bind_glb(gen, "frost", true)
 		detail_root.add_child(gen)
-		ArtAtmosphereKit.build_ground_skirt(detail_root, gp, 2.8 * gs, 0.50)
-		ArtAtmosphereKit.build_steam_vent(detail_root, gp + Vector3(0.0, 5.0 * gs, 0.0), Color(0.85, 0.94, 1.0, 0.34), 1.0)
+		HubAtmosphereKit.build_ground_skirt(detail_root, gp, 2.8 * gs, 0.50)
+		HubAtmosphereKit.build_steam_vent(detail_root, gp + Vector3(0.0, 5.0 * gs, 0.0), Color(0.85, 0.94, 1.0, 0.34), 1.0)
 		_add_omni("GeoGenGlow_%d" % idx, gp + Vector3(0.0, 1.8 * gs, 1.8 * gs), Color("#ff9842"), 1.8, 14.0)
 		detail_meshes += 1
 
@@ -919,7 +931,7 @@ func _build_hero_landmarks_and_conduits() -> void:
 		dm.scale = Vector3.ONE * float(dome_info[2])
 		_pbr.bind_glb(dm, "frost", true)
 		detail_root.add_child(dm)
-		ArtAtmosphereKit.build_ground_skirt(detail_root, dome_info[1], 9.2, 0.48)
+		HubAtmosphereKit.build_ground_skirt(detail_root, dome_info[1], 9.2, 0.48)
 		_add_omni(String(dome_info[0]) + "_WarmGlow", (dome_info[1] as Vector3) + Vector3(0.0, 3.8, 0.0), Color("#ffcb78"), 2.4, 24.0)
 		detail_meshes += 1
 
@@ -934,7 +946,7 @@ func _build_hero_landmarks_and_conduits() -> void:
 		tw.rotation_degrees.y = float(tower_info[3])
 		_pbr.bind_glb(tw, "frost", true)
 		detail_root.add_child(tw)
-		ArtAtmosphereKit.build_ground_skirt(detail_root, tower_info[1], 4.8, 0.50)
+		HubAtmosphereKit.build_ground_skirt(detail_root, tower_info[1], 4.8, 0.50)
 		_add_omni(String(tower_info[0]) + "_Beacon", (tower_info[1] as Vector3) + Vector3(0.0, 19.2 * float(tower_info[2]), 0.0), Color("#ff5030"), 2.8, 30.0)
 		detail_meshes += 1
 
@@ -956,7 +968,7 @@ func _build_hero_landmarks_and_conduits() -> void:
 		rock.scale = Vector3.ONE * rs
 		_pbr.bind_glb(rock, "frost", true)
 		detail_root.add_child(rock)
-		ArtAtmosphereKit.build_ground_skirt(detail_root, rp, 3.6 * rs, 0.44)
+		HubAtmosphereKit.build_ground_skirt(detail_root, rp, 3.6 * rs, 0.44)
 		detail_meshes += 1
 
 	var spire_spots: Array = [
@@ -975,7 +987,7 @@ func _build_hero_landmarks_and_conduits() -> void:
 		spire.scale = Vector3.ONE * ss
 		_pbr.bind_glb(spire, "frost", true)
 		detail_root.add_child(spire)
-		ArtAtmosphereKit.build_ground_skirt(detail_root, sp, 1.8 * ss, 0.42)
+		HubAtmosphereKit.build_ground_skirt(detail_root, sp, 1.8 * ss, 0.42)
 		if idx < 6:
 			_add_omni("IceSpireGlow_%d" % idx, sp + Vector3(0.0, 2.2 * ss, 0.0), Color("#38d2ff"), 1.35, 12.0)
 		detail_meshes += 1
@@ -993,26 +1005,26 @@ func _build_hero_landmarks_and_conduits() -> void:
 		detail_root.add_child(lc)
 
 	# 5. 跨雪原物理因果装甲导管（看得见的因果连线：不用读文字就能沿着发光导管找到动力站/主楼/北哨/雷达塔）
-	_power_conduit_mats.append(PhysicalLinkKit.build_conduit_path(detail_root, [
+	_power_conduit_mats.append(HubPhysicalLinkKit.build_conduit_path(detail_root, [
 		Vector3(58.0, 0.35, -100.0), Vector3(32.0, 0.35, -92.0), Vector3(12.0, 0.35, -92.0)
 	], 0.14, Color("#ffae42")))
-	_power_conduit_mats.append(PhysicalLinkKit.build_conduit_path(detail_root, [
+	_power_conduit_mats.append(HubPhysicalLinkKit.build_conduit_path(detail_root, [
 		Vector3(58.0, 0.35, -100.0), Vector3(44.0, 0.35, -125.0), Vector3(48.0, 0.35, -155.0)
 	], 0.14, Color("#28dbff")))
-	_radar_conduit_mats.append(PhysicalLinkKit.build_conduit_path(detail_root, [
+	_radar_conduit_mats.append(HubPhysicalLinkKit.build_conduit_path(detail_root, [
 		Vector3(0.0, 0.35, -12.0), Vector3(0.0, 0.35, -50.0), Vector3(0.0, 0.35, -90.0)
 	], 0.13, Color("#28dbff")))
-	_radar_conduit_mats.append(PhysicalLinkKit.build_conduit_path(detail_root, [
+	_radar_conduit_mats.append(HubPhysicalLinkKit.build_conduit_path(detail_root, [
 		Vector3(64.0, 0.35, -100.0), Vector3(115.0, 4.2, -52.0), Vector3(170.0, 9.8, -62.0), Vector3(215.0, 14.6, -72.0)
 	], 0.14, Color("#28dbff")))
 	# 新增连接极地温室、货运站与通讯灯塔的发光能量导管，让 11 栋建筑连成完整极地小镇
-	_power_conduit_mats.append(PhysicalLinkKit.build_conduit_path(detail_root, [
+	_power_conduit_mats.append(HubPhysicalLinkKit.build_conduit_path(detail_root, [
 		Vector3(-30.0, 0.35, -108.0), Vector3(-62.0, 0.35, -108.0), Vector3(-80.0, 0.35, -108.0)
 	], 0.14, Color("#ffae42")))
-	_power_conduit_mats.append(PhysicalLinkKit.build_conduit_path(detail_root, [
+	_power_conduit_mats.append(HubPhysicalLinkKit.build_conduit_path(detail_root, [
 		Vector3(71.0, 0.35, -108.0), Vector3(88.0, 0.35, -96.0)
 	], 0.14, Color("#28dbff")))
-	_power_conduit_mats.append(PhysicalLinkKit.build_conduit_path(detail_root, [
+	_power_conduit_mats.append(HubPhysicalLinkKit.build_conduit_path(detail_root, [
 		Vector3(-63.0, 0.35, -28.0), Vector3(-82.0, 0.35, -28.0)
 	], 0.14, Color("#ffae42")))
 

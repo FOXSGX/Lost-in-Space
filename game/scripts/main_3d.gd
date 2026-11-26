@@ -3711,7 +3711,7 @@ func handle_action(peer_id: int, action: String) -> void:
     if is_host and _ship_session.campaign.enabled and game_started and current_planet_id == "ruin" and action in ["interact", "repair"]:
         if _campaign_travel.ruin_return(peer_id):
             return
-    if action in ["interact", "item_use", "item_drop", "item_scan", "slot_1", "slot_2", "slot_next", "slot_previous", "toggle_equipment"] or action.begins_with("choice_"):
+    if action in ["interact", "item_use", "item_drop", "item_scan", "slot_1", "slot_2", "slot_3", "slot_4", "slot_next", "slot_previous", "toggle_equipment"] or action.begins_with("choice_"):
         if not is_host:
             request_action.rpc_id(1, peer_id, action)
         elif _items != null:
@@ -4337,6 +4337,7 @@ func _enemy_snapshot() -> Array:
     return snapshot
 
 func _world_snapshot() -> Dictionary:
+    return {"ruin_state": _ruin_planet.snapshot() if current_planet_id == "ruin" and _ruin_planet != null else {}, "extraction_enabled": extraction_enabled, "extraction_progress": extraction_progress, "planet_id": current_planet_id, "ruin_enemies": _ruin_planet.enemy_snapshot() if (_ruin_planet != null and current_planet_id == "ruin") else [], "kit": kit_assignments.duplicate(true), "credits": credits, "owned_skins": owned_skins, "player_skins": player_skins.duplicate(true), "ship_state": _ship_session.snapshot(), "wave": enemy_wave_index, "timer": enemy_wave_timer, "enemies": _enemy_snapshot(), "beacons": activated_beacons, "crates": taken_crates, "samples": taken_samples, "deposited": deposited_resources, "salvage": salvage_value, "mission_elapsed": mission_elapsed, "knowledge": knowledge_flags.keys(), "anomaly_resolved": anomaly_resolved, "ending_choice": ending_choice, "story_flags": story_flags, "side_quest_states": side_quest_states, "achievements": achievement_flags, "world_flags": world_flags, "resource_epoch": _planet_resource_epoch, "lost_cargo": lost_cargo, "rift_valve_open": rift_valve_open, "signal_mode": signal_mode, "signal_lure_until": signal_lure_until, "signal_lure_position": signal_lure_position, "signal_cooldown_until": signal_cooldown_until, "map_markers": map_markers, "vitals": _vitals_snapshot(), "beacon_positions": beacon_positions, "crate_positions": crate_positions, "sample_positions": sample_positions, "journal": journal_entries, "regions": discovered_regions, "clues": discovered_clues, "scan_clues": scan_revealed_clues, "scan_device_active": scan_device_active, "scan_device_position": scan_device_position, "scan_remaining": scan_remaining, "goofy_effects": _goofy_items.snapshot() if _goofy_items != null else [], "field_state": _field_interactions.snapshot() if _field_interactions != null else {}, "roam_state": _roam_activities.snapshot() if _roam_activities != null else {}}
 
 func _vitals_snapshot() -> Array:
     var snapshot: Array = []

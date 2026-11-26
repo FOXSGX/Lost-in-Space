@@ -60,6 +60,7 @@ func _physics_process(delta: float) -> void:
 				actor.velocity.y = 11.5
 				_bounce_cd = 0.55
 				_bounce_squish = 1.0
+				SfxKit.play_3d(self, "sfx_bounce", _bounce_pad_pos, -4.0)
 
 func _upgrade_environment_and_lights(room: Node3D) -> void:
 	for child: Node in room.get_children():
@@ -174,10 +175,10 @@ func _build_hero_hangar_architecture() -> void:
 		arch.scale = Vector3(0.96, 1.90, 1.0)
 		_pbr.bind_glb(arch, "ship", true)
 		add_child(arch)
-		ArtAtmosphereKit.build_ground_skirt(self, Vector3(rx, 0.0, -6.3), 1.3, 0.45)
-		ArtAtmosphereKit.build_ground_skirt(self, Vector3(rx, 0.0, 6.3), 1.3, 0.45)
-	ArtAtmosphereKit.build_godray_cone(self, Vector3(-7.0, 9.0, 3.8), 8.6, 0.9, 2.6, Color("#7ef0ff"), 0.075)
-	ArtAtmosphereKit.build_godray_cone(self, Vector3(6.4, 9.0, 2.5), 8.6, 1.2, 3.4, Color("#ffd494"), 0.085)
+		HubAtmosphereKit.build_ground_skirt(self, Vector3(rx, 0.0, -6.3), 1.3, 0.45)
+		HubAtmosphereKit.build_ground_skirt(self, Vector3(rx, 0.0, 6.3), 1.3, 0.45)
+	HubAtmosphereKit.build_godray_cone(self, Vector3(-7.0, 9.0, 3.8), 8.6, 0.9, 2.6, Color("#7ef0ff"), 0.075)
+	HubAtmosphereKit.build_godray_cone(self, Vector3(6.4, 9.0, 2.5), 8.6, 1.2, 3.4, Color("#ffd494"), 0.085)
 
 	# 2. 正中对称的英雄级氧气瓶展示圆台（完全居中对齐 (-7.0, 0, 3.8)，顶面精确落在 y=0.95 托住氧气瓶，绝不偏歪！）
 	var ped: Node3D = PEDESTAL_GLB.instantiate() as Node3D
@@ -185,7 +186,7 @@ func _build_hero_hangar_architecture() -> void:
 	ped.position = Vector3(-7.0, 0.0, 3.8)
 	_pbr.bind_glb(ped, "ship", true)
 	add_child(ped)
-	ArtAtmosphereKit.build_ground_skirt(self, Vector3(-7.0, 0.0, 3.8), 1.35, 0.48)
+	HubAtmosphereKit.build_ground_skirt(self, Vector3(-7.0, 0.0, 3.8), 1.35, 0.48)
 
 	# 靠后左角落放一台生命充氧舱作环境叙事装饰
 	var pod: Node3D = REFILL_GLB.instantiate() as Node3D
@@ -194,14 +195,14 @@ func _build_hero_hangar_architecture() -> void:
 	pod.rotation.y = PI * 0.25
 	_pbr.bind_glb(pod, "ship", true)
 	add_child(pod)
-	ArtAtmosphereKit.build_ground_skirt(self, Vector3(-9.3, 0.0, -4.6), 1.0, 0.45)
+	HubAtmosphereKit.build_ground_skirt(self, Vector3(-9.3, 0.0, -4.6), 1.0, 0.45)
 
 	# 3. 顶部悬链线软管 + 返回门边泄压蒸汽
 	for sz: float in [-5.8, 5.8]:
-		ArtAtmosphereKit.build_catenary_hose(self, Vector3(-8.2, 7.8, sz), Vector3(-2.8, 7.8, sz), 0.68, 0.05)
-		ArtAtmosphereKit.build_catenary_hose(self, Vector3(-2.8, 7.8, sz), Vector3(2.8, 7.8, sz), 0.68, 0.05)
-		ArtAtmosphereKit.build_catenary_hose(self, Vector3(2.8, 7.8, sz), Vector3(8.2, 7.8, sz), 0.68, 0.05)
-	ArtAtmosphereKit.build_steam_vent(self, Vector3(6.2, 0.2, 5.9), Color(0.84, 0.95, 1.0, 0.28), 0.6)
+		HubAtmosphereKit.build_catenary_hose(self, Vector3(-8.2, 7.8, sz), Vector3(-2.8, 7.8, sz), 0.68, 0.05)
+		HubAtmosphereKit.build_catenary_hose(self, Vector3(-2.8, 7.8, sz), Vector3(2.8, 7.8, sz), 0.68, 0.05)
+		HubAtmosphereKit.build_catenary_hose(self, Vector3(2.8, 7.8, sz), Vector3(8.2, 7.8, sz), 0.68, 0.05)
+	HubAtmosphereKit.build_steam_vent(self, Vector3(6.2, 0.2, 5.9), Color(0.84, 0.95, 1.0, 0.28), 0.6)
 
 	# 4. 机库顶部中央双面科技感 LED 大屏吊牌
 	var sign_holder: Node3D = Node3D.new()
@@ -230,7 +231,7 @@ func _build_hero_hangar_architecture() -> void:
 
 func _build_flight_rings_and_conduits() -> void:
 	# 1. 贴地装甲发光导引管（从氧气展示台顺畅串联到四座阶梯高台）
-	_conduit_mats.append(PhysicalLinkKit.build_conduit_path(self, [
+	_conduit_mats.append(HubPhysicalLinkKit.build_conduit_path(self, [
 		Vector3(-6.2, 0.05, 3.8),
 		Vector3(-3.8, 0.05, 3.8),
 		Vector3(-4.2, 0.05, -2.3),
