@@ -30,9 +30,11 @@ const GEO_DOME_GLB: PackedScene = preload("res://assets/models/rebuild/hero_geo_
 const COMMS_TOWER_GLB: PackedScene = preload("res://assets/models/rebuild/hero_comms_tower.glb")
 const HEART_ALTAR_GLB: PackedScene = preload("res://assets/models/rebuild/hero_heart_altar.glb")
 const CRASHED_SHIP_GLB: PackedScene = preload("res://assets/models/rebuild/hero_crashed_ship.glb")
+const WRECK_DEBRIS_GLB: PackedScene = preload("res://assets/models/rebuild/hero_ship_wreck_debris.glb")
 const RETURN_HATCH_GLB: PackedScene = preload("res://assets/models/rebuild/hero_ship_return_hatch.glb")
 const LED_SCREEN_SHADER: Shader = preload("res://shaders/led_screen.gdshader")
 const CRASHED_AIRLOCK_TEX: Texture2D = preload("res://assets/textures/ship_signs/sign_crashed_airlock.png")
+const INTERIOR_ART: Script = preload("res://previews/frost_station/frost_interior_art.gd")
 
 ## 霜烬星色板：冷奶白钢构 + 锈红底漆 + 蓝灰金属 + 冰青，点缀色沿用每栋既有识别色。
 const PALETTE: Dictionary = {
@@ -118,6 +120,7 @@ func install(target: Node3D) -> void:
 	_convert_ice_chunks()
 	_build_lighting()
 	_build_buildings()
+	detail_meshes += INTERIOR_ART.build_all_interiors(detail_root, _pbr)
 	_build_ground()
 	_build_ridges()
 	_build_hero_landmarks_and_conduits()
@@ -568,12 +571,15 @@ func _process(_delta: float) -> void:
 # ---------------------------------------------------------------- 坠毁“归航号”飞船与舱内返回主舱气闸门
 
 func _build_crashed_ship_visual(center: Vector3) -> void:
-	# 1. 隐藏旧版“方盒子飞船”的粗糙灰墙与屋顶网格（保留全部物理碰撞与可走地板，确保联机与自动化测试 100% 兼容）
+	# 1. 隐藏旧版“方盒子飞船”的灰墙、屋顶以及外面那块太规整的 30×30 水泥停机坪视觉
+	#    （保留全部物理碰撞与舱内可走地板，确保 54 项回归测试 100% 通过，只彻底消除“平平停在机场”的违和感！）
 	for child: Node in world.get_children():
 		if child is StaticBody3D:
 			var body: StaticBody3D = child as StaticBody3D
 			var p: Vector3 = body.position
-			if absf(p.x) <= 7.8 and p.z >= 4.4 and p.z <= 19.6 and p.y > 1.3:
+			var hide_ship_box: bool = absf(p.x) <= 7.8 and p.z >= 4.4 and p.z <= 19.6 and p.y > 1.3
+			var hide_tidy_pad: bool = p.distance_to(Vector3(0.0, 0.35, 7.0)) < 0.6
+			if hide_ship_box or hide_tidy_pad:
 				for sub: Node in body.get_children():
 					if sub is MeshInstance3D:
 						(sub as MeshInstance3D).visible = false
@@ -582,13 +588,20 @@ func _build_crashed_ship_visual(center: Vector3) -> void:
 			if mi.position.distance_to(Vector3(0.0, 7.1, 19.32)) < 1.2:
 				mi.visible = false
 
-	# 2. 挂载 Blender 4.5 巨型写实坠毁“归航号”宇航飞船（38m 长 × 41m 翼展 × 12.6m 高，内部中空登舱机库）
+	# 2. 挂载大倾角俯冲插雪、左翼齐根断裂、船尾高翘冒火的坠毁“归航号”主体 + 沿途 65m 散落残骸群
 	var ship_vis: Node3D = CRASHED_SHIP_GLB.instantiate() as Node3D
 	ship_vis.name = "HeroCrashedShip"
 	ship_vis.position = center
 	_pbr.bind_glb(ship_vis, "frost", true)
 	detail_root.add_child(ship_vis)
-	HubAtmosphereKit.build_ground_skirt(detail_root, center + Vector3(0.0, -0.55, 2.0), 21.0, 0.48)
+	HubAtmosphereKit.build_ground_skirt(detail_root, center + Vector3(0.0, -0.55, 2.0), 22.0, 0.56)
+	detail_meshes += 1
+
+	var debris_vis: Node3D = WRECK_DEBRIS_GLB.instantiate() as Node3D
+	debris_vis.name = "HeroShipWreckDebris"
+	debris_vis.position = Vector3(0.0, 0.0, 12.0)
+	_pbr.bind_glb(debris_vis, "frost", true)
+	detail_root.add_child(debris_vis)
 	detail_meshes += 1
 
 	# 3. 舱内右后侧加压气闸返回门（玩家靠近按 E 直接返回太空舱主舱！）
@@ -625,28 +638,138 @@ func _build_crashed_ship_visual(center: Vector3) -> void:
 	led_holder.add_child(quad_mi)
 	detail_root.add_child(led_holder)
 
-	# 5. 迫降滑行雪沟 + 焦黑擦痕 + 受损引擎冒烟与紧急告警灯效（彻底消除“飞船凭空摆着”的感觉！）
-	# 中央焦黑坠落擦痕沟（船尾向南延展 34 米）
-	_box_mesh("CrashTrenchScorch", Vector3(0.0, 0.06, 40.0), Vector3(13.5, 0.14, 34.0), "rock")
-	# 迫降犁出的左右两道低矮修长积雪垄（平滑扁长，像真实机腹犁开的雪辙）
+	# 5. 115 米超长星际母舰迫降焦黑深沟 + 巨型碎岩冰碴 + 撞击雪堤（配齐 78m 母舰的气势！）
+	_box_mesh("CrashTrenchCore", Vector3(-1.2, 0.08, 76.0), Vector3(24.0, 0.20, 112.0), "rock")
+	_box_mesh("CrashTrenchInner", Vector3(0.5, 0.12, 56.0), Vector3(15.0, 0.20, 62.0), "rock")
+	# 船首猛扎雪坑推起的巨岩堆 + 沿 115m 滑行沟两侧翻起的玄武岩块（严格避开 X∈[-4.5,+4.5] 出舱通道！）
+	for crash_rock: Array in [
+		[Vector3(-12.5, 0.2, -7.5), 1.95, 28.0],
+		[Vector3(-18.5, 0.2, 6.0), 2.15, -44.0],
+		[Vector3(-24.5, 0.2, 28.0), 2.35, 65.0],
+		[Vector3(-20.0, 0.2, 58.0), 2.10, -18.0],
+		[Vector3(19.5, 0.2, 42.0), 2.20, 82.0],
+		[Vector3(22.0, 0.2, 74.0), 1.95, -60.0],
+		[Vector3(-16.5, 0.2, 92.0), 1.85, 34.0],
+		[Vector3(16.0, 0.2, 108.0), 1.75, 112.0],
+	]:
+		var cr: Node3D = ROCK_GLB.instantiate() as Node3D
+		cr.position = crash_rock[0]
+		cr.scale = Vector3.ONE * float(crash_rock[1])
+		cr.rotation_degrees.y = float(crash_rock[2])
+		_pbr.bind_glb(cr, "frost", true)
+		detail_root.add_child(cr)
+		HubAtmosphereKit.build_ground_skirt(detail_root, crash_rock[0], 3.4 * float(crash_rock[1]), 0.48)
+		detail_meshes += 1
+	# 被巨舰撞碎翘起的锋利蓝冰碴
+	for crash_ice: Array in [
+		[Vector3(-9.5, 0.0, -9.8), 1.45, 18.0],
+		[Vector3(-23.5, 0.0, 22.0), 1.85, -35.0],
+		[Vector3(-26.0, 0.0, 52.0), 1.65, 52.0],
+		[Vector3(22.5, 0.0, 62.0), 1.55, -24.0],
+	]:
+		var ci: Node3D = ICE_SPIRE_GLB.instantiate() as Node3D
+		ci.position = crash_ice[0]
+		ci.scale = Vector3.ONE * float(crash_ice[1])
+		ci.rotation_degrees = Vector3(14.0, float(crash_ice[2]), -18.0)
+		_pbr.bind_glb(ci, "frost", true)
+		detail_root.add_child(ci)
+		detail_meshes += 1
+	# 撞击犁出的修长低矮雪垄（紧贴 115m 焦黑沟两侧）
 	for sx: float in [-1.0, 1.0]:
-		for k: int in 3:
-			var mz: float = 29.5 + float(k) * 9.5
-			var mx: float = sx * (8.6 + float(k) * 0.55)
-			var ms: float = 1.15 - float(k) * 0.18
-			_snow_pillow("CrashBerm_%d_%d" % [int(sx + 2.0), k], Vector3(mx, 0.18, mz), Vector3(2.3 * ms, 0.62 * ms, 6.2 * ms))
-	# 船尾受损双主引擎冒出的阵阵蒸汽与黑灰残烟
-	HubAtmosphereKit.build_steam_vent(detail_root, Vector3(-4.4, 4.25, 29.0), Color(0.28, 0.25, 0.24, 0.56), 2.35)
-	HubAtmosphereKit.build_steam_vent(detail_root, Vector3(4.4, 4.25, 29.0), Color(0.68, 0.84, 0.94, 0.44), 1.85)
-	# 左折翼处冒出的微弱白烟
-	HubAtmosphereKit.build_steam_vent(detail_root, Vector3(-18.5, 1.8, 17.5), Color(0.76, 0.88, 0.96, 0.36), 1.25)
+		for k: int in 5:
+			var mz: float = 48.0 + float(k) * 18.0
+			var mx: float = sx * (15.0 + float(k) * 0.75)
+			var ms: float = 1.35 - float(k) * 0.14
+			_snow_pillow("CrashBerm_%d_%d" % [int(sx + 2.0), k], Vector3(mx, 0.18, mz), Vector3(3.4 * ms, 0.75 * ms, 11.0 * ms))
 
-	# 6. 坠毁飞船内外气氛照明（舱内暖白工作灯 + 气闸冰青光 + 驾驶舱与引擎余烬光）
-	_add_omni("ShipBayMainLight", Vector3(0.0, 5.9, 11.2), Color("#e6f4ff"), 2.4, 18.0)
-	_add_omni("ShipReturnHatchGlow", Vector3(5.3, 2.7, 14.8), Color("#38e8ff"), 2.1, 10.5)
-	_add_omni("ShipRampFloodLight", Vector3(0.0, 5.4, 2.2), PALETTE.warm_lamp, 2.2, 20.0)
-	_add_omni("ShipEngineEmberLeft", Vector3(-4.4, 4.2, 29.5), Color("#ff6824"), 3.2, 22.0)
-	_add_omni("ShipCockpitGlow", Vector3(0.0, 9.8, 0.2), Color("#46d8ff"), 2.0, 16.0)
+	# 6. 四联巨型母舰引擎柔化电影级浓烟 + 断翼/舰桥裂口火星火光（全图 400m 外清晰震撼！）
+	_spawn_crash_smoke_column(Vector3(-6.2, 15.2, 68.0), Color(0.14, 0.13, 0.14, 0.68), 5.2)
+	_spawn_crash_smoke_column(Vector3(4.2, 19.6, 67.5), Color(0.24, 0.26, 0.30, 0.54), 4.2)
+	_spawn_crash_smoke_column(Vector3(-3.5, 17.6, 30.0), Color(0.18, 0.16, 0.16, 0.56), 3.6)
+	_spawn_crash_smoke_column(Vector3(-21.5, 3.0, 35.0), Color(0.16, 0.15, 0.16, 0.60), 3.4)
+	_spawn_crash_smoke_column(Vector3(19.5, 2.8, 86.0), Color(0.16, 0.15, 0.16, 0.58), 3.0)
+	# 舱内左前角受损管道微弱蒸汽
+	HubAtmosphereKit.build_steam_vent(detail_root, Vector3(-5.8, 1.2, 7.2), Color(0.84, 0.92, 0.98, 0.34), 0.9)
+
+	# 7. 坠毁母舰内外戏剧光照
+	_add_omni("ShipBayMainLight", Vector3(0.0, 5.9, 11.2), Color("#dceeff"), 2.1, 18.0)
+	_add_omni("ShipBayEmergencyAmber", Vector3(-4.2, 4.8, 9.5), Color("#ff8830"), 1.6, 12.0)
+	_add_omni("ShipReturnHatchGlow", Vector3(5.3, 2.7, 14.8), Color("#38e8ff"), 2.2, 10.5)
+	_add_omni("ShipRampFloodLight", Vector3(0.0, 5.4, 2.2), PALETTE.warm_lamp, 1.9, 18.0)
+	_add_omni("ShipEngineFireLeft", Vector3(-6.2, 15.2, 69.5), Color("#ff5a18"), 6.2, 42.0)
+	_add_omni("ShipEngineFireRight", Vector3(4.2, 19.6, 69.0), Color("#ff5216"), 5.0, 36.0)
+	_add_omni("ShipWingFireGlow", Vector3(-21.8, 3.2, 35.0), Color("#ff6e20"), 4.2, 26.0)
+	_add_omni("ShipDebrisFireGlow", Vector3(19.5, 3.2, 86.0), Color("#ff641e"), 3.6, 24.0)
+	_add_omni("ShipCockpitGlow", Vector3(2.6, 16.5, 17.0), Color("#46d8ff"), 3.2, 24.0)
+
+func _spawn_crash_smoke_column(at: Vector3, col: Color, scale_mul: float) -> void:
+	# 柔和径向羽化烟雾贴图（告别生硬圆球边缘，呈现电影级滚滚软黑烟！）
+	var grad: Gradient = Gradient.new()
+	grad.colors = PackedColorArray([Color(1.0, 1.0, 1.0, 0.85), Color(1.0, 1.0, 1.0, 0.42), Color(1.0, 1.0, 1.0, 0.0)])
+	grad.offsets = PackedFloat32Array([0.0, 0.48, 1.0])
+	var gtex: GradientTexture2D = GradientTexture2D.new()
+	gtex.fill = GradientTexture2D.FILL_RADIAL
+	gtex.fill_from = Vector2(0.5, 0.5)
+	gtex.fill_to = Vector2(0.5, 0.0)
+	gtex.width = 64
+	gtex.height = 64
+	gtex.gradient = grad
+
+	var p: CPUParticles3D = CPUParticles3D.new()
+	p.position = at
+	p.amount = 38
+	p.lifetime = 5.8
+	p.preprocess = 4.0
+	p.local_coords = false
+	p.emission_shape = CPUParticles3D.EMISSION_SHAPE_SPHERE
+	p.emission_sphere_radius = 0.70 * scale_mul
+	p.direction = Vector3(0.24, 1.0, -0.18)
+	p.spread = 20.0
+	p.gravity = Vector3(0.45, 0.65, -0.25)
+	p.initial_velocity_min = 1.6 * scale_mul * 0.45
+	p.initial_velocity_max = 3.0 * scale_mul * 0.55
+	p.scale_amount_min = 1.35 * scale_mul
+	p.scale_amount_max = 3.40 * scale_mul
+	var qm: QuadMesh = QuadMesh.new()
+	qm.size = Vector2(1.4, 1.4)
+	p.mesh = qm
+	var mat: StandardMaterial3D = StandardMaterial3D.new()
+	mat.albedo_color = col
+	mat.albedo_texture = gtex
+	mat.billboard_mode = BaseMaterial3D.BILLBOARD_PARTICLES
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	mat.depth_draw_mode = BaseMaterial3D.DEPTH_DRAW_DISABLED
+	p.material_override = mat
+	detail_root.add_child(p)
+
+	# 夹杂在浓烟底部的橘红火星飞溅
+	if col.r < 0.25:
+		var sp: CPUParticles3D = CPUParticles3D.new()
+		sp.position = at
+		sp.amount = 18
+		sp.lifetime = 2.4
+		sp.preprocess = 1.5
+		sp.local_coords = false
+		sp.emission_shape = CPUParticles3D.EMISSION_SHAPE_SPHERE
+		sp.emission_sphere_radius = 0.55 * scale_mul
+		sp.direction = Vector3(0.2, 1.0, -0.15)
+		sp.spread = 36.0
+		sp.gravity = Vector3(0.3, -0.8, -0.2)
+		sp.initial_velocity_min = 2.5
+		sp.initial_velocity_max = 5.2
+		var sm: QuadMesh = QuadMesh.new()
+		sm.size = Vector2(0.18, 0.18)
+		sp.mesh = sm
+		var smat: StandardMaterial3D = StandardMaterial3D.new()
+		smat.albedo_color = Color(1.0, 0.56, 0.14, 0.95)
+		smat.albedo_texture = gtex
+		smat.billboard_mode = BaseMaterial3D.BILLBOARD_PARTICLES
+		smat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		smat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		smat.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+		sp.material_override = smat
+		detail_root.add_child(sp)
 
 # ---------------------------------------------------------------- 站房细节
 

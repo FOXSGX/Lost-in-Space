@@ -150,7 +150,7 @@ func station(kind: String, point: Vector3, text: String, with_sign: bool = true,
 		pictogram(point+Vector3(0,1.15,0.4),"res://previews/frost_first_playable/signs/"+kind+".png")
 
 func supply(kind: String, point: Vector3, data: Dictionary = {}) -> void:
-	var entry: Dictionary = {"kind":kind,"position":point,"uid":"supply_%d" % loot.size(),"safe_position":point,"area":"frost_adventure"}
+	var entry: Dictionary = {"kind":kind,"position":point,"uid":"supply_%d" % loot.size(),"safe_position":point,"area":"frost_adventure","placed":true}
 	entry.merge(data,true)
 	loot.append(entry)
 

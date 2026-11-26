@@ -206,7 +206,8 @@ func tick(delta: float) -> void:
 		var boosting: bool = bool(controls.get("sprint", false))
 		var handbrake: bool = bool(controls.get("jump", false))
 		steer_input = -move.x
-		var max_spd: float = BOOST_SPEED if boosting else CRUISE_SPEED
+		var turbo_mul: float = 1.35 if (director.get("puzzles") != null and bool(director.puzzles.upgrades.get("turbo_vehicles", false))) else 1.0
+		var max_spd: float = (BOOST_SPEED if boosting else CRUISE_SPEED) * turbo_mul
 		var target: float = 0.0 if handbrake else (-move.y * max_spd)
 		var accel_rate: float = 18.0 if handbrake else (11.5 if absf(target) > absf(speed) else 14.0)
 		var prev_speed: float = speed

@@ -262,6 +262,30 @@ func build_palette(theme: String = "frost", has_vertex_color: bool = true) -> Di
 	dome_glass.emission_energy_multiplier = 0.36
 	mats["M_GlassWarm"] = dome_glass
 
+	var plant_leaf: StandardMaterial3D = StandardMaterial3D.new()
+	plant_leaf.albedo_color = Color(0.16, 0.48, 0.22)
+	plant_leaf.roughness = 0.64
+	plant_leaf.metallic = 0.0
+	mats["M_PlantLeaf"] = plant_leaf
+
+	var plant_leaf_light: StandardMaterial3D = StandardMaterial3D.new()
+	plant_leaf_light.albedo_color = Color(0.30, 0.64, 0.30)
+	plant_leaf_light.roughness = 0.60
+	plant_leaf_light.metallic = 0.0
+	mats["M_PlantLeafLight"] = plant_leaf_light
+
+	var fabric_warm: StandardMaterial3D = StandardMaterial3D.new()
+	fabric_warm.albedo_color = Color(0.62, 0.44, 0.34)
+	fabric_warm.roughness = 0.82
+	fabric_warm.metallic = 0.0
+	mats["M_FabricWarm"] = fabric_warm
+
+	var fabric_blue: StandardMaterial3D = StandardMaterial3D.new()
+	fabric_blue.albedo_color = Color(0.24, 0.46, 0.58)
+	fabric_blue.roughness = 0.80
+	fabric_blue.metallic = 0.0
+	mats["M_FabricBlue"] = fabric_blue
+
 	# 极寒冰原特色：冷板岩基岩 + 陡切蓝冰晶 + 巨兽古骨
 	mats["M_Bedrock"] = make_rock(
 		Color(0.20, 0.27, 0.34), Color(0.10, 0.14, 0.19),

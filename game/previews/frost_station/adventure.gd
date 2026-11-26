@@ -1,8 +1,10 @@
 extends "res://previews/frost_first_playable/adventure.gd"
 
 const SANDBOX_GAMEPLAY: Script = preload("res://previews/frost_station/frost_sandbox_gameplay.gd")
+const PUZZLES_SCRIPT: Script = preload("res://previews/frost_station/frost_puzzles.gd")
 const COMPASS_HUD_SCRIPT: Script = preload("res://scripts/mission_compass_hud.gd")
 var sandbox: Node3D
+var puzzles: Node3D
 var compass_hud: MissionCompassHUD
 var grabbed: Dictionary = {}
 var beam: MeshInstance3D
@@ -55,10 +57,10 @@ func _ready() -> void:
 		_place_hud(hud_title, Control.PRESET_CENTER_TOP, Vector2(-260, 14), Vector2(520, 34))
 		hud_title.add_theme_color_override("font_color", UIStyleKit.VISOR_CYAN)
 	if hud_prompt != null:
-		_place_hud(hud_prompt, Control.PRESET_CENTER_BOTTOM, Vector2(-260, -152), Vector2(520, 40))
+		_place_hud(hud_prompt, Control.PRESET_CENTER_BOTTOM, Vector2(-260, -176), Vector2(520, 40))
 		hud_prompt.visible = false
 	if hud_status != null:
-		_place_hud(hud_status, Control.PRESET_CENTER_BOTTOM, Vector2(-300, -152), Vector2(600, 40))
+		_place_hud(hud_status, Control.PRESET_CENTER_BOTTOM, Vector2(-300, -176), Vector2(600, 40))
 		hud_status.visible = false
 	beam = MeshInstance3D.new()
 	var mesh: CylinderMesh = CylinderMesh.new()
@@ -75,6 +77,9 @@ func _ready() -> void:
 	sandbox = SANDBOX_GAMEPLAY.new() as Node3D
 	add_child(sandbox)
 	sandbox.setup(self, world)
+	puzzles = PUZZLES_SCRIPT.new() as Node3D
+	add_child(puzzles)
+	puzzles.setup(self, world)
 	compass_hud = COMPASS_HUD_SCRIPT.new() as MissionCompassHUD
 	if hud_title != null and hud_title.get_parent() != null:
 		hud_title.get_parent().add_child(compass_hud)
@@ -94,6 +99,8 @@ func begin_embedded(host: bool, ids: Array, saved: Dictionary, ship_items: Dicti
 			var backup: FileAccess = FileAccess.open("user://frost-v3-before-station-"+str(Time.get_unix_time_from_system())+".dat",FileAccess.WRITE)
 			if backup != null:backup.store_var(saved)
 	world.cart.riders.clear()
+	if world.snowmobile != null:
+		world.snowmobile.riders.clear()
 
 func _input(event: InputEvent) -> void:
 	super._input(event)
@@ -104,8 +111,12 @@ func _physics_process(delta: float) -> void:
 	super._physics_process(delta)
 	if not game_started:return
 	world.cart.tick(delta)
+	if world.snowmobile != null:
+		world.snowmobile.tick(delta)
 	if sandbox != null:
 		sandbox.tick(delta)
+	if puzzles != null:
+		puzzles.tick(delta)
 	world.apply_progress(progress)
 	# 动态极地吹雪节奏：周期性微调雾效浓度，让车灯、站区路灯与雷达航标真正有用
 	if world.frost_art != null and world.frost_art.environment != null:
@@ -130,8 +141,16 @@ func handle_action(id: int, action: String) -> void:
 		push_target(id)
 		return
 	if action == "interact":
+		if world.snowmobile != null and world.snowmobile.riders.has(id):
+			if not world.snowmobile.exit_rider(id):tell(id,"旁边没有安全落脚处 · 停稳后换个位置下车")
+			return
 		if world.cart.riders.has(id):
 			if not world.cart.exit_rider(id):tell(id,"旁边没有安全落脚处 · 停稳后换个位置下车")
+			return
+		if puzzles != null and puzzles.try_interact(id):
+			return
+		if world.snowmobile != null and world.snowmobile.board(id):
+			tell(id,"已骑上极地雪地摩托 · WASD 驰骋，Shift 氮气冲刺，E 下车")
 			return
 		var rear: Vector3 = world.cart.to_global(Vector3(0,1,2.8))
 		if world.cart.reachable(players[id],rear,2.8):
@@ -192,18 +211,24 @@ func aim_ray(id: int, distance: float = 9.0) -> Dictionary:
 
 func apply_heat(id: int, delta: float) -> void:
 	if _items.selected(id).get("kind","")!="suction":
-		if sandbox != null and players.has(id):
-			var hit_h: Dictionary = aim_ray(id, 11.0)
+		var boost_delta: float = delta * (2.0 if (puzzles != null and bool(puzzles.upgrades.get("heater_overclock", false))) else 1.0)
+		if players.has(id):
+			var hit_h: Dictionary = aim_ray(id, 12.0)
 			if not hit_h.is_empty():
-				sandbox.heat_hit_at(hit_h.position, delta)
-		super.apply_heat(id,delta)
+				if sandbox != null:
+					sandbox.heat_hit_at(hit_h.position, boost_delta)
+				if puzzles != null:
+					puzzles.heat_hit_at(hit_h.position, boost_delta)
+		super.apply_heat(id, boost_delta)
 		return
 	if _items.ensure_bag(id).equipment_active:return
 	if push_latched.get(id,false):return
+	var amp: bool = puzzles != null and bool(puzzles.upgrades.get("suction_amp", false))
+	var reach: float = 13.5 if amp else 9.0
 	var actor: SpacePlayer3D = players[id]
 	var target: Node3D = grabbed.get(id) as Node3D if is_instance_valid(grabbed.get(id)) else null
 	if target == null:
-		var hit: Dictionary = aim_ray(id)
+		var hit: Dictionary = aim_ray(id, reach)
 		target = hit.get("collider") as Node3D
 		if not target is RigidBody3D and not target is SpacePlayer3D:return
 		if target == world.cart or (target is SpacePlayer3D and target.downed):return
@@ -212,14 +237,14 @@ func apply_heat(id: int, delta: float) -> void:
 		grabbed[id] = target
 	var origin: Vector3 = actor.position+Vector3.UP*1.5
 	var aim: Vector3 = Basis(Vector3.UP,actor.rotation.y)*Vector3(0,-sin(actor._network_view_pitch),-cos(actor._network_view_pitch))
-	var desired: Vector3 = origin+aim*3.2
+	var desired: Vector3 = origin+aim*(3.6 if amp else 3.2)
 	var sight: PhysicsRayQueryParameters3D = PhysicsRayQueryParameters3D.create(origin,target.global_position,2)
-	if target.position.distance_to(origin)>11 or not get_world_3d().direct_space_state.intersect_ray(sight).is_empty():
+	if target.position.distance_to(origin)>(15.5 if amp else 11.0) or not get_world_3d().direct_space_state.intersect_ray(sight).is_empty():
 		grabbed.erase(id)
 		return
 	if target is RigidBody3D:
 		target.sleeping = false
-		target.linear_velocity = (desired-target.position).limit_length(10)*4
+		target.linear_velocity = (desired-target.position).limit_length(13.0 if amp else 10.0)*(4.8 if amp else 4.0)
 	elif target is SpacePlayer3D:
 		var pull: Vector3 = (desired-target.position).limit_length(4)*2
 		target.launch_velocity = Vector3(pull.x,0,pull.z)
@@ -231,14 +256,16 @@ func push_target(id: int) -> void:
 	if elapsed-float(push_clock.get(id,-1))<0.25:return
 	push_clock[id] = elapsed
 	push_latched[id] = true
+	var amp: bool = puzzles != null and bool(puzzles.upgrades.get("suction_amp", false))
 	var target: Node3D = grabbed.get(id) as Node3D if is_instance_valid(grabbed.get(id)) else null
-	if target == null:target = aim_ray(id).get("collider") as Node3D
+	if target == null:target = aim_ray(id, 13.5 if amp else 9.0).get("collider") as Node3D
 	grabbed.erase(id)
 	if target == null:return
 	var actor: SpacePlayer3D = players[id]
 	var aim: Vector3 = Basis(Vector3.UP,actor.rotation.y)*Vector3(0,-sin(actor._network_view_pitch),-cos(actor._network_view_pitch))
 	if target is RigidBody3D:
-		target.apply_central_impulse(aim*18)
+		target.sleeping = false
+		target.apply_central_impulse(aim*(25.0 if amp else 18.0))
 	elif target is SpacePlayer3D and target != actor and not target.downed:
 		target.launch_velocity = aim*7
 		target.launch_time = 0.7
@@ -248,11 +275,15 @@ func push_target(id: int) -> void:
 
 func _left(id: int) -> void:
 	world.cart.exit_rider(id,true)
+	if world.snowmobile != null:
+		world.snowmobile.exit_rider(id, true)
 	grabbed.erase(id)
 	super._left(id)
 
 func respawn_team() -> void:
 	for id: int in world.cart.riders.duplicate():world.cart.exit_rider(id,true)
+	if world.snowmobile != null:
+		for id: int in world.snowmobile.riders.duplicate():world.snowmobile.exit_rider(id, true)
 	grabbed.clear()
 	super.respawn_team()
 
@@ -260,8 +291,12 @@ func snapshot() -> Dictionary:
 	var data: Dictionary = super.snapshot()
 	data.surface_schema = 4
 	data.cart = world.cart.state()
+	if world.snowmobile != null:
+		data["snowmobile"] = world.snowmobile.state()
 	if sandbox != null and sandbox.has_method("sandbox_snapshot"):
 		data["sandbox"] = sandbox.sandbox_snapshot()
+	if puzzles != null and puzzles.has_method("snapshot"):
+		data["puzzles"] = puzzles.snapshot()
 	var rays: Dictionary = {}
 	for id: int in grabbed:
 		if is_instance_valid(grabbed[id]):rays[id] = grabbed[id].position
@@ -272,8 +307,12 @@ func apply_frost_state(data: Dictionary) -> void:
 	if int(data.get("surface_schema",0))!=4:return
 	super.apply_frost_state(data)
 	world.cart.apply_state(data.get("cart",{}))
+	if world.snowmobile != null and data.has("snowmobile"):
+		world.snowmobile.apply_state(data["snowmobile"] as Dictionary)
 	if sandbox != null and sandbox.has_method("apply_sandbox_snapshot") and data.has("sandbox"):
 		sandbox.apply_sandbox_snapshot(data["sandbox"] as Dictionary)
+	if puzzles != null and puzzles.has_method("apply_snapshot") and data.has("puzzles"):
+		puzzles.apply_snapshot(data["puzzles"] as Dictionary)
 	world.apply_progress(progress)
 	set_meta("grab_rays",data.get("grab_rays",{}))
 
@@ -283,23 +322,35 @@ func _process(delta: float) -> void:
 	var id: int = multiplayer.get_unique_id()
 	var actor: SpacePlayer3D = players.get(id) as SpacePlayer3D
 	if actor == null:return
+	if journal_panel != null and journal_panel.visible and journal_text != null and puzzles != null:
+		journal_text.text = puzzles.journal_summary()
 	_update_mission_compass_and_beacon(actor)
 	hud_title.text = world.location(actor.position)+" · "+("航行已恢复" if progress.flight else ("回飞船安装能源" if progress.energy else ("返回主楼二层开柜" if progress.key else "主线：前往主楼二层查明能源保险柜")))
-	if world.cart.riders.has(id):
+	if world.snowmobile != null and world.snowmobile.riders.has(id):
+		hud_status.text = "极地雪地摩托 · %.0f km/h · Shift 氮气加速 · E 下车" % [absf(world.snowmobile.speed) * 3.6]
+		hud_status.visible = true
+	elif world.cart.riders.has(id):
 		hud_status.text = "极地运输车 · %.0f km/h · 货物 %d/%d · Shift 加速 · E 下车" % [absf(world.cart.speed) * 3.6, world.cart.cargo.size(), world.cart.MAX_CARGO]
 		hud_status.visible = true
 	else:
 		# 不开车时彻底隐藏底部常驻按键说明条，避免文字太多遮挡画面
 		hud_status.text = ""
 		hud_status.visible = false
-	if world.cart.reachable(actor,world.cart.to_global(Vector3(0,1,2.8)),2.8):
+	if world.snowmobile != null and not world.snowmobile.riders.has(id) and world.snowmobile.reachable(actor, world.snowmobile.position + Vector3.UP * 0.85, 3.8):
+		hud_prompt.text = notice if notice_time > 0 else "按 E 骑上极地雪地摩托"
+	elif world.cart.reachable(actor,world.cart.to_global(Vector3(0,1,2.8)),2.8):
 		hud_prompt.text = notice if notice_time>0 else "E 装入手持物件 / 空手取货"
 	elif world.cart.reachable(actor,world.cart.position+Vector3.UP,4.8):
 		hud_prompt.text = notice if notice_time>0 else "E 上运输车"
 	elif notice_time <= 0.0:
-		var near_st: Dictionary = nearby_station(id)
-		if String(near_st.get("kind", "")) == "board":
-			hud_prompt.text = "按 E 通过加压舱门 · 返回【归航号】飞船主舱"
+		var sel_kind: String = String(_items.selected(id).get("kind", "")) if _items != null else ""
+		var pz_prompt: String = puzzles.nearby_prompt(actor, sel_kind) if puzzles != null else ""
+		if not pz_prompt.is_empty():
+			hud_prompt.text = pz_prompt
+		else:
+			var near_st: Dictionary = nearby_station(id)
+			if String(near_st.get("kind", "")) == "board":
+				hud_prompt.text = "按 E 通过加压舱门 · 返回【归航号】飞船主舱"
 	if hud_prompt != null:
 		hud_prompt.visible = not hud_prompt.text.strip_edges().is_empty()
 	var end: Vector3
@@ -374,20 +425,31 @@ func _update_mission_compass_and_beacon(actor: SpacePlayer3D) -> void:
 	var rdr_ok: bool = bool(progress.get("radar_online", false))
 	var prb_ok: bool = bool(progress.get("west_probe_read", false))
 	var col_cnt: int = int(progress.get("collection_count", 0))
+	var pz_done: int = puzzles.solved_count() if puzzles != null else 0
+	var up_tags: String = puzzles.active_upgrade_tags() if puzzles != null else "无"
 	var sides: PackedStringArray = PackedStringArray([
-		"外围大盆地探索（可选高乐趣）：",
-		"%s 动力站通电亮灯供暖" % ("✓" if pwr_ok else "☐"),
-		"%s 东线高地重启气象雷达" % ("✓" if rdr_ok else "☐"),
-		"%s 西线冰缝探测舱黑匣子" % ("✓" if prb_ok else "☐"),
-		"★ 飞船收藏柜纪念杯 (%d/4)" % col_cnt,
+		"★ 科考城谜案解谜 (%d/6) · 拍小霜问线索" % pz_done,
+		"⚙ 永久强化：%s" % up_tags,
+		"%s 动力站供电  %s 雷达  %s 黑匣子  ★ 纪念杯 %d/4" % [
+			"✓" if pwr_ok else "☐",
+			"✓" if rdr_ok else "☐",
+			"✓" if prb_ok else "☐",
+			col_cnt,
+		],
 	])
 	var fwd: Vector3 = -actor._camera.global_basis.z if actor._camera != null else -actor.global_basis.z
 	var targets: Array = [
 		{"label": target_lbl, "pos": target_pos, "color": target_col, "main": true},
-		{"label": "坠毁飞船", "pos": Vector3(0, 2.5, 12), "color": Color("#ffba5c"), "main": false},
+	]
+	if puzzles != null:
+		var pz_beacon: Dictionary = puzzles.next_unsolved_beacon()
+		if not pz_beacon.is_empty():
+			targets.append(pz_beacon)
+	targets.append_array([
+		{"label": "雪地摩托", "pos": world.snowmobile.global_position if world.snowmobile != null else Vector3(-7.6, 1, -4.8), "color": Color("#4ef0ff"), "main": false},
 		{"label": "探险车", "pos": world.cart.global_position if world.cart != null else Vector3(45, 1, -20), "color": Color("#f4c068"), "main": false},
 		{"label": "动力站", "pos": Vector3(58, 1, -116), "color": Color("#ffaa4c"), "main": false},
 		{"label": "雷达高地", "pos": Vector3(325, 16, -75), "color": Color("#7ce8b4"), "main": false},
 		{"label": "探测舱", "pos": Vector3(-340, 2, -90), "color": Color("#78d4f0"), "main": false},
-	]
+	])
 	compass_hud.update_guidance(actor.global_position, fwd, stage_t, m_title, m_detail, sides, targets)

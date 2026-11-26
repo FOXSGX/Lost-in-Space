@@ -85,8 +85,8 @@ func _run() -> void:
 	await _snap(cam, Vector3(10.5, 2.2, -42.5), Vector3(16.0, 1.05, -48.0), 46.0, abs_out + "frost_C_rover_closeup.png")
 	await _snap(cam, Vector3(14.0, 7.5, -148.0), Vector3(4.0, 6.5, -195.0), 54.0, abs_out + "frost_D_canyon_ice.png")
 
-	# 新增视角 E：16 座超大型极地科考城鸟瞰全景（3 座 30m 巨型玻璃穹顶 + 13 栋大型建筑 + 26m 通讯塔 + 巨兽峡谷）
-	await _snap(cam, Vector3(-195.0, 68.0, 118.0), Vector3(8.0, 4.0, -76.0), 60.0, abs_out + "frost_E_expanded_town.png")
+	# 新增视角 E：16 座超大型极地科考城 + 78m 巨型坠毁星际母舰鸟瞰全景
+	await _snap(cam, Vector3(-208.0, 76.0, 148.0), Vector3(8.0, 6.0, -56.0), 60.0, abs_out + "frost_E_expanded_town.png")
 	# 新增视角 F：精细物品与 5 件新创意玩具雪地近距离陈列特写（氧气瓶/医疗箱/热枪/弹跳垫/信号弹/音响/碰碰球/保温壶）
 	var showcase: Node3D = Node3D.new()
 	showcase.name = "ItemShowcaseTemp"
@@ -101,6 +101,7 @@ func _run() -> void:
 		showcase.add_child(item_vis)
 	await _wait_frames(4)
 	await _snap(cam, Vector3(-1.9, 1.85, -28.0), Vector3(-1.9, 0.50, -32.8), 52.0, abs_out + "frost_F_items_and_toys_closeup.png")
+	showcase.queue_free()
 
 	# 新增视角 G：呆萌科考小机器人“小霜” + 4 格物品栏 + 体温/氧气微条 + 头盔微结霜验收
 	if frost.players.has(1):
@@ -114,10 +115,42 @@ func _run() -> void:
 	await _wait_frames(8)
 	await _snap(cam, Vector3(4.5, 16.0, -591.5), Vector3(-2.4, 15.2, -602.0), 54.0, abs_out + "frost_H_heart_altar_climax.png")
 
-	# 新增视角 I：坠毁的“归航号”大型写实科幻飞船外景 + 尾焰浓烟 + 雪地撞击滑行沟
-	await _snap(cam, Vector3(-32.0, 14.0, 34.0), Vector3(0.0, 4.2, 12.0), 56.0, abs_out + "frost_I_crashed_ship_exterior.png")
+	# 新增视角 I：78m 巨型坠毁“归航号”母舰 + 115m 撞击拖痕 + 22m 折断左翼 + 四联引擎烟火全景
+	await _snap(cam, Vector3(-66.0, 26.0, 108.0), Vector3(2.0, 10.0, 34.0), 58.0, abs_out + "frost_I_crashed_ship_exterior.png")
 	# 新增视角 J：坠毁飞船登舱机库内部 + 发光“返回飞船主舱”加压气闸舱门与 LED 屏
 	await _snap(cam, Vector3(-1.4, 2.3, 11.4), Vector3(6.4, 2.6, 14.8), 60.0, abs_out + "frost_J_crashed_ship_interior_hatch.png")
+	# 新增视角 K：巨型坠毁母舰舰首猛扎雪坑前视特写（高耸指挥舰桥 + 34m 高仰右翼 + 断翼 + 敞开出舱口）
+	await _snap(cam, Vector3(-22.0, 10.5, -24.0), Vector3(3.0, 10.0, 24.0), 60.0, abs_out + "frost_K_crashed_ship_nose_impact.png")
+
+	# 给演示角色塞入 4 件不同物品（热风机/医疗包/弹跳垫/磁力音响）+ 装备氧气瓶，实机验收全套新全息物品图标！
+	frost._items.add_item(1, "oxygen")
+	frost._items.mount_oxygen(1)
+	frost._items.add_item(1, "heater", -1, {"charge": 180.0}, true)
+	frost._items.add_item(1, "medical", -1, {}, false)
+	frost._items.add_item(1, "bounce_pad", -1, {}, false)
+	frost._items.add_item(1, "boombox", -1, {}, false)
+	frost._items.publish()
+	await _wait_frames(4)
+
+	# 新增视角 L：一出门向阳雪地上的极地雪地摩托 + 底部全新 4 格科幻全息物品图标验收！
+	frost.notice = ""
+	frost.notice_time = 0.0
+	await _wait_frames(2)
+	await _snap(cam, Vector3(-2.6, 2.2, -9.2), Vector3(-7.4, 0.9, -14.6), 56.0, abs_out + "frost_L_snowmobile_at_exit.png")
+	# 新增视角 M：生活医疗楼差异化温馨室内（食堂餐桌 + 翡翠绿医疗维生舱 + 暖光）
+	await _snap(cam, Vector3(47.0, 2.8, -46.5), Vector3(50.5, 1.4, -60.0), 64.0, abs_out + "frost_M_interior_living_and_med.png")
+	# 新增视角 N：巨型生态穹顶温室室内（6 排郁郁葱葱水培绿植 + 茶歇餐桌 + 整洁摆放的热可可）
+	await _snap(cam, Vector3(-108.0, 3.6, -99.0), Vector3(-108.0, 1.6, -114.0), 66.0, abs_out + "frost_N_interior_greenhouse.png")
+	# 新增视角 O：冰川钻探中心室内（中央 8m 发光蓝冰芯钻塔 + 两侧专业双屏实验台）
+	await _snap(cam, Vector3(-72.0, 3.8, -153.5), Vector3(-72.0, 2.5, -168.0), 66.0, abs_out + "frost_O_interior_drill_station.png")
+	# 新增视角 P：飞船出口开放式三层出舱物资货架近景（验证物品分上中下三层自然摆放于货架，绝非死板展示桌）
+	await _snap(cam, Vector3(-8.4, 2.35, 5.1), Vector3(-10.5, 1.75, 0.8), 54.0, abs_out + "frost_P_staging_tables_closeup.png")
+	# 新增视角 Q：冰川钻探中心谜题全景（电池插槽配电箱 + 双重物压板 + 地面发光因果导管 + 三层物资货架）
+	await _snap(cam, Vector3(-72.0, 4.4, -153.5), Vector3(-72.0, 1.4, -166.0), 66.0, abs_out + "frost_Q_puzzle_drill_station.png")
+	# 新增视角 R：机甲维修厂立体解谜大厅（5.4m 弹跳天桥 + 地面青蓝起跳圈 + 三连动能靶心 + 三层开放货架）
+	await _snap(cam, Vector3(112.0, 4.2, -24.0), Vector3(112.0, 4.4, -49.0), 68.0, abs_out + "frost_R_puzzle_mech_hangar.png")
+	# 新增视角 S：天文观测穹顶谜题大厅（声波结晶密柜 + 5m 高空热感火盆锁 + 巨型望远镜 + 双层壁柜）
+	await _snap(cam, Vector3(-164.0, 3.6, -67.5), Vector3(-164.0, 2.8, -86.0), 66.0, abs_out + "frost_S_puzzle_observatory.png")
 
 	print("VISUAL_CAPTURE_12_OK dir=" + abs_out)
 	quit(0)

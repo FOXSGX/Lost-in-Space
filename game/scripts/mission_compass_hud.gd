@@ -13,7 +13,7 @@ const MINIMAP_SIZE: float = 188.0
 
 # 霜烬星 15 栋大型建筑 + 飞船（合计 16 座建筑群）真实平面轮廓数据（左下角实时雷达小地图）
 const FROST_MAP_BUILDINGS: Array = [
-	["ship", Vector2(0.0, 12.0), Vector2(14.0, 14.0), Color("#ffba5c"), false],
+	["ship", Vector2(0.0, 32.0), Vector2(36.0, 68.0), Color("#ffba5c"), false],
 	["main", Vector2(0.0, -110.0), Vector2(60.0, 32.0), Color("#4ce8ff"), false],
 	["museum", Vector2(-49.0, -70.0), Vector2(32.0, 38.0), Color("#7ac4d6"), false],
 	["living", Vector2(49.0, -63.0), Vector2(32.0, 38.0), Color("#58d6b8"), false],

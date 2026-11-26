@@ -2,6 +2,10 @@ extends "res://previews/frost_first_playable/world.gd"
 
 const FROST_ART: Script = preload("res://previews/frost_station/frost_art.gd")
 const BASIN_TERRAIN: Script = preload("res://previews/frost_station/basin_terrain.gd")
+const OPEN_SHELF_GLB: PackedScene = preload("res://assets/models/rebuild/hero_open_supply_shelf.glb")
+const COUNTER_SHELF_GLB: PackedScene = preload("res://assets/models/rebuild/hero_wall_counter_shelf.glb")
+
+var _shelf_pbr: ArtPbrLib
 
 var rooms: Dictionary = {}
 var extra_rooms: Dictionary = {}
@@ -10,6 +14,7 @@ var power_lights: Array[OmniLight3D] = []
 var radar_lights: Array[OmniLight3D] = []
 var power_parts: Array[MeshInstance3D] = []
 var cart: CharacterBody3D
+var snowmobile: CharacterBody3D
 var art: Node3D
 var frost_art: Node3D
 var basin_terrain: Node3D
@@ -117,6 +122,106 @@ func panel_sign(point: Vector3, key: String, size_value: Vector2 = Vector2(4,1.8
 func furniture(key: String, point: Vector3, size_value: Vector3, yaw: float = 0) -> void:
 	art.asset(key,point,size_value,yaw,true)
 
+## 精确计算每种可拾取物品的半高，确保稳稳贴合桌面/柜台/栈板表面（零悬空、零穿模、零滚落）
+func _item_half_height(kind: String) -> float:
+	return {
+		"oxygen": 0.34,
+		"medical": 0.21,
+		"heater": 0.19,
+		"cell": 0.19,
+		"fuel": 0.20,
+		"suction": 0.24,
+		"chips": 0.21,
+		"keepsake": 0.15,
+		"crate": 0.28,
+		"bounce_pad": 0.16,
+		"flare": 0.29,
+		"boombox": 0.21,
+		"bumper_orb": 0.32,
+		"thermos": 0.24,
+	}.get(kind, 0.21)
+
+## 将物品以自然朝向稳稳摆放在指定支撑面高度上（货架层板/壁柜台面/床头柜/货箱顶面）
+func on_surface(kind: String, x: float, surface_y: float, z: float, yaw_deg: float = 0.0, data: Dictionary = {}) -> void:
+	var extra: Dictionary = data.duplicate(true)
+	extra["yaw"] = deg_to_rad(yaw_deg)
+	extra["placed"] = true
+	supply(kind, Vector3(x, surface_y + _item_half_height(kind) + 0.004, z), extra)
+
+func _add_shelf_collider(parent: Node3D, local_pos: Vector3, sz: Vector3, layer: int) -> void:
+	var sb: StaticBody3D = StaticBody3D.new()
+	sb.position = local_pos
+	sb.collision_layer = layer
+	sb.collision_mask = 0
+	var cs: CollisionShape3D = CollisionShape3D.new()
+	var bx: BoxShape3D = BoxShape3D.new()
+	bx.size = sz
+	cs.shape = bx
+	sb.add_child(cs)
+	parent.add_child(sb)
+
+## 开放式三层工业极地物资货架（下层 0.56m / 中层 1.24m / 上层 1.92m），自然分层陈列物品！
+## items 元素格式：[kind, tier(0/1/2), local_x, local_z, local_yaw_deg, extra_dict]
+func open_shelf(base_pos: Vector3, yaw_deg: float, items: Array) -> Node3D:
+	if _shelf_pbr == null:
+		_shelf_pbr = ArtPbrLib.new()
+	var holder: Node3D = Node3D.new()
+	holder.name = "OpenSupplyShelf"
+	holder.position = base_pos
+	holder.rotation_degrees.y = yaw_deg
+	add_child(holder)
+	var vis: Node3D = OPEN_SHELF_GLB.instantiate() as Node3D
+	_shelf_pbr.bind_glb(vis, "frost", true)
+	holder.add_child(vis)
+	# 背板与两侧立柱用 layer=2 阻挡穿墙；三层实心托板用 layer=1 托住刚体物品且绝不遮挡正面伸手拿取！
+	_add_shelf_collider(holder, Vector3(0.0, 1.16, -0.40), Vector3(3.32, 2.32, 0.14), 2)
+	for sx: float in [-1.64, 1.64]:
+		_add_shelf_collider(holder, Vector3(sx, 1.16, 0.0), Vector3(0.14, 2.32, 0.86), 2)
+	var tier_heights: Array[float] = [0.56, 1.24, 1.92]
+	for ty: float in tier_heights:
+		_add_shelf_collider(holder, Vector3(0.0, ty - 0.03, 0.0), Vector3(3.26, 0.06, 0.84), 1)
+	var basis_y: Basis = Basis(Vector3.UP, deg_to_rad(yaw_deg))
+	for item_spec: Array in items:
+		var kind: String = String(item_spec[0])
+		var tier: int = clampi(int(item_spec[1]), 0, 2)
+		var lx: float = float(item_spec[2])
+		var lz: float = float(item_spec[3])
+		var lyaw: float = float(item_spec[4])
+		var extra: Dictionary = (item_spec[5] as Dictionary) if item_spec.size() > 5 else {}
+		var world_p: Vector3 = base_pos + basis_y * Vector3(lx, 0.0, lz)
+		on_surface(kind, world_p.x, base_pos.y + tier_heights[tier], world_p.z, yaw_deg + lyaw, extra)
+	return holder
+
+## 生活/医疗/实验壁挂双层柜台架（下柜台面 0.96m / 上层壁架 1.64m），充满生活烟火气！
+## items 元素格式：[kind, tier(0=台面/1=上架), local_x, local_z, local_yaw_deg, extra_dict]
+func counter_shelf(base_pos: Vector3, yaw_deg: float, items: Array) -> Node3D:
+	if _shelf_pbr == null:
+		_shelf_pbr = ArtPbrLib.new()
+	var holder: Node3D = Node3D.new()
+	holder.name = "WallCounterShelf"
+	holder.position = base_pos
+	holder.rotation_degrees.y = yaw_deg
+	add_child(holder)
+	var vis: Node3D = COUNTER_SHELF_GLB.instantiate() as Node3D
+	_shelf_pbr.bind_glb(vis, "frost", true)
+	holder.add_child(vis)
+	# 下柜体与背板用 layer=2，上层开放置物板用 layer=1 保证拿取顺手
+	_add_shelf_collider(holder, Vector3(0.0, 0.48, 0.0), Vector3(3.16, 0.96, 0.86), 2)
+	_add_shelf_collider(holder, Vector3(0.0, 1.58, -0.40), Vector3(3.16, 1.24, 0.12), 2)
+	_add_shelf_collider(holder, Vector3(0.0, 1.615, -0.10), Vector3(3.10, 0.05, 0.56), 1)
+	var tier_heights: Array[float] = [0.96, 1.64]
+	var basis_y: Basis = Basis(Vector3.UP, deg_to_rad(yaw_deg))
+	for item_spec: Array in items:
+		var kind: String = String(item_spec[0])
+		var tier: int = clampi(int(item_spec[1]), 0, 1)
+		var lx: float = float(item_spec[2])
+		var lz: float = float(item_spec[3])
+		var lyaw: float = float(item_spec[4])
+		var extra: Dictionary = (item_spec[5] as Dictionary) if item_spec.size() > 5 else {}
+		var world_p: Vector3 = base_pos + basis_y * Vector3(lx, 0.0, lz)
+		on_surface(kind, world_p.x, base_pos.y + tier_heights[tier], world_p.z, yaw_deg + lyaw, extra)
+	return holder
+
 func ship() -> void:
 	box(Vector3(0,0.35,7),Vector3(30,0.7,30),Color("607985"))
 	ramp(Vector3(0,0.2,-11),Vector3(0,0.7,-6),24)
@@ -133,10 +238,28 @@ func ship() -> void:
 		cup.visible = false
 		collection_models.append(cup)
 	panel_sign(Vector3(0,3.2,18.7),"mission",Vector2(7,2.7))
-	for x: float in [-6,-3,3,6]:
-		supply("heater",Vector3(x,1.5,-3),{"charge":180.0})
-		supply("oxygen",Vector3(x,1.5,0))
-		supply("cell",Vector3(x,1.5,-6))
+	# 飞船出口两侧开放式三层出舱物资货架（像真实科考前哨装备架一样分上中下三层错落摆放，彻底告别死板展示桌！）
+	open_shelf(Vector3(-10.5, 0.7, 0.8), 22.0, [
+		["oxygen", 0, -0.78, 0.08, 12.0],
+		["cell", 0, 0.36, 0.14, -18.0],
+		["heater", 1, -0.68, 0.06, 20.0, {"charge": 180.0}],
+		["flare", 1, 0.24, 0.10, -10.0],
+		["thermos", 1, 0.92, 0.12, -25.0],
+		["cell", 2, 0.12, 0.04, 15.0],
+	])
+	open_shelf(Vector3(10.5, 0.7, 0.8), -22.0, [
+		["bounce_pad", 0, -0.58, 0.02, 8.0],
+		["oxygen", 0, 0.82, 0.10, -10.0],
+		["heater", 1, -0.72, 0.08, -16.0, {"charge": 180.0}],
+		["boombox", 1, 0.56, 0.08, 14.0],
+		["bumper_orb", 2, -0.10, 0.06, 0.0],
+	])
+	# 一出门正左前方向阳雪地上立刻就能看见并骑走的极地科幻雪地摩托（避开船首残骸与东侧 X=10 测试通道！）
+	snowmobile = load("res://previews/frost_station/snowmobile.gd").new()
+	snowmobile.name = "ArcticSnowmobile"
+	add_child(snowmobile)
+	snowmobile.setup(get_parent(), Vector3(-7.2, 0.85, -14.2), -24.0)
+	landmarks["snowmobile"] = Vector3(-7.2, 0.85, -14.2)
 	# Initial low snowbank can be melted, but never locks the whole open station.
 	for x: float in [-2.5,0,2.5]:frost(Vector3(x,1.3,-10),Vector3(2.5,2.6,1.2))
 
@@ -160,19 +283,25 @@ func main_building() -> void:
 	furniture("container-tall",Vector3(-26,0.2,-118),Vector3(2,2.6,1.5))
 	furniture("table-large",Vector3(15,0.2,-107),Vector3(6,1.1,2.7))
 	furniture("table-display-planet",Vector3(21,0.2,-119),Vector3(3,1.8,3))
-	furniture("table-large",Vector3(23,0.2,-112),Vector3(5,1.1,2.5))
-	furniture("computer-screen",Vector3(23,1.3,-112.7),Vector3(1,0.8,0.6))
 	furniture("container-tall",Vector3(27,0.2,-119),Vector3(2,2.6,1.5))
 	furniture("container-tall",Vector3(-27,0.2,-110),Vector3(2,2.6,1.5))
 	for point: Vector3 in [Vector3(-17,7.8,-105),Vector3(16,7.8,-105),Vector3(0,8.6,-120)]:
 		box(point,Vector3(5,0.12,1),Color("d6e3d8"),false)
 		lamp(point-Vector3.UP*0.3,Color("c1e0dd"),24)
-	furniture("computer-wide",Vector3(-10,0.2,-100),Vector3(4,1.4,1.6))
 	panel_sign(Vector3(10,3,-125.65),"suction",Vector2(7,2.4))
-	supply("suction",Vector3(15,1.5,-106),{})
-	supply("suction",Vector3(18,1.0,-111),{})
-	for x: float in [9,13,18,23]:supply("crate",Vector3(x,1,-102),{})
-	for x: float in [-26,-20]:supply("cell",Vector3(x,1,-109),{})
+	# 东实验台保留 1 把吸推器（兼容原路线），后排与西侧改为真实科研三层架与壁挂柜台！
+	on_surface("suction", 15.0, 1.30, -106.0, 14.0)
+	open_shelf(Vector3(22.4, 0.2, -112.4), 0.0, [
+		["cell", 0, -0.75, 0.10, 16.0],
+		["suction", 1, 0.20, 0.08, -22.0],
+		["flare", 2, -0.35, 0.06, 10.0],
+	])
+	counter_shelf(Vector3(-10.0, 0.2, -100.0), 180.0, [
+		["thermos", 0, -0.78, 0.14, 24.0],
+		["cell", 1, 0.56, -0.04, -14.0],
+	])
+	for x: float in [10.0, 14.0, 18.0]:
+		on_surface("crate", x, 0.20, -102.0, 0.0)
 	# The office has a broad door from the ring, and an actual cabinet upstairs.
 	partition(Vector3(-5,4.2,-119),22,3.5,5)
 	furniture("computer-wide",Vector3(-12,4.2,-123),Vector3(4,1.3,1.6))
@@ -216,7 +345,10 @@ func museum() -> void:
 			museum_bones.append(bone)
 	box(Vector3(-49,2.7,-72),Vector3(0.8,0.8,28),BONE)
 	for x: float in [-60,-38]:box(Vector3(x,4,-75),Vector3(0.5,8,0.5),Color("75919b"))
-	furniture("table-large",Vector3(-59,0.2,-83),Vector3(5,1,2))
+	counter_shelf(Vector3(-59.2, 0.2, -83.4), 0.0, [
+		["thermos", 0, -0.72, 0.12, -18.0],
+		["keepsake", 1, 0.45, -0.05, 22.0],
+	])
 	panel_sign(Vector3(-49,3.2,-88.65),"biology",Vector2(9,3.2))
 	station("record",Vector3(-49,1.5,-86),"骨架介绍：长节骨脊与多对肋骨支撑巨大的躯体。标本仍在拼装；与遗迹骨架的关系尚待研究。",false,false)
 
@@ -229,12 +361,23 @@ func living() -> void:
 			box(Vector3(x,0.7,z),Vector3(3,0.9,5),Color("749098"))
 			box(Vector3(x,1.25,z),Vector3(2.8,0.25,4.7),Color("c4d2c5"))
 			box(Vector3(x,1.5,z-1.6),Vector3(2.5,0.3,1.1),Color("d9c6a7"),false)
-	furniture("table-large",Vector3(42,0.2,-53),Vector3(5,1,3))
-	for point: Vector3 in [Vector3(39,1.7,-77),Vector3(59,1.7,-70),Vector3(42,1.4,-53),Vector3(44,1.4,-53)]:supply("chips",point)
-	supply("keepsake",Vector3(40,1.5,-70))
-	supply("keepsake",Vector3(59,1.5,-78))
-	supply("medical",Vector3(61,1,-59))
-	furniture("container-wide",Vector3(61,0.2,-58),Vector3(4,1.2,1.6))
+	# 餐厨区靠墙双层生活橱柜架（台面放热可可与开袋零食，上层置物架放备用零食与磁力小音响！）
+	counter_shelf(Vector3(41.2, 0.2, -64.1), 0.0, [
+		["thermos", 0, -0.85, 0.14, 18.0],
+		["chips", 0, 0.25, 0.10, -24.0],
+		["chips", 1, -0.45, -0.06, 12.0],
+		["boombox", 1, 0.72, -0.04, -10.0],
+	])
+	# 医疗角靠墙双层医疗药柜架（下台面医疗包，上层药架备用氧气瓶与急救药箱）
+	counter_shelf(Vector3(63.4, 0.2, -57.5), -90.0, [
+		["medical", 0, -0.58, 0.12, 10.0],
+		["oxygen", 1, 0.62, -0.04, -15.0],
+	])
+	# 宿舍区床头矮柜（私人科考纪念杯端端正正摆在床头柜上）
+	furniture("container-wide",Vector3(41.2,0.2,-70.0),Vector3(1.2,0.85,1.2))
+	furniture("container-wide",Vector3(56.8,0.2,-78.0),Vector3(1.2,0.85,1.2))
+	on_surface("keepsake", 41.2, 1.05, -70.0, 20.0)
+	on_surface("keepsake", 56.8, 1.05, -78.0, -25.0)
 	for z: float in [-70,-78]:furniture("container-tall",Vector3(63,0.2,z),Vector3(2,2.3,1.4))
 	panel_sign(Vector3(49,3,-81.65),"living_info",Vector2(7,2))
 
@@ -249,16 +392,26 @@ func power_station() -> void:
 		for z: float in [-122,-120]:box(Vector3(x,4,z),Vector3(2.7,0.3,0.5),Color("d3a45b"),false)
 	station("charge",Vector3(65,1.4,-109),"站区维护台 · 恢复旁路后按住 E 慢充和补氧。",false)
 	stations[-1].district_power = true
-	supply("cell",Vector3(51,1,-127));supply("medical",Vector3(65,1,-127))
+	# 工程师靠墙三层工具物资架（错落收纳电池、热风机与医疗箱）
+	open_shelf(Vector3(58.0, 0.2, -128.4), 0.0, [
+		["cell", 0, -0.78, 0.10, 14.0],
+		["heater", 1, 0.08, 0.08, -16.0, {"charge": 180.0}],
+		["medical", 1, 0.96, 0.06, 20.0],
+		["cell", 2, -0.42, 0.04, -8.0],
+	])
 	panel_sign(Vector3(58,3,-129.65),"power_info",Vector2(7,2.3))
 	landmarks.power_switch = Vector3(50,1.3,-108)
 
 func garage() -> void:
 	shell("garage",Vector3(46,0,-22),44,28,Color("d8b47a"),12)
 	partition(Vector3(46,0,-29),42,3.5,6)
-	furniture("table-large",Vector3(60,0.2,-31),Vector3(6,1,2))
 	furniture("container-tall",Vector3(28,0.2,-31),Vector3(2.5,3,2))
-	supply("cell",Vector3(59,1.4,-31));supply("keepsake",Vector3(63,1.4,-31))
+	open_shelf(Vector3(60.0, 0.2, -31.8), 0.0, [
+		["cell", 0, -0.82, 0.08, 12.0],
+		["bumper_orb", 0, 0.65, 0.08, 0.0],
+		["flare", 1, -0.30, 0.10, -18.0],
+		["keepsake", 2, 0.48, 0.04, 24.0],
+	])
 	panel_sign(Vector3(46,3,-35.65),"cart",Vector2(8,2.5))
 	cart = load("res://previews/frost_station/cart.gd").new()
 	cart.name = "SurveyCart"
@@ -273,13 +426,15 @@ func warehouse() -> void:
 	for x: float in [-58,-47,-38,-28]:
 		for z: float in [-17,-30]:
 			furniture("container-wide",Vector3(x,0.2,z),Vector3(2.8,1.1,1.4))
-			supply("chips" if x<-45 else "cell",Vector3(x,1.5,z))
+			on_surface("chips" if x<-45 else "cell", x, 1.30, z, 5.0 if x < -45 else -5.0)
 	# Two room doorways have ice collision. Front spaces remain accessible.
 	for x: float in [-57,-28]:
 		warehouse_ice.append(ice.size())
 		frost(Vector3(x,1.8,-22),Vector3(4.5,3.6,1))
 		partition(Vector3(x,0,-22),10,3.8,4.5)
-		supply("keepsake",Vector3(x,1.6,-32))
+		# 冷藏室深处放置稳固展示箱台，科考纪念杯端正摆在箱台上（不再悬空掉落）
+		furniture("container-wide",Vector3(x,0.2,-32.5),Vector3(1.8,1.0,1.4))
+		on_surface("keepsake", x, 1.20, -32.5, 12.0)
 		landmarks["frozen_"+str(x)] = Vector3(x,0.4,-19)
 	panel_sign(Vector3(-43,3,-35.65),"warehouse_info",Vector2(8,2.5))
 
@@ -313,15 +468,8 @@ func apply_progress(progress: Dictionary) -> void:
 	for i: int in collection_models.size():collection_models[i].visible = i<int(progress.get("collection_count",0))
 
 func _place_courtyard_toys() -> void:
-	# 在飞船降落坪前方与作业院显眼处摆放 5 件全新创意小玩具，让玩家一出门就能捡来玩！
-	supply("bounce_pad", Vector3(-9.5, 1.3, -2.5))
-	supply("flare", Vector3(-6.5, 1.3, -2.5))
-	supply("thermos", Vector3(6.5, 1.3, -2.5))
-	supply("boombox", Vector3(9.5, 1.3, -2.5))
-	supply("bumper_orb", Vector3(0.0, 1.3, -26.0))
-	supply("bounce_pad", Vector3(12.0, 1.3, -58.0))
-	supply("flare", Vector3(-12.0, 1.3, -58.0))
-	supply("thermos", Vector3(12.0, 1.3, -86.0))
+	# 所有出舱装备已整齐集成到 ship() 门口双出舱工作台，严禁在室外空地雪堆随意散落物品
+	pass
 
 func extra_shell(id: String, center: Vector3, width: float, depth: float, tint: Color, door_width: float = 7.0, height: float = 7.0) -> void:
 	extra_rooms[id] = {"center": center, "width": width, "depth": depth}
@@ -347,107 +495,120 @@ func _build_expanded_town_buildings() -> void:
 		box(Vector3(-76.0, 0.16, float(z_seg)), Vector3(11.0, 0.12, 20.0), Color("667b86"))
 		box(Vector3(82.0, 0.16, float(z_seg)), Vector3(11.0, 0.12, 20.0), Color("667b86"))
 
-	# 建筑 #7：巨型极地生态穹顶温室 (32×32m，高 14.5m，内部恒温暖房 + 发光植物园！)
+	# 建筑 #7：巨型极地生态穹顶温室 (32×32m，高 14.5m，内部恒温暖房 + 发光水培植物园！)
 	var gh: Vector3 = Vector3(-108.0, 0.0, -112.0)
 	extra_rooms["greenhouse"] = {"center": gh, "width": 30.0, "depth": 30.0}
 	box(gh + Vector3(0, 0.14, 0), Vector3(32.0, 0.28, 32.0), Color("748d8a"))
 	lamp(gh + Vector3(0, 6.2, 0), Color("ffe2a8"), 30.0)
-	furniture("table-large", gh + Vector3(0, 0.28, -4.0), Vector3(6.2, 1.1, 2.8))
-	furniture("table-large", gh + Vector3(-8.0, 0.28, 2.0), Vector3(4.8, 1.1, 2.2))
-	furniture("table-large", gh + Vector3(8.0, 0.28, 2.0), Vector3(4.8, 1.1, 2.2))
-	supply("thermos", gh + Vector3(-1.5, 1.5, -4.0))
-	supply("thermos", gh + Vector3(1.5, 1.5, -4.0))
-	supply("bounce_pad", gh + Vector3(6.5, 1.3, 5.0))
-	supply("flare", gh + Vector3(-6.5, 1.3, 5.0))
-	supply("keepsake", gh + Vector3(0.0, 1.5, -4.0))
+	# 温室园艺壁挂操作柜架（下台面热可可与零食，上架科考杯与信号弹）
+	counter_shelf(gh + Vector3(0.0, 0.28, -5.2), 0.0, [
+		["thermos", 0, -0.82, 0.12, 18.0],
+		["chips", 0, 0.68, 0.10, -16.0],
+		["keepsake", 1, -0.20, -0.05, 14.0],
+	])
 	landmarks["greenhouse"] = gh + Vector3(0, 0.35, 18.0)
 
 	# 建筑 #8：高空通讯灯塔总部 (34×30×10m 巨型指挥电台楼 + 26m 通讯高塔！)
 	var ch: Vector3 = Vector3(112.0, 0.0, -108.0)
 	extra_shell("comms_hub", ch, 34.0, 30.0, Color("6ec7cf"), 10.0, 10.0)
 	partition(ch + Vector3(0, 0, -4.0), 32.0, 4.2, 6.0)
-	furniture("computer-wide", ch + Vector3(-9.0, 0.2, -9.0), Vector3(5.5, 1.5, 2.0))
-	furniture("computer-wide", ch + Vector3(9.0, 0.2, -9.0), Vector3(5.5, 1.5, 2.0))
-	furniture("table-display-planet", ch + Vector3(0.0, 0.2, -8.0), Vector3(3.6, 2.0, 3.6))
-	station("charge", ch + Vector3(10.0, 1.4, 3.0), "通讯总部应急补给台 · 按住 E 补氧与充能。", false)
-	supply("boombox", ch + Vector3(-7.0, 1.4, 4.0))
-	supply("flare", ch + Vector3(-3.0, 1.4, 5.0))
-	supply("suction", ch + Vector3(3.0, 1.4, 5.0))
-	supply("thermos", ch + Vector3(7.0, 1.4, 5.0))
+	station("charge", ch + Vector3(10.0, 1.4, -2.0), "通讯总部应急补给台 · 按住 E 补氧与充能。", false)
+	open_shelf(ch + Vector3(-11.5, 0.2, 6.5), 25.0, [
+		["boombox", 1, -0.62, 0.08, 15.0],
+		["thermos", 1, 0.72, 0.12, -20.0],
+		["flare", 0, 0.10, 0.10, 12.0],
+	])
+	open_shelf(ch + Vector3(11.5, 0.2, 6.5), -25.0, [
+		["cell", 0, -0.65, 0.10, 8.0],
+		["cell", 1, 0.55, 0.08, -14.0],
+		["flare", 2, -0.15, 0.04, 18.0],
+	])
 
 	# 建筑 #9：西线重型货运总站 (42×32×10m，14m 超大极地车穿行库门！)
 	var cd: Vector3 = Vector3(-108.0, 0.0, -32.0)
 	extra_shell("cargo_depot", cd, 42.0, 32.0, Color("e0a458"), 14.0, 10.0)
-	for x_off: float in [-14.0, -7.0, 7.0, 14.0]:
-		furniture("container-wide", cd + Vector3(x_off, 0.2, -9.0), Vector3(4.2, 1.4, 2.0))
-		furniture("container-tall", cd + Vector3(x_off, 0.2, 5.0), Vector3(2.8, 3.2, 2.0))
-	supply("bumper_orb", cd + Vector3(-5.0, 1.3, 0.0))
-	supply("bounce_pad", cd + Vector3(5.0, 1.3, 0.0))
-	supply("oxygen", cd + Vector3(-13.5, 1.8, -9.0))
-	supply("medical", cd + Vector3(13.5, 1.8, -9.0))
-	supply("crate", cd + Vector3(0.0, 1.2, -10.5))
-	supply("thermos", cd + Vector3(0.0, 1.2, 6.0))
+	open_shelf(cd + Vector3(-5.8, 0.2, -11.4), 0.0, [
+		["oxygen", 0, -0.78, 0.10, 8.0],
+		["medical", 1, -0.10, 0.08, -14.0],
+		["bumper_orb", 1, 0.85, 0.06, 0.0],
+	])
+	open_shelf(cd + Vector3(5.8, 0.2, -11.4), 0.0, [
+		["cell", 0, -0.68, 0.10, -12.0],
+		["thermos", 1, 0.22, 0.12, 20.0],
+		["bumper_orb", 0, 0.80, 0.08, 0.0],
+	])
+	on_surface("crate", cd.x, 0.20, cd.z - 10.5, 6.0)
 
 	# 建筑 #10：东线极地机甲维修厂 (42×34×11m 巨型机库维修大厅！)
 	var mh: Vector3 = Vector3(112.0, 0.0, -34.0)
 	extra_shell("mech_hangar", mh, 42.0, 34.0, Color("e89e4e"), 14.0, 11.0)
-	for sx: float in [-13.5, 13.5]:
-		furniture("table-large", mh + Vector3(sx, 0.2, -8.0), Vector3(6.5, 1.2, 2.8))
-		furniture("container-tall", mh + Vector3(sx, 0.2, 6.0), Vector3(3.0, 3.4, 2.2))
-	station("charge", mh + Vector3(-12.0, 1.4, -5.0), "机甲维修厂重型充能台 · 按住 E 补氧与充能。", false)
-	supply("suction", mh + Vector3(-13.0, 1.6, -8.0))
-	supply("cell", mh + Vector3(13.0, 1.6, -8.0))
-	supply("bounce_pad", mh + Vector3(-4.0, 1.3, 2.0))
-	supply("bumper_orb", mh + Vector3(4.0, 1.3, 2.0))
-	supply("thermos", mh + Vector3(0.0, 1.3, -10.0))
+	station("charge", mh + Vector3(-12.0, 1.4, -3.5), "机甲维修厂重型充能台 · 按住 E 补氧与充能。", false)
+	open_shelf(mh + Vector3(-14.5, 0.2, -8.5), 18.0, [
+		["suction", 1, -0.58, 0.08, 12.0],
+		["cell", 0, 0.65, 0.10, -15.0],
+		["bounce_pad", 0, -0.68, 0.02, 5.0],
+	])
+	open_shelf(mh + Vector3(14.5, 0.2, -8.5), -18.0, [
+		["bounce_pad", 0, -0.62, 0.02, -8.0],
+		["bumper_orb", 1, -0.35, 0.08, 0.0],
+		["bumper_orb", 1, 0.68, 0.08, 0.0],
+		["bumper_orb", 2, 0.12, 0.04, 0.0],
+	])
 
 	# 建筑 #11：西翼天文观测大穹顶 (32×32m 巨型观测圆顶 + 24m 极地观测塔！)
 	var obs: Vector3 = Vector3(-164.0, 0.0, -78.0)
 	extra_rooms["observatory"] = {"center": obs, "width": 30.0, "depth": 30.0}
 	box(obs + Vector3(0, 0.14, 0), Vector3(32.0, 0.28, 32.0), Color("6d8692"))
 	lamp(obs + Vector3(0, 6.4, 0), Color("bfe8ff"), 30.0)
-	furniture("table-display-planet", obs + Vector3(0, 0.28, 0.0), Vector3(4.5, 2.4, 4.5))
-	supply("flare", obs + Vector3(-6.0, 1.3, 5.0))
-	supply("bounce_pad", obs + Vector3(6.0, 1.3, 5.0))
-	supply("keepsake", obs + Vector3(0.0, 1.3, 7.5))
-	supply("thermos", obs + Vector3(-5.0, 1.3, -5.0))
+	counter_shelf(obs + Vector3(0.0, 0.28, 9.2), 180.0, [
+		["thermos", 0, -0.78, 0.12, 16.0],
+		["flare", 0, 0.32, 0.10, -22.0],
+		["boombox", 1, -0.42, -0.04, 8.0],
+		["keepsake", 1, 0.78, -0.06, -15.0],
+	])
 	landmarks["observatory"] = obs + Vector3(0, 0.35, 18.0)
 
 	# 建筑 #12：东翼地热反应堆电厂 (38×34×12m 超大型双涡轮电厂！)
 	var rh: Vector3 = Vector3(166.0, 0.0, -76.0)
 	extra_shell("reactor_hall", rh, 38.0, 34.0, Color("f0a848"), 12.0, 12.0)
-	for sx: float in [-9.0, 9.0]:
-		box(rh + Vector3(sx, 2.8, -6.0), Vector3(5.0, 5.2, 6.0), Color("7b999e"))
-		furniture("computer-system", rh + Vector3(sx, 0.2, 6.0), Vector3(3.2, 2.4, 1.6))
-	station("charge", rh + Vector3(0.0, 1.4, -11.0), "反应堆电厂高压补给台 · 按住 E 补氧与充能。", false)
-	supply("cell", rh + Vector3(-11.0, 1.4, 8.0))
-	supply("heater", rh + Vector3(11.0, 1.4, 8.0), {"charge": 180.0})
-	supply("boombox", rh + Vector3(0.0, 1.4, 4.0))
-	supply("thermos", rh + Vector3(0.0, 1.4, -4.0))
+	station("charge", rh + Vector3(0.0, 1.4, -12.0), "反应堆电厂高压补给台 · 按住 E 补氧与充能。", false)
+	open_shelf(rh + Vector3(-11.5, 0.2, 10.5), 180.0, [
+		["cell", 0, -0.72, 0.10, 10.0],
+		["cell", 1, 0.15, 0.08, -14.0],
+		["oxygen", 0, 0.85, 0.08, 6.0],
+	])
+	open_shelf(rh + Vector3(11.5, 0.2, 10.5), 180.0, [
+		["bounce_pad", 0, -0.58, 0.04, 12.0],
+		["heater", 1, -0.45, 0.08, -12.0, {"charge": 180.0}],
+		["medical", 1, 0.78, 0.08, 16.0],
+	])
 
 	# 建筑 #13：西北冰川钻探中心 (36×28×10m 峡谷西翼大型科考堡垒！)
 	var dr: Vector3 = Vector3(-72.0, 0.0, -166.0)
 	extra_shell("drill_station", dr, 36.0, 28.0, Color("72c5ce"), 10.0, 10.0)
-	furniture("table-large", dr + Vector3(-9.0, 0.2, -6.0), Vector3(6.0, 1.2, 2.6))
-	furniture("container-wide", dr + Vector3(9.0, 0.2, -6.0), Vector3(5.0, 1.4, 2.2))
-	supply("suction", dr + Vector3(-9.0, 1.6, -6.0))
-	supply("oxygen", dr + Vector3(9.0, 1.8, -6.0))
-	supply("medical", dr + Vector3(0.0, 1.3, -8.0))
-	supply("bumper_orb", dr + Vector3(-5.0, 1.3, 4.0))
-	supply("flare", dr + Vector3(5.0, 1.3, 4.0))
+	open_shelf(dr + Vector3(-10.2, 0.2, 7.8), 155.0, [
+		["suction", 1, -0.52, 0.08, 12.0],
+		["medical", 0, 0.68, 0.10, -18.0],
+		["cell", 2, -0.10, 0.04, 10.0],
+	])
+	open_shelf(dr + Vector3(10.2, 0.2, 7.8), -155.0, [
+		["oxygen", 0, -0.68, 0.10, 6.0],
+		["cell", 1, 0.56, 0.08, -14.0],
+		["thermos", 2, -0.25, 0.04, 18.0],
+	])
+	# 钻探大厅入口两侧备有两只可直接用吸推器拖上压板的样本箱！
+	on_surface("crate", dr.x - 4.6, 0.20, dr.z + 7.2, 8.0)
+	on_surface("crate", dr.x + 4.6, 0.20, dr.z + 7.2, -10.0)
 
-	# 建筑 #14：南区星港物流枢纽 (40×30×9.5m 停机坪东侧大型补给库！)
+	# 建筑 #14：南区星港物流枢纽 (40×30×9.5m 停机坪东侧大型补给库与食堂！)
 	var sh: Vector3 = Vector3(72.0, 0.0, 42.0)
 	extra_shell("south_hub", sh, 40.0, 30.0, Color("84c6b4"), 14.0, 9.5)
-	for sx: float in [-12.0, 12.0]:
-		furniture("container-wide", sh + Vector3(sx, 0.2, -6.0), Vector3(5.0, 1.4, 2.2))
-		furniture("table-large", sh + Vector3(sx, 0.2, 5.0), Vector3(5.5, 1.1, 2.4))
-	supply("bounce_pad", sh + Vector3(-5.0, 1.3, 0.0))
-	supply("boombox", sh + Vector3(5.0, 1.3, 0.0))
-	supply("bumper_orb", sh + Vector3(0.0, 1.3, -6.0))
-	supply("oxygen", sh + Vector3(-12.0, 1.8, -6.0))
-	supply("thermos", sh + Vector3(12.0, 1.8, -6.0))
-	supply("chips", sh + Vector3(0.0, 1.3, 6.0))
+	counter_shelf(sh + Vector3(0.0, 0.2, 9.5), 180.0, [
+		["chips", 0, -0.82, 0.12, 14.0],
+		["thermos", 0, 0.18, 0.10, -12.0],
+		["boombox", 1, -0.48, -0.04, 10.0],
+		["medical", 1, 0.72, -0.04, -18.0],
+	])
 
 	# 建筑 #15：西南极光特技生态基地 (32×32m 巨型圆顶 + 18m 极地飞车大跳台！)
 	var so: Vector3 = Vector3(-84.0, 0.0, 44.0)
@@ -455,11 +616,12 @@ func _build_expanded_town_buildings() -> void:
 	box(so + Vector3(0, 0.14, 0), Vector3(32.0, 0.28, 32.0), Color("687c85"))
 	ramp(so + Vector3(24.0, 0.1, 14.0), so + Vector3(24.0, 4.6, -8.0), 9.0)
 	lamp(so + Vector3(0, 6.2, 0), Color("ffe0a8"), 30.0)
-	supply("bounce_pad", so + Vector3(0.0, 1.3, 8.0))
-	supply("bumper_orb", so + Vector3(-5.0, 1.3, 0.0))
-	supply("boombox", so + Vector3(5.0, 1.3, 0.0))
-	supply("thermos", so + Vector3(0.0, 1.3, -5.0))
-	supply("oxygen", so + Vector3(-8.0, 1.3, -5.0))
+	open_shelf(so + Vector3(0.0, 0.28, 8.5), 180.0, [
+		["bounce_pad", 0, -0.68, 0.04, 8.0],
+		["bumper_orb", 1, -0.45, 0.08, 0.0],
+		["bumper_orb", 1, 0.52, 0.08, 0.0],
+		["thermos", 2, 0.10, 0.04, 15.0],
+	])
 	landmarks["south_outpost"] = so + Vector3(0, 0.35, 18.0)
 
 func _build_outer_basin_expedition() -> void:
@@ -468,10 +630,16 @@ func _build_outer_basin_expedition() -> void:
 	extra_shell("north_fort", outpost, 34.0, 28.0, Color("e6a256"), 10.0, 9.5)
 	station("charge", outpost + Vector3(8.5, 1.4, -4.5), "北哨前哨要塞 · 动力恢复后可在此补氧与充能。", false)
 	stations[-1].district_power = true
-	supply("cell", outpost + Vector3(-8.5, 1.1, -4.5))
-	supply("flare", outpost + Vector3(-8.5, 1.1, 4.0))
-	supply("thermos", outpost + Vector3(0.0, 1.1, -4.5))
-	supply("bounce_pad", outpost + Vector3(8.5, 1.1, 4.0))
+	open_shelf(outpost + Vector3(-6.8, 0.2, 6.5), 160.0, [
+		["cell", 0, -0.70, 0.10, 12.0],
+		["flare", 1, -0.25, 0.08, -14.0],
+		["flare", 1, 0.65, 0.08, 18.0],
+	])
+	open_shelf(outpost + Vector3(6.8, 0.2, 6.5), -160.0, [
+		["thermos", 1, -0.62, 0.10, 14.0],
+		["medical", 0, 0.58, 0.08, -10.0],
+		["oxygen", 0, -0.78, 0.10, 8.0],
+	])
 	power_lights.append(district_lamp(outpost + Vector3(0, 4.5, 15.5)))
 	landmarks["north_outpost"] = outpost + Vector3(-18, 0.4, 0)
 
@@ -487,10 +655,12 @@ func _build_outer_basin_expedition() -> void:
 	var pod_hull: StaticBody3D = box(pod_pos + Vector3(0, 2.4, -2), Vector3(8.0, 4.2, 10.0), Color("7d8d94"))
 	pod_hull.rotation_degrees = Vector3(8.0, 24.0, -11.0)
 	station("west_probe", pod_pos + Vector3(6.2, 1.4, 2.5), "坠毁探测舱黑匣子 · E 读取外围冰川地质遥测并解锁补给。", false, false)
-	supply("keepsake", pod_pos + Vector3(-6.0, 1.4, 3.0))
-	supply("cell", pod_pos + Vector3(-3.0, 1.4, 5.5))
-	supply("cell", pod_pos + Vector3(3.0, 1.4, 6.2))
-	supply("crate", pod_pos + Vector3(7.5, 1.2, -2.5))
+	open_shelf(pod_pos + Vector3(-4.2, 0.6, 5.8), 18.0, [
+		["cell", 0, -0.70, 0.10, 10.0],
+		["cell", 1, 0.45, 0.08, -16.0],
+		["keepsake", 2, -0.12, 0.04, 20.0],
+	])
+	on_surface("crate", pod_pos.x + 7.5, pod_pos.y + 0.60, pod_pos.z - 2.5, 12.0)
 	radar_lights.append(_beacon_post(pod_pos + Vector3(0, 0.6, 9.5), Color("#6be0f0")))
 	landmarks["west_probe"] = pod_pos + Vector3(0, 1.0, 12.0)
 
@@ -499,9 +669,11 @@ func _build_outer_basin_expedition() -> void:
 	box(radar_pos + Vector3(0, 0.3, 0), Vector3(32, 0.6, 32), Color("677b86"))
 	station("radar_tower", radar_pos + Vector3(0, 1.5, 5.5), "气象雷达主塔 · E 重启全盆地航标灯并同步外围物资坐标。", false, false)
 	station("charge", radar_pos + Vector3(9.5, 1.5, 0.0), "雷达站应急补氧台 · 按住 E 补氧与充能。", false)
-	supply("keepsake", radar_pos + Vector3(-9.0, 1.5, 2.0))
-	supply("chips", radar_pos + Vector3(-9.0, 1.5, -2.0))
-	supply("medical", radar_pos + Vector3(9.0, 1.5, -4.0))
+	open_shelf(radar_pos + Vector3(-9.5, 0.6, 0.0), 90.0, [
+		["medical", 0, -0.68, 0.10, 10.0],
+		["chips", 1, 0.20, 0.08, -14.0],
+		["keepsake", 2, 0.72, 0.04, 18.0],
+	])
 	radar_lights.append(_beacon_post(radar_pos + Vector3(0, 16.5, -6.0), Color("#ffba5c")))
 	landmarks["east_radar"] = radar_pos + Vector3(-14, 1.0, 10.0)
 
@@ -509,9 +681,11 @@ func _build_outer_basin_expedition() -> void:
 	var drop_pos: Vector3 = Vector3(-185, BASIN_TERRAIN.sample_height(-185, 165), 165)
 	box(drop_pos + Vector3(0, 0.3, 0), Vector3(20, 0.6, 20), Color("687c85"))
 	box(drop_pos + Vector3(0, 2.0, 0), Vector3(4.5, 3.2, 4.5), Color("d99848"))
-	supply("cell", drop_pos + Vector3(4.5, 1.2, 4.0))
-	supply("oxygen", drop_pos + Vector3(-4.5, 1.2, 4.0))
-	supply("bounce_pad", drop_pos + Vector3(0.0, 1.2, 5.5))
+	open_shelf(drop_pos + Vector3(0.0, 0.6, 5.4), 0.0, [
+		["oxygen", 0, -0.82, 0.10, 8.0],
+		["bounce_pad", 0, 0.56, 0.02, -6.0],
+		["cell", 1, -0.12, 0.08, 16.0],
+	])
 	radar_lights.append(_beacon_post(drop_pos + Vector3(0, 3.8, 0), Color("#6be0f0")))
 	landmarks["south_drop"] = drop_pos + Vector3(10, 0.8, 0)
 

@@ -42,12 +42,21 @@ func _physics_process(delta: float) -> void:
 func _process(delta: float) -> void:
 	super._process(delta)
 	var id: int = multiplayer.get_unique_id()
+	var bag: Dictionary = ensure_bag(id)
+	var sel_idx: int = -1 if bool(bag.equipment_active) else int(bag.selected)
 	for index: int in CAPACITY:
-		var kind: String = ensure_bag(id).slots[index].get("kind", "")
+		var slot: Dictionary = bag.slots[index]
+		var kind: String = slot.get("kind", "")
 		if kind in ["heater", "cell", "fuel"]:
-			_icons[index].texture = load("res://previews/frost_first_playable/" + ("heat.svg" if kind == "heater" else "cell.svg"))
-			_slot_levels[index].visible = true
-			_slot_levels[index].text = "%d%%" % int(float(ensure_bag(id).slots[index].get("charge",0))/1.8) if kind == "heater" else ("电池" if kind == "cell" else "燃料")
+			_icons[index].texture = ICONS.get(kind, load("res://assets/items/visor_icons/heater.png"))
+			if kind == "heater":
+				set_slot_gauge(index, float(slot.get("charge", 0.0)) / 180.0, UIStyleKit.VISOR_AMBER)
+			if index == sel_idx:
+				_slot_levels[index].text = "左键热熔" if kind == "heater" else ("左键充能" if kind == "cell" else "燃料")
+				_slot_levels[index].visible = true
+			else:
+				_slot_levels[index].text = ""
+				_slot_levels[index].visible = false
 
 func area() -> String:
 	return "frost_adventure"

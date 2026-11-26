@@ -12,28 +12,33 @@ const SUPPLIES: Array[String] = ["medical", "oxygen"]
 const CARGO: Array[String] = ["battery", "sample"]
 const HEAVY: Dictionary = {3: "core", 4: "freight", 5: "coolant"}
 const ICONS: Dictionary = {
-    "suction": preload("res://previews/frost_station/signs/icon_suction.png"),
-    "chips": preload("res://previews/frost_station/signs/icon_chips.png"),
-    "keepsake": preload("res://previews/frost_station/signs/icon_keepsake.png"),
-    "crate": preload("res://previews/frost_station/signs/icon_crate.png"),
-    "heater": preload("res://previews/frost_first_playable/heat.svg"),
-    "cell": preload("res://previews/frost_first_playable/cell.svg"),
-    "fuel": preload("res://previews/frost_first_playable/cell.svg"),
-    "medical": preload("res://assets/items/icons/medical.svg"),
-    "oxygen": preload("res://assets/items/icons/oxygen.svg"),
-    "battery": preload("res://assets/items/icons/battery.svg"),
-    "sample": preload("res://assets/items/icons/sample.svg"),
-    "penguin": preload("res://assets/items/icons/penguin.svg"),
-    "bubble": preload("res://assets/items/icons/bubble.svg"),
-    "board": preload("res://assets/items/icons/board.svg"),
-    "hologram": preload("res://assets/items/icons/hologram.svg"),
-    "smoke": preload("res://assets/items/icons/smoke.svg"),
-    "core": preload("res://assets/items/icons/core.svg"),
-    "freight": preload("res://assets/items/icons/freight.svg"),
-    "coolant": preload("res://assets/items/icons/coolant.svg"),
-    "thermal_suit": preload("res://assets/ship-hub/computer-icons/thermal_suit.svg"),
-    "wide_scanner": preload("res://assets/ship-hub/computer-icons/wide_scanner.svg"),
-    "signal_stabilizer": preload("res://assets/ship-hub/computer-icons/signal_stabilizer.svg"),
+    "suction": preload("res://assets/items/visor_icons/suction.png"),
+    "chips": preload("res://assets/items/visor_icons/chips.png"),
+    "keepsake": preload("res://assets/items/visor_icons/keepsake.png"),
+    "crate": preload("res://assets/items/visor_icons/crate.png"),
+    "heater": preload("res://assets/items/visor_icons/heater.png"),
+    "cell": preload("res://assets/items/visor_icons/cell.png"),
+    "fuel": preload("res://assets/items/visor_icons/fuel.png"),
+    "medical": preload("res://assets/items/visor_icons/medical.png"),
+    "oxygen": preload("res://assets/items/visor_icons/oxygen.png"),
+    "battery": preload("res://assets/items/visor_icons/battery.png"),
+    "sample": preload("res://assets/items/visor_icons/sample.png"),
+    "penguin": preload("res://assets/items/visor_icons/penguin.png"),
+    "bubble": preload("res://assets/items/visor_icons/bubble.png"),
+    "board": preload("res://assets/items/visor_icons/board.png"),
+    "hologram": preload("res://assets/items/visor_icons/hologram.png"),
+    "smoke": preload("res://assets/items/visor_icons/smoke.png"),
+    "core": preload("res://assets/items/visor_icons/core.png"),
+    "freight": preload("res://assets/items/visor_icons/freight.png"),
+    "coolant": preload("res://assets/items/visor_icons/coolant.png"),
+    "thermal_suit": preload("res://assets/items/visor_icons/thermal_suit.png"),
+    "wide_scanner": preload("res://assets/items/visor_icons/wide_scanner.png"),
+    "signal_stabilizer": preload("res://assets/items/visor_icons/signal_stabilizer.png"),
+    "bounce_pad": preload("res://assets/items/visor_icons/bounce_pad.png"),
+    "flare": preload("res://assets/items/visor_icons/flare.png"),
+    "boombox": preload("res://assets/items/visor_icons/boombox.png"),
+    "bumper_orb": preload("res://assets/items/visor_icons/bumper_orb.png"),
+    "thermos": preload("res://assets/items/visor_icons/thermos.png"),
 }
 const TRAINING_POSITIONS: Dictionary = {"oxygen": Vector3(-7.0, 0.96, 3.8)}
 
@@ -65,9 +70,12 @@ var _equipment_panel: Panel
 var _equipment_icon: TextureRect
 var _equipment_percent: Label
 var _slot_levels: Array[Label] = []
+var _slot_names: Array[Label] = []
+var _slot_bars: Array[ProgressBar] = []
 var _equipment_cells: Array[Panel] = []
 var _equipment_icons: Array[TextureRect] = []
 var _equipment_levels: Array[Label] = []
+var _equipment_oxy_bars: Array[ProgressBar] = []
 var _equipment_jets: Array[ProgressBar] = []
 var _last_focus: String = ""
 
@@ -82,11 +90,34 @@ func _build_ui() -> void:
     _bar = Control.new()
     _bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
     var bar_w: float = float(CAPACITY) * 78.0 - 10.0
-    controller._place_hud(_bar, Control.PRESET_CENTER_BOTTOM, Vector2(-bar_w * 0.5, -92), Vector2(bar_w, 68))
+    controller._place_hud(_bar, Control.PRESET_CENTER_BOTTOM, Vector2(-bar_w * 0.5, -130), Vector2(bar_w, 120))
     _layer.add_child(_bar)
+    var name_pill: StyleBoxFlat = StyleBoxFlat.new()
+    name_pill.bg_color = Color(0.03, 0.09, 0.14, 0.80)
+    name_pill.border_color = Color(0.32, 0.86, 0.96, 0.52)
+    name_pill.set_border_width_all(1)
+    name_pill.set_corner_radius_all(4)
+    name_pill.content_margin_left = 6
+    name_pill.content_margin_right = 6
+    name_pill.content_margin_top = 1
+    name_pill.content_margin_bottom = 1
     for index: int in CAPACITY:
+        # 当前选中物品名称显示在对应格正上方（未选中时隐藏）
+        var name_tag: Label = Label.new()
+        name_tag.position = Vector2(index * 78 - 22, 0)
+        name_tag.size = Vector2(112, 22)
+        name_tag.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+        name_tag.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+        name_tag.add_theme_font_override("font", UIStyleKit.FONT_BOLD)
+        name_tag.add_theme_font_size_override("font_size", 12)
+        name_tag.add_theme_color_override("font_color", UIStyleKit.VISOR_TEXT)
+        name_tag.add_theme_stylebox_override("normal", name_pill)
+        name_tag.mouse_filter = Control.MOUSE_FILTER_IGNORE
+        name_tag.visible = false
+        _bar.add_child(name_tag)
+        _slot_names.append(name_tag)
         var panel: Panel = Panel.new()
-        panel.position = Vector2(index * 78, 0)
+        panel.position = Vector2(index * 78, 26)
         panel.size = Vector2(68, 68)
         panel.add_theme_stylebox_override("panel", UIStyleKit.visor_slot(index == 0, false))
         panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -102,26 +133,63 @@ func _build_ui() -> void:
         key_tag.mouse_filter = Control.MOUSE_FILTER_IGNORE
         panel.add_child(key_tag)
         var icon: TextureRect = TextureRect.new()
-        icon.position = Vector2(12, 10)
-        icon.size = Vector2(44, 44)
+        icon.position = Vector2(9, 10)
+        icon.size = Vector2(48, 48)
         icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
         icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
         icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
         panel.add_child(icon)
         _icons.append(icon)
+        # 物品损耗/能量竖条（与氧气瓶读条风格完全统一，彻底告别挡图标的百分比数字！）
+        var sbar: ProgressBar = _make_gauge_bar(UIStyleKit.VISOR_AMBER)
+        sbar.position = Vector2(60, 10)
+        sbar.size = Vector2(4, 48)
+        sbar.visible = false
+        panel.add_child(sbar)
+        _slot_bars.append(sbar)
+        # 简洁按键提示统一放到物品栏正下方，仅当前选中格显示
         var level: Label = Label.new()
-        level.position = Vector2(4, 46)
-        level.size = Vector2(58, 18)
-        level.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+        level.position = Vector2(index * 78 - 6, 97)
+        level.size = Vector2(80, 18)
+        level.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
         level.add_theme_font_override("font", UIStyleKit.FONT_BOLD)
         level.add_theme_font_size_override("font_size", 11)
         level.add_theme_color_override("font_color", UIStyleKit.VISOR_CYAN)
         level.mouse_filter = Control.MOUSE_FILTER_IGNORE
-        panel.add_child(level)
+        _bar.add_child(level)
         _slot_levels.append(level)
     _choice = controller._panel(_layer, Vector2(390, 230), Vector2(500, 240), UIStyleKit.VISOR_GLASS_DEEP, UIStyleKit.VISOR_CYAN, 10)
     _choice.visible = false
     _build_equipment_ui()
+
+func _make_gauge_bar(fill_col: Color) -> ProgressBar:
+    var bar: ProgressBar = ProgressBar.new()
+    bar.fill_mode = ProgressBar.FILL_BOTTOM_TO_TOP
+    bar.show_percentage = false
+    bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+    bar.add_theme_font_size_override("font_size", 1)
+    var background: StyleBoxFlat = StyleBoxFlat.new()
+    background.bg_color = Color(0.04, 0.10, 0.15, 0.80)
+    background.set_corner_radius_all(2)
+    var fill: StyleBoxFlat = StyleBoxFlat.new()
+    fill.bg_color = fill_col
+    fill.set_corner_radius_all(2)
+    bar.add_theme_stylebox_override("background", background)
+    bar.add_theme_stylebox_override("fill", fill)
+    bar.custom_minimum_size = Vector2(4, 44)
+    return bar
+
+func set_slot_gauge(index: int, ratio_01: float, col: Color) -> void:
+    if index < 0 or index >= _slot_bars.size():
+        return
+    var bar: ProgressBar = _slot_bars[index]
+    bar.visible = true
+    bar.value = clampf(ratio_01 * 100.0, 0.0, 100.0)
+    var f: StyleBoxFlat = bar.get_theme_stylebox("fill") as StyleBoxFlat
+    if f != null and f.bg_color != col:
+        var copy: StyleBoxFlat = f.duplicate() as StyleBoxFlat
+        copy.bg_color = col
+        bar.add_theme_stylebox_override("fill", copy)
 
 func _build_equipment_ui() -> void:
     _equipment_column = VBoxContainer.new()
@@ -148,40 +216,29 @@ func _build_equipment_cell() -> void:
     _equipment_icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
     _equipment_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
     _equipment_icon.texture = ICONS.oxygen
-    _equipment_icon.position = Vector2(12, 8)
-    _equipment_icon.size = Vector2(40, 40)
+    _equipment_icon.position = Vector2(7, 10)
+    _equipment_icon.size = Vector2(44, 48)
     _equipment_icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
     _equipment_panel.add_child(_equipment_icon)
     _equipment_percent = Label.new()
-    _equipment_percent.position = Vector2(4, 46)
-    _equipment_percent.size = Vector2(52, 18)
-    _equipment_percent.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-    _equipment_percent.add_theme_font_override("font", UIStyleKit.FONT_BOLD)
-    _equipment_percent.add_theme_font_size_override("font_size", 11)
-    _equipment_percent.add_theme_color_override("font_color", UIStyleKit.VISOR_AMBER)
+    _equipment_percent.visible = false
     _equipment_percent.mouse_filter = Control.MOUSE_FILTER_IGNORE
     _equipment_panel.add_child(_equipment_percent)
-    _jet_bar = ProgressBar.new()
-    _jet_bar.fill_mode = ProgressBar.FILL_BOTTOM_TO_TOP
-    _jet_bar.show_percentage = false
-    _jet_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+    # 氧气余量独立读条（取代原先挡画面的“100%”百分比文字）
+    var oxy_bar: ProgressBar = _make_gauge_bar(UIStyleKit.VISOR_AMBER)
+    oxy_bar.tooltip_text = "氧气余量"
+    oxy_bar.position = Vector2(54, 10)
+    oxy_bar.size = Vector2(4, 48)
+    _equipment_panel.add_child(oxy_bar)
+    _jet_bar = _make_gauge_bar(UIStyleKit.VISOR_CYAN)
     _jet_bar.tooltip_text = "喷气储备"
-    _jet_bar.add_theme_font_size_override("font_size", 1)
-    var background: StyleBoxFlat = StyleBoxFlat.new()
-    background.bg_color = Color(0.04, 0.10, 0.15, 0.78)
-    background.set_corner_radius_all(2)
-    var fill: StyleBoxFlat = StyleBoxFlat.new()
-    fill.bg_color = UIStyleKit.VISOR_CYAN
-    fill.set_corner_radius_all(2)
-    _jet_bar.add_theme_stylebox_override("background", background)
-    _jet_bar.add_theme_stylebox_override("fill", fill)
-    _jet_bar.custom_minimum_size = Vector2(4, 44)
-    _jet_bar.position = Vector2(60, 8)
-    _jet_bar.size = Vector2(4, 44)
+    _jet_bar.position = Vector2(60, 10)
+    _jet_bar.size = Vector2(4, 48)
     _equipment_panel.add_child(_jet_bar)
     _equipment_cells.append(_equipment_panel)
     _equipment_icons.append(_equipment_icon)
     _equipment_levels.append(_equipment_percent)
+    _equipment_oxy_bars.append(oxy_bar)
     _equipment_jets.append(_jet_bar)
 
 func _process(_delta: float) -> void:
@@ -201,10 +258,13 @@ func _process(_delta: float) -> void:
         var kind: String = String(worn.get("kind", ""))
         _equipment_icons[index].texture = ICONS.get(kind) as Texture2D
         _equipment_icons[index].visible = not kind.is_empty()
-        _equipment_levels[index].visible = kind == "oxygen"
+        _equipment_levels[index].visible = false
+        _equipment_oxy_bars[index].visible = kind == "oxygen"
         _equipment_jets[index].visible = kind == "oxygen"
         if kind == "oxygen":
-            _equipment_levels[index].text = "%d%%" % ceili(tank_oxygen(peer_id, index) - 0.0001)
+            var oxy_val: float = tank_oxygen(peer_id, index)
+            _equipment_levels[index].text = "%d%%" % ceili(oxy_val - 0.0001)
+            _equipment_oxy_bars[index].value = clampf(oxy_val, 0.0, 100.0)
             _equipment_jets[index].value = float(worn.get("jet_reserve", 0.0)) * 100.0
             _equipment_panel = _equipment_cells[index]
             _equipment_icon = _equipment_icons[index]
@@ -214,14 +274,27 @@ func _process(_delta: float) -> void:
             var chosen: bool = bool(bag.equipment_active) and int(bag.equipment_selected) == index
             _equipment_cells[index].add_theme_stylebox_override("panel", UIStyleKit.visor_slot(chosen, true))
     var slots: Array = bag.slots
+    var sel_idx: int = -1 if bool(bag.equipment_active) else int(bag.selected)
     for index: int in CAPACITY:
         var kind: String = String((slots[index] as Dictionary).get("kind", ""))
+        var is_sel: bool = index == sel_idx
         _icons[index].texture = ICONS.get(kind) as Texture2D
-        _slot_levels[index].visible = kind == "oxygen"
-        _slot_levels[index].text = "%d%%" % ceili(float((slots[index] as Dictionary).get("oxygen", 100.0))) if kind == "oxygen" else ""
+        _slot_bars[index].visible = false
+        _slot_levels[index].visible = false
+        _slot_levels[index].text = ""
+        if is_sel and not kind.is_empty():
+            _slot_names[index].text = item_name(kind)
+            _slot_names[index].visible = true
+        else:
+            _slot_names[index].text = ""
+            _slot_names[index].visible = false
+        if kind == "oxygen":
+            set_slot_gauge(index, float((slots[index] as Dictionary).get("oxygen", 100.0)) / 100.0, UIStyleKit.VISOR_CYAN)
+        elif kind == "medical" and is_sel:
+            _slot_levels[index].text = "左键用"
+            _slot_levels[index].visible = true
         if _last_focus != focus:
-            var chosen: bool = not bool(bag.equipment_active) and int(bag.selected) == index
-            _cells[index].add_theme_stylebox_override("panel", UIStyleKit.visor_slot(chosen, false))
+            _cells[index].add_theme_stylebox_override("panel", UIStyleKit.visor_slot(is_sel, false))
     _last_selected = int(bag.selected)
     _last_focus = focus
     _refresh_world()
@@ -1072,6 +1145,7 @@ func _refresh_world() -> void:
         if is_instance_valid(_prop_bodies.get(uid)):
             continue
         var dynamic: bool = not entry.has("source")
+        var placed: bool = bool(entry.get("placed", false))
         var body: RigidBody3D = RigidBody3D.new()
         body.name = uid
         body.freeze = not dynamic or not controller.is_host
@@ -1080,11 +1154,11 @@ func _refresh_world() -> void:
         body.collision_mask = 2 | 8 | 1
         body.mass = 1.5
         body.continuous_cd = true
-        body.linear_damp = 0.65
-        body.angular_damp = 0.9
+        body.linear_damp = 4.0 if placed else 0.65
+        body.angular_damp = 8.0 if placed else 0.9
         var material: PhysicsMaterial = PhysicsMaterial.new()
-        material.friction = 0.65
-        material.bounce = 0.12
+        material.friction = 0.95 if placed else 0.65
+        material.bounce = 0.0 if placed else 0.12
         body.physics_material_override = material
         var source_offset: float = 0.2 if entry.get("source", "") == "stock" and entry.kind != "oxygen" else 0.34
         body.position = Vector3(entry.position) + (Vector3.ZERO if dynamic else Vector3.UP * source_offset)
@@ -1106,7 +1180,12 @@ func _refresh_world() -> void:
         body.add_child(model)
         _props.add_child(body)
         if dynamic and controller.is_host:
-            body.angular_velocity = Vector3(1.1, 0.3, 1.4)
+            if placed:
+                body.linear_velocity = Vector3.ZERO
+                body.angular_velocity = Vector3.ZERO
+                body.sleeping = true
+            else:
+                body.angular_velocity = Vector3(1.1, 0.3, 1.4)
         _prop_bodies[uid] = body
     for uid: String in _prop_bodies.keys():
         if not live_ids.has(uid):
