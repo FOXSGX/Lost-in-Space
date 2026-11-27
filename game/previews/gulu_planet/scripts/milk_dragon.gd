@@ -1,4 +1,4 @@
-﻿extends CharacterBody3D
+extends CharacterBody3D
 class_name MilkDragonKeeper
 
 ## 奶龙的唯一职责：拦球。
@@ -30,6 +30,8 @@ const STATE_RECOVER := "恢复"
 const STATE_RETURN := "回防"
 
 @export var home := Vector3(10.2, 0.0, 0.0)
+## 门中心（三张地图各自不同）；站位/预判/扑救都相对它计算。
+@export var goal_center := Vector3(12.45, 0.0, 0.0)
 ## 站位区：门前一块矩形，不是一条线
 @export var zone_min_x := 8.4
 @export var zone_max_x := 11.4
@@ -110,8 +112,13 @@ func setup_goal(next_goal: Node3D) -> void:
 	goal = next_goal
 	if goal != null and goal.has_method("goal_plane_x"):
 		_goal_x = float(goal.call("goal_plane_x"))
+	if goal != null and goal.has_method("gate_center"):
+		goal_center = goal.call("gate_center") as Vector3
 	if goal != null and goal.has_signal("fuel_collected"):
-		goal.connect("fuel_collected", _on_goal_conceded)
+		var callback := Callable(self, "_on_goal_conceded")
+		if goal.is_connected("fuel_collected", callback):
+			goal.disconnect("fuel_collected", callback)
+		goal.connect("fuel_collected", callback)
 
 
 func _on_goal_conceded(_total: int, _target: int) -> void:
@@ -224,9 +231,11 @@ func _physics_process(delta: float) -> void:
 ## 站位：球远时守中路，球近了才向近角偏移；始终在门线前一点（x≈11.1）。
 ## 这样远射的远角是真空当，近射才会被它封住。
 func _stand_point() -> Vector3:
-	var closeness := clampf((_sample.x - 9.0) / 3.0, 0.0, 1.0)
-	var near_side := clampf(_sample.z * 0.9, -2.6, 2.6) * closeness
-	return Vector3(11.1, 0.0, near_side)
+	var rel_z := _sample.z - goal_center.z
+	var closeness := clampf((_sample.x - (goal_center.x - 3.45)) / 3.0, 0.0, 1.0)
+	var near_side := clampf(rel_z * 0.9, -2.6, 2.6) * closeness
+	near_side = roundf(near_side / 0.5) * 0.5
+	return Vector3(goal_center.x - 1.35, goal_center.y, goal_center.z + near_side)
 
 
 ## 读“玩家站在球的哪一边”——只读位置，不读输入；玩家绕到另一边就能骗它。
@@ -238,7 +247,7 @@ func _read_player_side() -> float:
 	var distance := approach.length()
 	if distance > TELL_RANGE or distance < 0.2:
 		return 0.0
-	var to_goal := Vector3(_goal_x - ball.global_position.x, 0.0, -ball.global_position.z)
+	var to_goal := Vector3(_goal_x - ball.global_position.x, 0.0, goal_center.z - ball.global_position.z)
 	if to_goal.length_squared() < 0.01:
 		return 0.0
 	to_goal = to_goal.normalized()
@@ -283,12 +292,13 @@ func _should_intercept() -> bool:
 	var eta := distance / vx
 	if eta > 1.5:
 		return false
-	var predicted_z := _sample.z + _sample_vel.z * eta
-	if absf(predicted_z) > 3.4:
+	var rel_z := _sample.z - goal_center.z
+	var predicted_rel := rel_z + _sample_vel.z * eta
+	if absf(predicted_rel) > 3.4:
 		return false
 	# 还要判断它是不是真的朝门里来（而不是从门前横穿出去）
 	var dir := _sample_vel.normalized()
-	var to_goal := Vector3(_goal_x - _sample.x, 0.0, -_sample.z).normalized()
+	var to_goal := Vector3(_goal_x - _sample.x, 0.0, -rel_z).normalized()
 	if dir.dot(to_goal) < 0.35:
 		return false
 	return true
@@ -297,16 +307,16 @@ func _should_intercept() -> bool:
 func _begin_intercept() -> void:
 	var vx := maxf(_sample_vel.x, 0.5)
 	var eta := clampf((_goal_x - _sample.x) / vx, 0.0, 0.45)
-	var aim_z := clampf(_sample.z + _sample_vel.z * eta, -zone_half_z - 0.3, zone_half_z + 0.3)
+	var rel_aim := clampf((_sample.z - goal_center.z) + _sample_vel.z * eta, -zone_half_z - 0.3, zone_half_z + 0.3)
 	# 预判锁错：它按“玩家站位”先入为主，真球射向另一边时就会扑错。
-	if _precommit_side != 0.0 and signf(aim_z) != _precommit_side:
+	if _precommit_side != 0.0 and signf(rel_aim) != _precommit_side:
 		if visual != null:
 			visual.call("play_whiff")
-		aim_z = _precommit_side * (zone_half_z + 0.25)
+		rel_aim = _precommit_side * (zone_half_z + 0.25)
 	_target = Vector3(
 		clampf(_sample.x + _sample_vel.x * eta, zone_min_x - 0.4, zone_max_x),
-		0.0,
-		aim_z
+		goal_center.y,
+		goal_center.z + rel_aim
 	)
 	_state_timer = 0.0
 	_cooldown = intercept_cooldown

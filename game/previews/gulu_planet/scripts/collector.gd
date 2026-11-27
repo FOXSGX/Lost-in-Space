@@ -1,4 +1,4 @@
-﻿extends Node3D
+extends Node3D
 class_name FuelCollector
 
 ## 飞船装货口：喇叭形接货斜面 + 吸入式收集仓。
@@ -7,7 +7,7 @@ class_name FuelCollector
 signal fuel_collected(total: int, target: int)
 
 const HULL := Color("#7f8e86")
-const HULL_LIGHT := Color("#b4c1b7")
+const HULL_LIGHT := Color("#CFC5AE")
 const HULL_DARK := Color("#6d7c74")
 const TRIM := Color("#2f5c68")
 const TRIM_DARK := Color("#1f3f49")
@@ -30,12 +30,19 @@ var last_credit_peer := 0
 ## 规则 = 球心从场内侧越过门口平面（x = CATCH_MIN.x），且高度/横向在门洞内。
 ## 这样门框外侧、门顶上方、球门背面都不会误判，高速也不会漏（逐帧比 x 轴）。
 var _watched: Node3D
+## 只有当前地图的主门才吃球；场外地图会把它关掉。
+var active := true
 var _prev_pos := Vector3.ZERO
 var _has_prev := false
 
 var _pips: Array[MeshInstance3D] = []
 var _pulse := 0.0
 var _intake_material: StandardMaterial3D
+var _suction: CPUParticles3D
+## 装货订单：球越过门口平面时落在哪一层（0 下 / 1 中 / 2 上）。
+## 只记录，不参与判定；由 gulu_app 决定是否给 ×2。
+var last_goal_zone := -1
+var _order_strips: Array[MeshInstance3D] = []
 var _flash := 0.0
 
 var kit: GuluArtKit
@@ -80,6 +87,8 @@ func watch_ball(node: Node3D) -> void:
 
 
 func _physics_process(_delta: float) -> void:
+	if not active:
+		return
 	if _watched == null or not is_instance_valid(_watched):
 		return
 	var point: Vector3 = _watched.global_position
@@ -87,9 +96,11 @@ func _physics_process(_delta: float) -> void:
 		_prev_pos = point
 		_has_prev = true
 		return
-	var crossed := _prev_pos.x < CATCH_MIN.x and point.x >= CATCH_MIN.x
+	# 只认“从门前 4 m 内、沿门洞高度/横向穿过去”的球；否则传送/重生到远处也会被误判进球。
+	var crossed := _prev_pos.x < CATCH_MIN.x and _prev_pos.x > CATCH_MIN.x - 4.0 and point.x >= CATCH_MIN.x
 	var inside_mouth := point.y > 0.0 and point.y < CATCH_MAX.y and absf(point.z) <= CATCH_MAX.z
-	if crossed and inside_mouth and not bool(_watched.get("collected")):
+	var prev_in_mouth := _prev_pos.y > 0.0 and _prev_pos.y < CATCH_MAX.y + 0.6 and absf(_prev_pos.z) <= CATCH_MAX.z + 0.4
+	if crossed and inside_mouth and prev_in_mouth and not bool(_watched.get("collected")):
 		consume(_watched)
 	_prev_pos = point
 
@@ -109,6 +120,7 @@ func consume(fuel: Node3D) -> void:
 		return
 	if bool(fuel.get("collected")):
 		return
+	last_goal_zone = _zone_of(fuel.global_position.y)
 	fuel.call("collect")
 	last_credit_peer = int(fuel.get("credit_peer"))
 	loaded_count += 1
@@ -121,8 +133,25 @@ func consume(fuel: Node3D) -> void:
 func reset_state() -> void:
 	loaded_count = 0
 	last_credit_peer = 0
+	last_goal_zone = -1
 	_flash = 0.0
 	_update_pips()
+
+
+## 门口高度 → 舱层（下 / 中 / 上）。门口净空 y ∈ [0, 2.30]。
+func _zone_of(y: float) -> int:
+	if y < 0.78:
+		return 0
+	if y < 1.55:
+		return 1
+	return 2
+
+
+## 点亮“当前订单”那一层的灯带；其余层保持熄灭，玩家从口沿就能读出该往哪踢。
+func set_order_zone(zone: int) -> void:
+	last_goal_zone = -1
+	for index in range(_order_strips.size()):
+		_order_strips[index].visible = index == zone
 
 
 func _animate_intake(fuel: Node3D) -> void:
@@ -205,28 +234,54 @@ func _build_scoop() -> void:
 
 
 func _build_intake() -> void:
-	_box(Vector3(1.2, 2.2, 3.2), Vector3(15.5, 1.1, 0.0), INTAKE, false, 0.0, Vector3.ZERO, mat_intake)
-	# 内壁竖向加强筋：让“深”有结构依据，不只是黑盒子。
-	for z in [-1.52, 1.52]:
-		for x in [15.15, 15.55, 15.92]:
-			_box(Vector3(0.08, 2.0, 0.10), Vector3(x, 1.10, z), TRIM, false, 0.0, Vector3.ZERO, mat_trim)
-	# 底部导流坡：视觉上把球“接住”，不参与物理。
-	_box(Vector3(1.05, 0.08, 1.45), Vector3(15.42, 0.05, 0.0), TRIM_DARK, false,
+	# 装货口 = 一个有深度的舱口，不是靶心。
+	# 口沿（x≈15.02）比舱底（x≈16.16）大，四面内壁向内收，靠透视与光照读出“能塞进去”；
+	# 舱底三根发光栅读作能源接收线圈，口沿一圈琥珀内唇读作“入口”。
+	var mouth_x := 15.02
+	var back_x := 16.16
+	# 1) 口沿外框：四条倒角压条，把开口从船体上“切”出来。
+	_box(Vector3(0.16, 0.16, 3.44), Vector3(mouth_x, 2.22, 0.0), TRIM, false, 0.0, Vector3.ZERO, mat_trim)
+	_box(Vector3(0.16, 0.16, 3.44), Vector3(mouth_x, -0.02, 0.0), TRIM, false, 0.0, Vector3.ZERO, mat_trim)
+	for side in [-1.0, 1.0]:
+		_box(Vector3(0.16, 2.24, 0.16), Vector3(mouth_x, 1.10, side * 1.72), TRIM, false, 0.0, Vector3.ZERO, mat_trim)
+	# 2) 琥珀内唇：比外框小 6 cm 的一圈，交代“这里是入口”。
+	_box(Vector3(0.05, 0.06, 3.10), Vector3(mouth_x + 0.09, 2.10, 0.0), AMBER, false, 0.0, Vector3.ZERO, mat_amber)
+	_box(Vector3(0.05, 0.06, 3.10), Vector3(mouth_x + 0.09, 0.10, 0.0), AMBER, false, 0.0, Vector3.ZERO, mat_amber)
+	# 3) 四面内壁：从口沿斜收到舱底，形成漏斗。
+	var wall_len: float = back_x - mouth_x + 0.12
+	var mid_x: float = (mouth_x + back_x) * 0.5
+	_box(Vector3(wall_len, 0.05, 3.05), Vector3(mid_x, 1.88, 0.0), HULL_DARK, false, 0.0, Vector3(0.0, 0.0, -0.22), mat_hull_dark)
+	_box(Vector3(wall_len, 0.05, 3.05), Vector3(mid_x, 0.32, 0.0), HULL_DARK, false, 0.0, Vector3(0.0, 0.0, 0.22), mat_hull_dark)
+	for side in [-1.0, 1.0]:
+		_box(Vector3(wall_len, 1.95, 0.05), Vector3(mid_x, 1.10, side * 1.45), HULL_DARK, false,
+			0.0, Vector3(0.0, side * 0.28, 0.0), mat_hull_dark)
+	# 4) 舱底：深色底板 + 三道竖向发光栅（代替同心圆靶）。
+	_box(Vector3(0.06, 1.70, 2.55), Vector3(back_x, 1.10, 0.0), INTAKE, false, 0.0, Vector3.ZERO, mat_intake)
+	_intake_material = kit.emissive(CYAN, 0.90, 0.42)
+	for z in [-0.60, 0.0, 0.60]:
+		_box(Vector3(0.05, 0.62, 0.06), Vector3(back_x - 0.05, 1.10, z), CYAN, false, 0.0, Vector3.ZERO, _intake_material)
+	# 舱内补光：没有它四面内壁会全黑，纵深读不出来。
+	var cavity := OmniLight3D.new()
+	cavity.position = Vector3(15.72, 1.10, 0.0)
+	cavity.light_color = CYAN
+	cavity.light_energy = 0.55
+	cavity.omni_range = 2.4
+	add_child(cavity)
+	# 5) 底部导流坡：视觉上把球“接住”，不参与物理。
+	_box(Vector3(1.05, 0.08, 1.45), Vector3(15.55, 0.06, 0.0), TRIM_DARK, false,
 		0.0, Vector3(0.0, 0.0, -0.08), mat_bare)
 	for z in [-0.48, 0.48]:
-		_box(Vector3(1.0, 0.012, 0.06), Vector3(15.42, 0.096, z), AMBER, false, 0.0, Vector3.ZERO, mat_amber)
-	# 接收线圈：同心圆环 + 中心灯，说明这是“能源接收设备”。
-	_mesh_node(_torus(0.78, 0.82), Vector3(16.01, 1.10, 0.0), Vector3(0.0, 0.0, PI * 0.5), mat_trim)
-	_mesh_node(_torus(0.50, 0.535), Vector3(16.01, 1.10, 0.0), Vector3(0.0, 0.0, PI * 0.5), mat_glass)
-	_mesh_node(_torus(0.24, 0.275), Vector3(16.01, 1.10, 0.0), Vector3(0.0, 0.0, PI * 0.5), mat_amber)
-	var core := CylinderMesh.new()
-	core.top_radius = 0.14
-	core.bottom_radius = 0.14
-	core.height = 0.05
-	core.radial_segments = 20
-	_mesh_node(core, Vector3(16.02, 1.10, 0.0), Vector3(0.0, 0.0, PI * 0.5), mat_glass)
-	# 上下灯槽：只保留一条，避免“发光条堆满”。
-	_intake_material = kit.emissive(CYAN, 0.90, 0.42)
+		_box(Vector3(1.0, 0.012, 0.06), Vector3(15.55, 0.106, z), AMBER, false, 0.0, Vector3.ZERO, mat_amber)
+	# 6) 吸力粒子 + 口沿灯条。
+	_build_suction()
+	# 7) 订单灯带：三层各一条，只有当前订单那层亮（默认中舱）。
+	var order_material := kit.emissive(AMBER, 0.85, 0.40)
+	for index in range(3):
+		var band_y: float = 0.45 + float(index) * 0.71
+		var strip := _box(Vector3(0.03, 0.06, 2.80), Vector3(15.14, band_y, 0.0), AMBER, false,
+			0.0, Vector3.ZERO, order_material)
+		strip.visible = index == 1
+		_order_strips.append(strip)
 	_box(Vector3(0.10, 0.08, 2.95), Vector3(15.04, 2.25, 0.0), CYAN, false, 0.0, Vector3.ZERO, _intake_material)
 	_box(Vector3(0.10, 0.08, 2.95), Vector3(15.04, 0.10, 0.0), CYAN, false, 0.0, Vector3.ZERO, _intake_material)
 	for side in [-1.0, 1.0]:
@@ -243,6 +298,40 @@ func _build_intake() -> void:
 	amber.light_energy = 0.35
 	amber.omni_range = 4.5
 	add_child(amber)
+
+
+## 吸力粒子：从口沿沿 +X 往舱内流，读作“在吸货”，而不是靶心。
+func _build_suction() -> void:
+	_suction = CPUParticles3D.new()
+	_suction.name = "IntakeSuction"
+	_suction.amount = 18
+	_suction.lifetime = 0.85
+	_suction.preprocess = 0.8
+	_suction.local_coords = false
+	_suction.emitting = true
+	_suction.position = Vector3(15.10, 1.10, 0.0)
+	_suction.direction = Vector3(1.0, 0.0, 0.0)
+	_suction.spread = 12.0
+	_suction.initial_velocity_min = 1.6
+	_suction.initial_velocity_max = 2.8
+	_suction.gravity = Vector3.ZERO
+	_suction.scale_amount_min = 1.0
+	_suction.scale_amount_max = 1.0
+	_suction.emission_shape = CPUParticles3D.EMISSION_SHAPE_BOX
+	_suction.emission_box_extents = Vector3(0.05, 1.05, 1.35)
+	var mat := StandardMaterial3D.new()
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	mat.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+	mat.vertex_color_use_as_albedo = true
+	mat.billboard_mode = BaseMaterial3D.BILLBOARD_PARTICLES
+	mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+	_suction.material_override = mat
+	_suction.color = Color("#7fe6ff")
+	var quad := QuadMesh.new()
+	quad.size = Vector2(0.06, 0.06)
+	_suction.mesh = quad
+	add_child(_suction)
 
 
 func _build_pips() -> void:

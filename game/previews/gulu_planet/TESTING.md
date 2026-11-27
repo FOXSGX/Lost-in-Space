@@ -12,6 +12,49 @@ $preview = "C:\Users\31798\Documents\GitHub\Lost-in-Space-gulu\game\previews\gul
 & $godot --path $preview                            # 试玩
 & $godot --path $preview -- --shots                 # 截图 → user://gulu_shots
 & $godot --path $preview -- --record                # 只跑演示，不录像
+& $godot --headless --path $preview -- --fx-test    # 表现层冒烟（抖动/顿帧/尘土/挤压）
+& $godot --headless --path $preview -- --order-test # 装货订单（分层 ×2 / 30 s 换单 / 复位）
+& $godot --headless --path $preview -- --pad-test   # 手柄（摇杆/RT/Start 的映射与实机路径）
+& $godot --headless --path $preview -- --result-test # 结算目标（3 条目标的判定与面板数据）
+& $godot --headless --path $preview -- --audio-test  # BGM（加载 / 循环 / 静音联动）
+& $godot --headless --path $preview -- --super-test  # 必杀槽 / 超载射门 / 被扑加速
+& $godot --headless --path $preview -- --progress-test # 挑战清单 / 三档难度 / 分档最高分 / 存档
+& $godot --headless --path $preview -- --practice-test # 三个练习关（目标计数 / 完成 / 回标题）
+& $godot --headless --path $preview -- --steal-test  # 奶龙偷球（叼走 / E 抢回 / 冷却 / 上限）
+& $godot --headless --path $preview -- --tod-test    # 时段预设（光照/雾变化 + 玩法不受影响）
+& $godot --headless --path $preview -- --records-test # 记录板（分档最高分 / 挑战 / 开关）
+& $godot --headless --path $preview -- --campaign-test # 通关结构（3 关推进 / 高台刷球 / 通关 / 重试）
+& $godot --headless --path $preview -- --counter-test # 反击（扑出后开回场地 / 3 秒窗口 / ×1.5）
+& $godot --headless --path $preview -- --touch-test   # 接球抽射（滚球更远可踢 / 球速加成）
+& $godot --headless --path $preview -- --hud-test     # HUD 分辨率自适应（1280/1600x900/1920x1080）
+& $godot --headless --path $preview -- --stage-boot-test # --stage=N 直达关卡
+& $godot --headless --path $preview -- --edge-test       # 赶路中重开 / 掉出场地 / 暂停保持
+& $godot --headless --path $preview -- --soak-test       # 随机移动/踢球/暂停/掉边压力测试
+& $godot --headless --path $preview -- --input-test      # 动作表完整性 / 同时移动+冲刺+蓄力 / 冲刺后踢球
+& $godot --headless --path $preview -- --practice-fail-test # 练习中途退出 / 超时 / 再进练习
+& $godot --headless --path $preview -- --resize-test     # 800x600 / 2560x1440 / 1024x768 HUD 缩放
+& $godot --headless --path $preview -- --focus-test      # 失焦自动暂停 / 鼠标释放 / 结束后不再暂停
+& $godot --headless --path $preview -- --ball-edge-test  # 连廊与场地边缘的球不会掉出世界
+& $godot --headless --path $preview -- --records-persist-test # 通关结算挑战 + 最高分/挑战写档读档
+& $godot --headless --path $preview -- --floor-test      # 场外场地地面碰撞 + 主门不误吃球
+```
+
+**录演示片**（23 秒，含 BGM/音效；需要开窗口，不能 headless）：
+
+```powershell
+$frames = "$env:TEMP\gulu_demo_frames"
+& $godot --path $preview --write-movie "$frames\k.png" --fixed-fps 30 -- --demo
+& 'C:\Users\31798\AppData\Local\Programs\Python\Python312\python.exe' `
+  $preview\tools\record_video.py $frames "$preview\docs\record\gulu_demo_2026-11-25.mp4" 30
+# 需要声音时再用 imageio-ffmpeg 提供的 ffmpeg 把 "$frames\k.wav" 混进去
+```
+
+**重新生成 BGM**（改了 `make_bgm.py` 之后）：
+
+```powershell
+& 'C:\Users\31798\.dsh\dsh-runtimes\dsh-primary-runtime\dependencies\python\python.exe' `
+  tools\audio\make_bgm.py assets\audio
+& $godot --headless --path $preview --import
 ```
 
 **30 fps 录像**（Movie Maker，必须开窗口，不能 headless）：

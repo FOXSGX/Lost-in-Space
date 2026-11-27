@@ -1,4 +1,4 @@
-﻿extends Node3D
+extends Node3D
 class_name MilkDragonModelVisual
 
 ## 奶龙外观（正式模型版）：assets/characters/nailong_dl.glb。
@@ -66,6 +66,17 @@ var ring_enabled := false
 var _anticipation_side := 0.0
 var _anticipation_weight := 0.0
 
+# 待机表演（P0-5）：不靠额外动画资源，用体态循环让“站着不动”也有内容。
+# 0 看球 / 1 左右张望 / 2 跺脚 / 3 伸懒腰；只在真正静止且无事件反应时播放。
+var idle_enabled := true
+var _idle_kind := 0
+var _idle_left := 3.5
+var _idle_len := 3.5
+var _idle_time := 0.0
+var _idle_yaw := 0.0
+var _idle_bob := 0.0
+var _idle_pitch := 0.0
+
 
 func _ready() -> void:
 	_build()
@@ -127,6 +138,30 @@ func play_whiff() -> void:
 
 func play_goal() -> void:
 	_start_reaction("goal", 0.95)
+
+
+## 撞击挤压（P0-2）：拦到球时整只先压扁再弹回，替代“站着不动”。
+## 只动 _facing 的缩放，不动骨骼与位置，因此不影响碰撞与拦截判定。
+func play_squash(strength: float = 1.0) -> void:
+	if _facing == null:
+		return
+	var squash: float = clampf(strength, 0.0, 1.6)
+	var target := Vector3(1.0 + 0.11 * squash, 1.0 - 0.13 * squash, 1.0 + 0.11 * squash)
+	_facing.scale = Vector3.ONE
+	var tween := create_tween()
+	tween.tween_property(_facing, "scale", target, 0.055).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	tween.tween_property(_facing, "scale", Vector3.ONE, 0.22).set_trans(Tween.TRANS_ELASTIC).set_ease(Tween.EASE_OUT)
+
+
+## 被进球后的懊恼晃身：左右摆两下，纯表现。
+func play_dejected() -> void:
+	if _facing == null:
+		return
+	var tween := create_tween()
+	for i in range(2):
+		tween.tween_property(_facing, "rotation:z", 0.06, 0.09).set_trans(Tween.TRANS_SINE)
+		tween.tween_property(_facing, "rotation:z", -0.06, 0.12).set_trans(Tween.TRANS_SINE)
+	tween.tween_property(_facing, "rotation:z", 0.0, 0.10)
 
 
 func cancel_reaction() -> void:
@@ -298,6 +333,7 @@ func _process(delta: float) -> void:
 		_reaction_t += delta
 		if _reaction_t >= _reaction_duration:
 			_reaction = ""
+	_tick_idle(delta)
 	var mouth_target := 1.0
 	if _reaction == "whiff" or _reaction == "goal":
 		mouth_target = 0.35
@@ -331,8 +367,46 @@ func _animate(delta: float) -> void:
 	_gait += _planar_speed * delta * GAIT_PER_METER
 
 
+## 待机表演循环：只看“真的静止”的状态，动作幅度都压在 2–3 cm / 6° 以内，
+## 保证它仍然是个守门员，不是在做舞蹈。
+func _tick_idle(delta: float) -> void:
+	var idle: bool = idle_enabled and _reaction == "" and _speed01 < 0.06
+	idle = idle and _block < 0.15 and _ready_weight < 0.3
+	if not idle:
+		_idle_yaw = lerpf(_idle_yaw, 0.0, 1.0 - exp(-6.0 * delta))
+		_idle_bob = lerpf(_idle_bob, 0.0, 1.0 - exp(-8.0 * delta))
+		_idle_pitch = lerpf(_idle_pitch, 0.0, 1.0 - exp(-6.0 * delta))
+		return
+	_idle_time += delta
+	_idle_left -= delta
+	if _idle_left <= 0.0:
+		_idle_kind = randi() % 4
+		_idle_len = 1.4 if _idle_kind == 2 else randf_range(4.5, 7.5)
+		_idle_left = _idle_len
+		_idle_time = 0.0
+	var p: float = clampf(_idle_time / maxf(_idle_len, 0.01), 0.0, 1.0)
+	var envelope: float = sin(p * PI)
+	_idle_yaw = 0.0
+	_idle_bob = 0.0
+	_idle_pitch = 0.0
+	match _idle_kind:
+		0:
+			# 看球：头部小幅跟随，身体几乎不动。
+			_idle_yaw = sin(_idle_time * 1.1) * 0.045
+		1:
+			# 左右张望：先看左看右，再回正。
+			_idle_yaw = sin(_idle_time * 1.7) * 0.13 * envelope
+		2:
+			# 跺脚：两次小跳，落地带回弹。
+			_idle_bob = absf(sin(_idle_time * PI * 2.4)) * 0.006 * envelope
+		3:
+			# 伸懒腰：抬头 + 轻微后仰，然后收回。
+			_idle_pitch = -0.055 * envelope
+			_idle_bob = 0.004 * envelope
+
+
 func _apply_pose() -> void:
-	var bob := 0.005 * sin(_time * 1.8) + 0.009 * absf(sin(_gait)) * _stride_blend
+	var bob := 0.005 * sin(_time * 1.8) + 0.009 * absf(sin(_gait)) * _stride_blend + _idle_bob
 	_body.position.y = bob
 	_body.position.x = sin(_gait * 0.5) * 0.012 * absf(_lateral01) * _stride_blend
 	# 预判：重心先向预判侧偏一点，玩家能从体态读出“它要扑哪边”。
@@ -367,8 +441,8 @@ func _apply_pose() -> void:
 		return
 
 	if _head_bone >= 0:
-		var yaw := clampf(_head_yaw, -0.22, 0.22)
-		var pitch := clampf(_head_pitch - 0.10 * _block, -0.12, 0.12)
+		var yaw := clampf(_head_yaw + _idle_yaw, -0.28, 0.28)
+		var pitch := clampf(_head_pitch + _idle_pitch - 0.10 * _block, -0.15, 0.15)
 		_set_bone_world_delta(_head_bone, Quaternion(Vector3.UP, yaw) * Quaternion(Vector3.RIGHT, pitch))
 		if _neck_bone >= 0:
 			_set_bone_world_delta(_neck_bone, Quaternion(Vector3.UP, yaw * 0.35))

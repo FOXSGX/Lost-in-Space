@@ -1,4 +1,4 @@
-﻿extends RigidBody3D
+extends RigidBody3D
 class_name EnergyBall
 
 ## 能源球：真正的刚体（RigidBody3D + 球形碰撞体）。
@@ -16,6 +16,9 @@ signal out_of_bounds(position: Vector3)
 
 ## 半径 0.27 m：略大于足球，近景不遮挡守门员与舱口。
 const RADIUS := 0.27
+# 场地边界（主图 ±50/±34；场外场地由 app 调大）。
+var limit_x := 50.0
+var limit_z := 34.0
 ## 单击固定力度：冲量 = 质量 × 目标初速。质量 1.2 kg → 16.0 N·s 约 13.3 m/s。
 const KICK_IMPULSE := 19.0
 
@@ -26,6 +29,7 @@ var credit_peer := 0
 var wind := Vector3.ZERO
 
 var _visual: Node3D
+var _trail: GPUParticles3D
 var _time := 0.0
 ## 物理冲量必须在本节点的物理回调里施加，否则对休眠中的刚体会被丢掉。
 var _pending_impulse := Vector3.ZERO
@@ -58,6 +62,7 @@ func _ready() -> void:
 	add_child(collider)
 
 	_build_visual()
+	_build_trail()
 	set_physics_process(true)
 
 
@@ -130,10 +135,13 @@ func _physics_process(delta: float) -> void:
 	# 侧风：持续力，只影响运动中的球；静止球不推。
 	if wind != Vector3.ZERO and not collected and not sleeping:
 		apply_central_force(wind)
+	# 拖尾：只在球真正飞起来时发射。
+	if _trail != null:
+		_trail.emitting = (not collected) and linear_velocity.length() > 6.0
 	# 只有“真的掉出世界”才算需要救援；正常停球/门边停球一律不动它。
 	# ART-SYNC-002：随地图扩到 96×64，安全边界从 ±28/±22 放宽到 ±46/±30。
 	var p := global_position
-	if p.y < -8.0 or absf(p.x) > 50.0 or absf(p.z) > 34.0:
+	if p.y < -8.0 or absf(p.x) > limit_x or absf(p.z) > limit_z:
 		out_of_bounds.emit(p)
 
 
@@ -215,6 +223,46 @@ func _build_visual() -> void:
 	glow.light_energy = 0.10
 	glow.omni_range = 1.4
 	add_child(glow)
+
+
+## 速度拖尾（P0-1）：只在高速时发射，纯表现，不参与物理与碰撞。
+## local_coords=false，粒子留在世界里形成彗尾；低速/静止/已收集时立刻停发。
+func _build_trail() -> void:
+	_trail = GPUParticles3D.new()
+	_trail.name = "SpeedTrail"
+	_trail.amount = 26
+	_trail.lifetime = 0.26
+	_trail.local_coords = false
+	_trail.emitting = false
+	_trail.visibility_aabb = AABB(Vector3(-4.0, -4.0, -4.0), Vector3(8.0, 8.0, 8.0))
+
+	var quad := QuadMesh.new()
+	quad.size = Vector2(0.20, 0.20)
+	_trail.draw_pass_1 = quad
+
+	var mat := StandardMaterial3D.new()
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	mat.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+	mat.billboard_mode = BaseMaterial3D.BILLBOARD_PARTICLES
+	mat.vertex_color_use_as_albedo = true
+	mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+	_trail.material_override = mat
+
+	var proc := ParticleProcessMaterial.new()
+	proc.gravity = Vector3.ZERO
+	proc.initial_velocity_min = 0.0
+	proc.initial_velocity_max = 0.0
+	proc.scale_min = 0.5
+	proc.scale_max = 1.0
+	var ramp := Gradient.new()
+	ramp.set_color(0, Color("#9ff2ff"))
+	ramp.set_color(1, Color(0.16, 0.62, 0.95, 0.0))
+	var ramp_tex := GradientTexture1D.new()
+	ramp_tex.gradient = ramp
+	proc.color_ramp = ramp_tex
+	_trail.process_material = proc
+	add_child(_trail)
 
 
 

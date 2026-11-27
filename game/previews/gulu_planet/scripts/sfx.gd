@@ -1,7 +1,7 @@
 extends Node
 class_name GuluSfx
 
-## 极简音效层：3 个短音，全部由 tools/audio/make_sfx.py 本地合成（无第三方素材）。
+## 极简音效层：4 个短音 + 1 条 BGM，全部由 tools/audio/*.py 本地合成（无第三方素材）。
 ## 每种音有最短间隔，避免连续触发时变成噪音。
 
 const STREAMS := {
@@ -9,6 +9,7 @@ const STREAMS := {
 	"kick": "res://assets/audio/ball_kick.wav",
 	"block": "res://assets/audio/dragon_block.wav",
 	"loaded": "res://assets/audio/fuel_loaded.wav",
+	"step": "res://assets/audio/footstep.wav",
 }
 
 const MIN_INTERVAL := {
@@ -16,6 +17,7 @@ const MIN_INTERVAL := {
 	"block": 0.35,
 	"loaded": 0.25,
 	"metal": 0.10,
+	"step": 0.16,
 }
 
 const VOLUME_DB := {
@@ -23,9 +25,19 @@ const VOLUME_DB := {
 	"block": -8.0,
 	"loaded": -6.0,
 	"metal": -10.0,
+	"step": -17.0,
 }
 
 var _players: Dictionary = {}
+## 背景音乐：40 s 无缝循环，由 tools/audio/make_bgm.py 程序化生成（无第三方素材）。
+const MUSIC_PATH := "res://assets/audio/bgm_loop.wav"
+const MUSIC_VOLUME_DB := -15.0
+var _music: AudioStreamPlayer
+## 环境底噪（风/管线低频）：一条 6 秒无缝循环，按地图调音量与音高。
+const AMB_PATH := "res://assets/audio/amb_wind.wav"
+var _amb: AudioStreamPlayer
+var _amb_pitch := 1.0
+var _amb_db := -24.0
 
 var _last_ms: Dictionary = {}
 var _duck_until := 0
@@ -50,8 +62,82 @@ func _ready() -> void:
 		_last_ms[key] = -100000
 
 
+
+## 环境底噪：地图切换时调用；pitch 与音量决定是“风”还是“管线低频”。
+func play_ambience(pitch: float, volume_db: float) -> void:
+	if muted:
+		return
+	if _amb == null:
+		if not ResourceLoader.exists(AMB_PATH):
+			return
+		var stream := load(AMB_PATH) as AudioStreamWAV
+		if stream == null:
+			return
+		stream.loop_mode = AudioStreamWAV.LOOP_FORWARD
+		stream.loop_end = stream.get_length() * stream.mix_rate
+		_amb = AudioStreamPlayer.new()
+		_amb.stream = stream
+		add_child(_amb)
+	_amb_pitch = clampf(pitch, 0.5, 2.0)
+	_amb_db = volume_db
+	_amb.pitch_scale = _amb_pitch
+	_amb.volume_db = _amb_db
+	if not _amb.playing:
+		_amb.play()
+
+
+func stop_ambience() -> void:
+	if _amb != null and _amb.playing:
+		_amb.stop()
+func setup_music() -> void:
+	if not ResourceLoader.exists(MUSIC_PATH):
+		push_warning("BGM 缺失：%s" % MUSIC_PATH)
+		return
+	var stream := load(MUSIC_PATH) as AudioStreamWAV
+	if stream == null:
+		push_warning("BGM 不是 AudioStreamWAV：%s" % MUSIC_PATH)
+		return
+	# 运行时打开循环：整段无缝，循环点就是文件首尾（生成脚本保证首尾连续）。
+	stream.loop_mode = AudioStreamWAV.LOOP_FORWARD
+	stream.loop_begin = 0
+	stream.loop_end = int(stream.get_length() * float(stream.mix_rate))
+	_music = AudioStreamPlayer.new()
+	_music.name = "Bgm"
+	_music.stream = stream
+	_music.volume_db = MUSIC_VOLUME_DB
+	add_child(_music)
+	_music.play()
+
+
+func has_music() -> bool:
+	return _music != null and _music.stream != null
+
+
+func music_playing() -> bool:
+	return _music != null and _music.playing
+
+
+func music_length() -> float:
+	if _music == null or _music.stream == null:
+		return 0.0
+	return _music.stream.get_length()
+
+
+func music_volume_db() -> float:
+	return _music.volume_db if _music != null else -200.0
+
+
 func set_muted(value: bool) -> void:
+	if value and _amb != null and _amb.playing:
+		_amb.stop()
 	muted = value
+	# 取消静音后把当前地图的环境底噪接回来（否则要等下一关才恢复）
+	if not value and _amb != null and not _amb.playing:
+		_amb.pitch_scale = _amb_pitch
+		_amb.volume_db = _amb_db
+		_amb.play()
+	if _music != null:
+		_music.volume_db = -80.0 if value else MUSIC_VOLUME_DB
 
 
 func is_muted() -> bool:

@@ -164,3 +164,17 @@ python tools\audio\make_sfx.py assets\audio
   避免卡通比例与现有写实工业风冲突。
 - 验证：自测 45/0；`tools/probe_dressing.gd` 确认所有装饰贴地且不侵入球路/出生点；
   详见 `docs/ART_PASS_2026-11-23.md`。
+
+## 13. 三图资产（2026-11-26，Blender 灯塔/装货口 + 招牌 + 环境音）
+
+| 资产 | 路径 | 来源 | 许可 |
+| --- | --- | --- | --- |
+| 灯塔（场外场地） | `assets/models/nailong/floodlight_tower.glb` | `art-source/blender/nailong/build_arena_floodlight.py`（Blender 4.5 + 仓库内 aq2kit/aqs_kit 工艺库） | 随项目；无第三方模型/贴图 |
+| 便携装货口 | `assets/models/nailong/arena_gate.glb` | `art-source/blender/nailong/build_arena_gate.py` | 随项目 |
+| 门区灯箱 / 指路牌 | `assets/textures/signs/*.png` | 本仓库 Pillow 脚本烘焙（系统微软雅黑，游戏不分发字体） | 随项目 |
+| 环境底噪 | `assets/audio/amb_wind.wav` | 本仓库脚本合成（低通噪声 + 正弦，无缝循环） | 随项目 |
+| 脚步音 | `assets/audio/footstep.wav` | 本仓库脚本合成 | 随项目 |
+| BGM | `assets/audio/bgm_loop.wav` | `tools/audio/make_bgm.py` 合成 40 s 无缝循环 | 随项目 |
+| 图标 | `icon.png` | 由第 2 关截图裁切缩放生成 | 随项目 |
+
+说明：招牌视觉参考了仓库内霜烬星（`feature/ship-and-frost-2.0`）的标识做法——深青底、暖黄描边、标题条 + 主副文案；图形与文字均为本仓库重新绘制，未复制其 PNG。

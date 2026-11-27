@@ -34,6 +34,14 @@ var _sphere: SphereShape3D
 var _contact_shadow: MeshInstance3D
 var perf_capture: bool = false
 var perf_events: Array = []
+# 打击反馈（P0-1/P0-2）：镜头抖动。只改相机呈现，不影响移动、碰撞与物理。
+var _shake_amp: float = 0.0
+var _shake_left: float = 0.0
+var _shake_len: float = 0.22
+var _shake_clock: float = 0.0
+# 走路时的轻微镜头起伏（只在真人游玩时开启；自测/截图关掉，保证眼高 1.600 不变）。
+var camera_bob_enabled: bool = false
+var _bob_phase: float = 0.0
 
 func _ready() -> void:
     perf_capture = OS.get_cmdline_user_args().has("--profile-sections")
@@ -90,6 +98,7 @@ func _physics_tick(delta: float) -> void:
         _tick_remote(delta);return
     if paused:
         return
+    _apply_joypad_look(delta)
     _camera_yaw = lerp_angle(_camera_yaw, _camera_yaw_target, 1.0 - exp(-THIRD_PERSON_ROTATION_SMOOTHNESS * delta))
     _camera_pitch = lerpf(_camera_pitch, _camera_pitch_target, 1.0 - exp(-THIRD_PERSON_ROTATION_SMOOTHNESS * delta))
     if carrying==3:
@@ -208,12 +217,49 @@ func update_camera(delta: float, snap: bool = false) -> void:
     _camera_impl(delta,snap)
     _record_cost("camera_queries",begin_us)
 
+## 打击反馈接口：amount 0..1（0.15 轻踢 / 0.3 抽射 / 0.55 扑救），duration 为衰减总时长。
+func add_camera_shake(amount: float, duration: float = 0.22) -> void:
+    if amount <= 0.0:
+        return
+    _shake_amp = clampf(maxf(_shake_amp, amount), 0.0, 1.0)
+    _shake_len = maxf(duration, 0.01)
+    _shake_left = maxf(_shake_left, duration)
+
+## 剩余抖动强度（0..1，二次衰减）；每帧只算一次，避免同一帧多个事件叠加。
+func _shake_scale(delta: float) -> float:
+    if _shake_left <= 0.0 or _shake_amp <= 0.0:
+        _shake_amp = 0.0
+        _shake_left = 0.0
+        return 0.0
+    _shake_left = maxf(_shake_left - delta, 0.0)
+    _shake_clock += delta
+    var t: float = _shake_left / _shake_len
+    if _shake_left <= 0.0:
+        _shake_amp = 0.0
+    return _shake_amp * t * t
+
 func _camera_impl(delta: float, snap: bool = false) -> void:
     var target: Vector3 = global_position + Vector3(0, 1.35, 0)
+    var shake: float = _shake_scale(delta)
     if use_first_person:
         # 与 space_player_3d.gd 的飞船第一人称完全一致：眼高 1.6 m、FOV 74、俯仰 ±1.25 rad。
         camera.global_position = global_position + Vector3(0, SHIP_EYE_HEIGHT, 0)
-        camera.global_rotation = Vector3(-_camera_pitch, _camera_yaw, 0)
+        if camera_bob_enabled:
+            var flat_speed: float = Vector2(velocity.x, velocity.z).length()
+            var amount: float = clampf(flat_speed / SPEED, 0.0, 1.0)
+            _bob_phase += delta * (6.2 + 3.0 * amount)
+            if amount > 0.02:
+                camera.global_position += Vector3(sin(_bob_phase * 0.5) * 0.010 * amount, sin(_bob_phase) * 0.020 * amount, 0.0)
+        if shake > 0.0:
+            var st: float = _shake_clock * 41.0
+            camera.global_position = global_position + Vector3(0, SHIP_EYE_HEIGHT, 0) + Vector3(
+                sin(st * 1.7) * 0.020 * shake, sin(st * 1.21) * 0.016 * shake, 0.0)
+            camera.global_rotation = Vector3(
+                -_camera_pitch + sin(st) * 0.011 * shake,
+                _camera_yaw + sin(st * 1.37 + 1.1) * 0.014 * shake,
+                sin(st * 0.87 + 0.4) * 0.007 * shake)
+        else:
+            camera.global_rotation = Vector3(-_camera_pitch, _camera_yaw, 0)
         return
     var desired: Vector3 = _third_person_camera_position(target)
     desired = get_parent().call("clamp_cave_camera_position", target, desired) as Vector3
@@ -221,6 +267,10 @@ func _camera_impl(delta: float, snap: bool = false) -> void:
     camera.global_position = camera_guard.call("position_camera", target, desired, delta, snap) as Vector3
     if camera.global_position.distance_to(target) > 0.01:
         camera.look_at(target, Vector3.UP)
+    if shake > 0.0:
+        var st3: float = _shake_clock * 44.0
+        camera.global_position += camera.global_transform.basis * Vector3(
+            sin(st3 * 1.13) * 0.030 * shake, sin(st3) * 0.026 * shake, 0.0)
     camera_guard.call("suppress_near_characters")
 
 func _resolve_camera(target: Vector3, desired: Vector3) -> Vector3:
@@ -271,6 +321,20 @@ const THIRD_PERSON_ROTATION_SMOOTHNESS : float = 24.0
 const THIRD_PERSON_CAMERA_SMOOTHNESS : float = 20.0
 const THIRD_PERSON_PITCH_MIN : float = -0.58
 const THIRD_PERSON_PITCH_MAX : float = 0.30
+
+## 手柄右摇杆视角（P0-7）：与鼠标走同一对目标量，平滑逻辑完全复用。
+const JOYPAD_LOOK_SPEED : float = 2.9
+
+func _apply_joypad_look(delta: float) -> void:
+    if not InputMap.has_action("look_left"):
+        return
+    var look: Vector2 = Input.get_vector("look_left", "look_right", "look_up", "look_down")
+    if look.length() < 0.12:
+        return
+    var pitch_min: float = -SHIP_PITCH_LIMIT if use_first_person else THIRD_PERSON_PITCH_MIN
+    var pitch_max: float = SHIP_PITCH_LIMIT if use_first_person else THIRD_PERSON_PITCH_MAX
+    _camera_yaw_target -= look.x * JOYPAD_LOOK_SPEED * delta
+    _camera_pitch_target = clampf(_camera_pitch_target + look.y * JOYPAD_LOOK_SPEED * delta, pitch_min, pitch_max)
 
 func _third_person_camera_position(target: Vector3) -> Vector3:
     var forward: Vector3 = Vector3(-sin(_camera_yaw), 0.0, -cos(_camera_yaw))
