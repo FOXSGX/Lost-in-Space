@@ -30,6 +30,8 @@ var last_credit_peer := 0
 ## 规则 = 球心从场内侧越过门口平面（x = CATCH_MIN.x），且高度/横向在门洞内。
 ## 这样门框外侧、门顶上方、球门背面都不会误判，高速也不会漏（逐帧比 x 轴）。
 var _watched: Node3D
+## 只有当前地图的主门才吃球；场外地图会把它关掉。
+var active := true
 var _prev_pos := Vector3.ZERO
 var _has_prev := false
 
@@ -85,6 +87,8 @@ func watch_ball(node: Node3D) -> void:
 
 
 func _physics_process(_delta: float) -> void:
+	if not active:
+		return
 	if _watched == null or not is_instance_valid(_watched):
 		return
 	var point: Vector3 = _watched.global_position
@@ -92,9 +96,11 @@ func _physics_process(_delta: float) -> void:
 		_prev_pos = point
 		_has_prev = true
 		return
-	var crossed := _prev_pos.x < CATCH_MIN.x and point.x >= CATCH_MIN.x
+	# 只认“从门前 4 m 内、沿门洞高度/横向穿过去”的球；否则传送/重生到远处也会被误判进球。
+	var crossed := _prev_pos.x < CATCH_MIN.x and _prev_pos.x > CATCH_MIN.x - 4.0 and point.x >= CATCH_MIN.x
 	var inside_mouth := point.y > 0.0 and point.y < CATCH_MAX.y and absf(point.z) <= CATCH_MAX.z
-	if crossed and inside_mouth and not bool(_watched.get("collected")):
+	var prev_in_mouth := _prev_pos.y > 0.0 and _prev_pos.y < CATCH_MAX.y + 0.6 and absf(_prev_pos.z) <= CATCH_MAX.z + 0.4
+	if crossed and inside_mouth and prev_in_mouth and not bool(_watched.get("collected")):
 		consume(_watched)
 	_prev_pos = point
 

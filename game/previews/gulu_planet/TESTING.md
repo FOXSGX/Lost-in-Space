@@ -33,6 +33,10 @@ $preview = "C:\Users\31798\Documents\GitHub\Lost-in-Space-gulu\game\previews\gul
 & $godot --headless --path $preview -- --input-test      # 动作表完整性 / 同时移动+冲刺+蓄力 / 冲刺后踢球
 & $godot --headless --path $preview -- --practice-fail-test # 练习中途退出 / 超时 / 再进练习
 & $godot --headless --path $preview -- --resize-test     # 800x600 / 2560x1440 / 1024x768 HUD 缩放
+& $godot --headless --path $preview -- --focus-test      # 失焦自动暂停 / 鼠标释放 / 结束后不再暂停
+& $godot --headless --path $preview -- --ball-edge-test  # 连廊与场地边缘的球不会掉出世界
+& $godot --headless --path $preview -- --records-persist-test # 通关结算挑战 + 最高分/挑战写档读档
+& $godot --headless --path $preview -- --floor-test      # 场外场地地面碰撞 + 主门不误吃球
 ```
 
 **录演示片**（23 秒，含 BGM/音效；需要开窗口，不能 headless）：

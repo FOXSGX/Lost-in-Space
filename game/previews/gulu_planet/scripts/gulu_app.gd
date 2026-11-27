@@ -422,6 +422,18 @@ func _ready() -> void:
 	elif args.has("--practice-fail-test"):
 		_automation = true
 		call_deferred("_run_practice_fail_test")
+	elif args.has("--floor-test"):
+		_automation = true
+		call_deferred("_run_floor_test")
+	elif args.has("--focus-test"):
+		_automation = true
+		call_deferred("_run_focus_test")
+	elif args.has("--ball-edge-test"):
+		_automation = true
+		call_deferred("_run_ball_edge_test")
+	elif args.has("--records-persist-test"):
+		_automation = true
+		call_deferred("_run_records_persist_test")
 	elif args.has("--resize-test"):
 		_automation = true
 		call_deferred("_run_resize_test")
@@ -556,6 +568,13 @@ func _on_countdown_finished() -> void:
 # ---------------------------------------------------------------- 暂停 / 静音
 
 ## 打开暂停：冻结整棵树（计时、物理、AI 一起停），释放鼠标给按钮。
+## 切出窗口/最小化时自动暂停：避免鼠标仍被捕获、计时继续跑。
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_APPLICATION_FOCUS_OUT or what == NOTIFICATION_WM_WINDOW_FOCUS_OUT:
+		if _round_active and not _paused and not completed:
+			_open_pause()
+
+
 func _open_pause() -> void:
 	if _paused or not _round_active or completed:
 		return
@@ -1109,6 +1128,7 @@ func _build_corridor(from: Vector3, to: Vector3, width: float, tag: String, sign
 	pad.position = Vector3(0.0, -0.13, 0.0)
 	pivot.add_child(pad)
 	var body := StaticBody3D.new()
+	body.collision_layer = 2
 	body.position = pad.position
 	var shape := CollisionShape3D.new()
 	var box := BoxShape3D.new()
@@ -1127,6 +1147,7 @@ func _build_corridor(from: Vector3, to: Vector3, width: float, tag: String, sign
 		rail.position = Vector3(side * (width * 0.5 - 0.09), 0.52, 0.0)
 		pivot.add_child(rail)
 		var rail_body := StaticBody3D.new()
+		rail_body.collision_layer = 2
 		rail_body.position = rail.position
 		var rail_shape := CollisionShape3D.new()
 		var rail_box := BoxShape3D.new()
@@ -1177,6 +1198,7 @@ func _build_corridor(from: Vector3, to: Vector3, width: float, tag: String, sign
 	roof.position = Vector3(0.0, 4.15, 0.0)
 	pivot.add_child(roof)
 	var roof_body := StaticBody3D.new()
+	roof_body.collision_layer = 2
 	roof_body.position = roof.position
 	var roof_shape := CollisionShape3D.new()
 	var roof_box := BoxShape3D.new()
@@ -1313,6 +1335,7 @@ func _add_arena_wall_piece(center: Vector3, local_pos: Vector3, size: Vector3, m
 	wall.position = center + local_pos
 	add_child(wall)
 	var body := StaticBody3D.new()
+	body.collision_layer = 2
 	body.position = wall.position
 	var shape := CollisionShape3D.new()
 	var box := BoxShape3D.new()
@@ -1335,6 +1358,7 @@ func _build_arena_floor(center: Vector3, tag: String) -> void:
 	pad.position = center + Vector3(0.0, -0.2, 0.0)
 	add_child(pad)
 	var body := StaticBody3D.new()
+	body.collision_layer = 2
 	body.name = "Body" + tag
 	body.position = pad.position
 	var shape := CollisionShape3D.new()
@@ -1386,6 +1410,7 @@ func _build_arena_floor(center: Vector3, tag: String) -> void:
 			crate.position = center + Vector3(-9.0 + fmod(index * 3.0, 4.0), 0.8, side * 7.6)
 			add_child(crate)
 			var crate_body := StaticBody3D.new()
+			crate_body.collision_layer = 2
 			crate_body.position = crate.position
 			var crate_shape := CollisionShape3D.new()
 			var crate_box := BoxShape3D.new()
@@ -1690,6 +1715,9 @@ func _apply_active_map(map_index: int) -> void:
 	for index in range(_goals.size()):
 		var node: Node = _goals[index]
 		node.set("active", index == _active_map)
+	# 主门只在第 0 张图吃球（传送/重生到 x>12.45 时不会再被误判）
+	if collector != null:
+		collector.set("active", _active_map == 0)
 	var previous_map := _active_map
 	var goal_node: Node = _goals[_active_map]
 	var center := Vector3(12.45, 0.0, 0.0)
@@ -1837,11 +1865,16 @@ func _advance_stage() -> void:
 		_set_play_enabled(false)
 		_banner_label.text = "通关！\n走过：主装卸场 → 北场 → 南场\n总分 %d · 最高分 %d · 按 R 再打一次" % [score, maxi(best_score, score)]
 		_banner.visible = true
+		var newly := evaluate_challenges()
+		var record := false
 		if best_by_tier[difficulty_tier] < score:
 			best_by_tier[difficulty_tier] = score
 			best_score = score
-			if not _automation:
-				_save_progress()
+			record = true
+		if (record or not newly.is_empty()) and not _automation:
+			_save_progress()
+		var extra := "\n新挑战 +%d" % newly.size() if not newly.is_empty() else ""
+		_banner_label.text = "通关！\n走过：主装卸场 → 北场 → 南场\n总分 %d · 最高分 %d%s\n按 R 再打一次" % [score, maxi(best_score, score), extra]
 		return
 	stage += 1
 	_stage_hud_left = 3.0
@@ -5844,6 +5877,137 @@ func _run_resize_test() -> void:
 	_layout_hud_canvas(Vector2(1280, 800))
 	print("GULU RESIZE SUMMARY passes=%d failures=%d" % [passes.size(), failures.size()])
 	get_tree().quit(0 if failures.is_empty() else 1)
+
+# ---------------------------------------------------------------- 失焦暂停 / 球卡边缘 / 记录持久化
+
+func _run_focus_test() -> void:
+	var passes: Array = []
+	var failures: Array = []
+	print("GULU FOCUS TEST start")
+	await _wait(0.5)
+	_keep_stage = false
+	reset_round()
+	await _wait(0.3)
+	_round_active = true
+	_set_play_enabled(true)
+	_check(not _paused, "starts unpaused", passes, failures)
+	_notification(Node.NOTIFICATION_APPLICATION_FOCUS_OUT)
+	await _wait(0.1)
+	_check(_paused and get_tree().paused, "focus loss pauses the game", passes, failures)
+	_check(Input.mouse_mode == Input.MOUSE_MODE_VISIBLE, "focus loss releases the mouse", passes, failures)
+	_close_pause()
+	await _wait(0.1)
+	_check(not _paused and not get_tree().paused, "closing the pause resumes", passes, failures)
+	# 通关后失焦不应再弹暂停
+	completed = true
+	_notification(Node.NOTIFICATION_APPLICATION_FOCUS_OUT)
+	await _wait(0.05)
+	_check(not _paused, "no pause after the round is over", passes, failures)
+	completed = false
+	print("GULU FOCUS SUMMARY passes=%d failures=%d" % [passes.size(), failures.size()])
+	get_tree().quit(0 if failures.is_empty() else 1)
+
+
+func _run_ball_edge_test() -> void:
+	var passes: Array = []
+	var failures: Array = []
+	print("GULU BALL EDGE TEST start")
+	await _wait(0.5)
+	_keep_stage = false
+	reset_round()
+	await _wait(0.3)
+	_round_active = true
+	_set_play_enabled(true)
+	_apply_active_map(1)
+	await _wait(0.1)
+	var spots: Array = stage_ball_spots()
+	var probes := [
+		Vector3(56.0, 0.8, 12.0),    # B→C 连廊中间
+		Vector3(43.2, 0.8, 4.2),     # 北场西侧边缘
+		Vector3(68.0, 0.8, 0.0),     # 门后
+		Vector3(56.0, 0.8, 21.0),    # 南场场地内
+	]
+	var index := 0
+	for probe in probes:
+		index += 1
+		ball.call("reset_to", probe)
+		ball.set("linear_velocity", Vector3.ZERO)
+		ball.set("sleeping", false)
+		await _wait(1.4)
+		var p := ball.global_position
+		var in_bounds := absf(p.x) <= 82.0 and absf(p.z) <= 40.0 and p.y > -8.0
+		var at_spot := false
+		for spot in spots:
+			if p.distance_to(spot as Vector3) < 2.5:
+				at_spot = true
+				break
+		_check(in_bounds or at_spot, "ball stays playable after probe %d (%s)" % [index, str(p.round())],
+			passes, failures)
+	print("GULU BALL EDGE SUMMARY passes=%d failures=%d" % [passes.size(), failures.size()])
+	get_tree().quit(0 if failures.is_empty() else 1)
+
+
+func _run_records_persist_test() -> void:
+	var passes: Array = []
+	var failures: Array = []
+	print("GULU RECORDS PERSIST TEST start")
+	await _wait(0.5)
+	# 通关结算要判定挑战并写档
+	_keep_stage = false
+	reset_round()
+	await _wait(0.3)
+	var before_done := challenges_done()
+	stage = STAGE_COUNT
+	score = 777
+	goals_this_round = 4
+	saves_this_round = 2
+	best_combo_this_round = 3
+	shots_this_round = 6
+	_advance_stage()
+	await _wait(0.1)
+	_check(campaign_done and completed, "campaign victory reached", passes, failures)
+	_check(challenges_done() >= before_done, "campaign victory evaluates challenges (%d -> %d)" % [before_done, challenges_done()],
+		passes, failures)
+	# 手动写档 -> 清空内存 -> 读档，验证真的持久化
+	best_by_tier[1] = 777
+	best_score = 777
+	challenges["first_goal"] = true
+	_save_progress()
+	best_by_tier = [0, 0, 0]
+	best_score = 0
+	challenges["first_goal"] = false
+	_load_best()
+	_check(best_by_tier[1] == 777, "best score survives a save/load round-trip (%d)" % best_by_tier[1],
+		passes, failures)
+	_check(bool(challenges.get("first_goal", false)), "challenge flags survive a save/load round-trip",
+		passes, failures)
+	print("GULU RECORDS PERSIST SUMMARY passes=%d failures=%d" % [passes.size(), failures.size()])
+	get_tree().quit(0 if failures.is_empty() else 1)
+
+## 地面碰撞探针：把球放在几个关键点，逐 0.2 s 打印高度，看它落在哪。
+func _run_floor_test() -> void:
+	var passes: Array = []
+	var failures: Array = []
+	print("GULU FLOOR TEST start")
+	await _wait(0.5)
+	_keep_stage = false
+	reset_round()
+	await _wait(0.3)
+	_round_active = true
+	_apply_active_map(1)
+	await _wait(0.1)
+	for probe in [Vector3(56.0, 0.8, 0.0), Vector3(56.0, 0.8, 5.0), Vector3(56.0, 0.8, 12.0), Vector3(56.0, 0.8, 21.0), Vector3(50.0, 0.8, -4.0)]:
+		ball.call("reset_to", probe)
+		ball.set("linear_velocity", Vector3.ZERO)
+		ball.set("sleeping", false)
+		await _wait(1.0)
+		var y := ball.global_position.y
+		_check(y > 0.15 and y < 0.9, "ball rests on the floor at %s (y=%.2f)" % [str(probe), y], passes, failures)
+		_check(not bool(ball.get("collected")), "ball is not eaten by the main gate at %s" % str(probe), passes, failures)
+	print("GULU FLOOR SUMMARY passes=%d failures=%d" % [passes.size(), failures.size()])
+	get_tree().quit(0 if failures.is_empty() else 1)
+
+
 func _count_joy_events(action: String) -> int:
 	if not InputMap.has_action(action):
 		return 0
