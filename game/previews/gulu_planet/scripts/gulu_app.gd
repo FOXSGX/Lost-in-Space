@@ -261,6 +261,7 @@ var _active_map := 0
 var _map_card: Label
 var _route_label: RichTextLabel
 var _travel_label: Label
+var _travel_arrow: MeshInstance3D
 var _arena_kit: GuluArtKit
 var _arena_mats: Dictionary = {}
 ## 关卡之间的“走过去”：清关后不瞬移，玩家沿连廊走到下一块场地才开始下一关。
@@ -1845,12 +1846,25 @@ func _update_travel_hud() -> void:
 		return
 	if not _travel_pending or player == null:
 		_travel_label.visible = false
+		if _travel_arrow != null:
+			_travel_arrow.visible = false
 		return
 	var next_name := str(stage_config(stage + 1)["name"])
 	var dist := player.global_position.distance_to(_travel_target)
 	var hint := _compass_hint(_travel_target)
 	_travel_label.visible = true
+	if _travel_arrow != null:
+		_travel_arrow.visible = true
 	_travel_label.text = "前往 %s　%s　%.0f m" % [next_name, hint, dist]
+	if _travel_arrow != null:
+		var to_target := _travel_target - player.global_position
+		to_target.y = 0.0
+		var flat := Vector2(to_target.x, to_target.z)
+		if flat.length() > 1.5:
+			var dir := Vector2(flat.x, flat.y).normalized()
+			var ahead := player.global_position + Vector3(dir.x, 0.0, dir.y) * 2.0
+			_travel_arrow.global_position = Vector3(ahead.x, 0.06, ahead.z)
+			_travel_arrow.rotation.y = atan2(dir.x, dir.y)
 func _update_travel() -> void:
 	if not _travel_pending or player == null:
 		return
@@ -1936,6 +1950,16 @@ func _build_collector() -> void:
 	collector.connect("fuel_collected", _on_goal_scored)
 
 
+
+## 只有“测试/截图/录像/调试”参数才关掉走路镜头起伏；
+## 用 --stage=N 正常启动时要保留手感。
+func _args_are_automation(args: PackedStringArray) -> bool:
+	for arg in args:
+		if arg.begins_with("--selftest") or arg.ends_with("-test") or arg == "--art-shots" \
+			or arg == "--ui-shots" or arg.begins_with("--demo") or arg.begins_with("--look=") \
+			or arg == "--icon-shot" or arg == "--probe-map":
+			return true
+	return false
 func _spawn_player() -> void:
 	actors = {}
 	player = load("res://scripts/station_player.gd").new() as CharacterBody3D
@@ -1945,7 +1969,7 @@ func _spawn_player() -> void:
 	actors[1] = player
 	player.set("use_first_person", true)
 	# 真实启动（无命令行参数）才开走路镜头起伏；测试/截图/录像保持静止基线。
-	player.set("camera_bob_enabled", OS.get_cmdline_user_args().is_empty())
+	player.set("camera_bob_enabled", not _args_are_automation(OS.get_cmdline_user_args()))
 	(player.get("visual") as Node3D).visible = false
 	player.call("update_camera", 1.0, true)
 	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
@@ -2245,6 +2269,21 @@ func _build_hud() -> void:
 	_travel_label.add_theme_color_override("font_outline_color", Color(0.02, 0.05, 0.06, 0.9))
 	_travel_label.visible = false
 	_hud_canvas.add_child(_travel_label)
+
+	_travel_arrow = MeshInstance3D.new()
+	var arrow_mesh := QuadMesh.new()
+	arrow_mesh.size = Vector2(2.2, 2.2)
+	_travel_arrow.mesh = arrow_mesh
+	var arrow_mat := StandardMaterial3D.new()
+	arrow_mat.albedo_texture = load("res://assets/textures/signs/floor_arrow.png")
+	arrow_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	arrow_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	arrow_mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+	_travel_arrow.material_override = arrow_mat
+	_travel_arrow.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	_travel_arrow.rotation.x = -PI * 0.5
+	_travel_arrow.visible = false
+	add_child(_travel_arrow)
 
 	_route_label.position = Vector2(24, 744)
 	_route_label.size = Vector2(720, 34)
@@ -3505,7 +3544,7 @@ func reset_round() -> void:
 		player.set("_camera_yaw_target", yaw)
 	player.set("use_first_person", true)
 	# 真实启动（无命令行参数）才开走路镜头起伏；测试/截图/录像保持静止基线。
-	player.set("camera_bob_enabled", OS.get_cmdline_user_args().is_empty())
+	player.set("camera_bob_enabled", not _args_are_automation(OS.get_cmdline_user_args()))
 	(player.get("visual") as Node3D).visible = false
 	player.call("update_camera", 1.0, true)
 	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
@@ -5825,6 +5864,7 @@ func _run_input_test() -> void:
 		"player still moves while sprinting and charging", passes, failures)
 	_check(is_finite(player.global_position.x), "player position stays finite", passes, failures)
 	_check(not _paused and not get_tree().paused, "no accidental pause from input combos", passes, failures)
+	_check(not bool(player.get("camera_bob_enabled")), "automation runs keep camera bob off", passes, failures)
 	# 冲刺后立刻踢球：先把球放到脚边，保证不是“太远”被拒
 	var fwd := -player.global_transform.basis.z
 	fwd.y = 0.0
