@@ -416,6 +416,15 @@ func _ready() -> void:
 	elif args.has("--stage-boot-test"):
 		_automation = true
 		call_deferred("_run_stage_boot_test")
+	elif args.has("--input-test"):
+		_automation = true
+		call_deferred("_run_input_test")
+	elif args.has("--practice-fail-test"):
+		_automation = true
+		call_deferred("_run_practice_fail_test")
+	elif args.has("--resize-test"):
+		_automation = true
+		call_deferred("_run_resize_test")
 	elif args.has("--soak-test"):
 		_automation = true
 		call_deferred("_run_soak_test")
@@ -5739,6 +5748,101 @@ func _run_soak_test() -> void:
 		passes, failures)
 	_check(recoveries > 0, "fall recovery exercised %d times" % recoveries, passes, failures)
 	print("GULU SOAK SUMMARY passes=%d failures=%d" % [passes.size(), failures.size()])
+	get_tree().quit(0 if failures.is_empty() else 1)
+
+# ---------------------------------------------------------------- 输入并发 / 练习失败 / 窗口尺寸
+
+func _run_input_test() -> void:
+	var passes: Array = []
+	var failures: Array = []
+	print("GULU INPUT TEST start")
+	await _wait(0.5)
+	_keep_stage = false
+	reset_round()
+	await _wait(0.3)
+	_round_active = true
+	_set_play_enabled(true)
+	var expected := ["move_left", "move_right", "move_up", "move_down", "sprint", "release_mouse", "inspect_first_person", "brace", "retrieve", "capture_mouse"]
+	var missing: Array = []
+	for action in expected:
+		if not InputMap.has_action(action):
+			missing.append(action)
+	_check(missing.is_empty(), "all expected actions are registered (%s)" % ",".join(missing), passes, failures)
+	var start_pos := player.global_position
+	# 同时按住前进 + 冲刺 + 蓄力（真实玩家会这么干）
+	Input.action_press("move_up")
+	Input.action_press("sprint")
+	_charging = true
+	_charge = 0.6
+	await _wait(0.35)
+	Input.action_release("move_up")
+	Input.action_release("sprint")
+	_charging = false
+	await _wait(0.25)
+	_check(player.global_position.distance_to(start_pos) > 0.3,
+		"player still moves while sprinting and charging", passes, failures)
+	_check(is_finite(player.global_position.x), "player position stays finite", passes, failures)
+	_check(not _paused and not get_tree().paused, "no accidental pause from input combos", passes, failures)
+	# 冲刺后立刻踢球：先把球放到脚边，保证不是“太远”被拒
+	var fwd := -player.global_transform.basis.z
+	fwd.y = 0.0
+	fwd = fwd.normalized()
+	if ball != null:
+		ball.call("reset_to", player.global_position + fwd * 1.2)
+	await _wait(0.1)
+	var kicked := _try_kick(1.0)
+	_check(kicked or not _round_active, "kick works right after sprinting", passes, failures)
+	await _wait(0.2)
+	_check(ball != null and is_finite(ball.global_position.x), "ball stays valid after the sprint kick", passes, failures)
+	print("GULU INPUT SUMMARY passes=%d failures=%d" % [passes.size(), failures.size()])
+	get_tree().quit(0 if failures.is_empty() else 1)
+
+
+func _run_practice_fail_test() -> void:
+	var passes: Array = []
+	var failures: Array = []
+	print("GULU PRACTICE FAIL TEST start")
+	await _wait(0.5)
+	# 1) 中途退出
+	start_practice(1)
+	await _wait(0.6)
+	_round_active = true
+	_exit_practice()
+	await _wait(0.2)
+	_check(practice_mode == 0 and not _round_active, "quitting a drill returns to the title", passes, failures)
+	# 2) 时间到
+	start_practice(2)
+	await _wait(0.6)
+	_round_active = true
+	round_time_left = 0.2
+	await _wait(0.6)
+	_check(practice_mode == 0 or completed, "drill timeout is handled (mode=%d completed=%s)" % [practice_mode, str(completed)],
+		passes, failures)
+	_check(_banner.visible or not _round_active, "drill timeout shows banner or leaves the round", passes, failures)
+	# 3) 时间到之后还能再进练习
+	start_practice(3)
+	await _wait(0.6)
+	_check(practice_mode == 3 and _round_active, "a new drill starts after a timeout", passes, failures)
+	print("GULU PRACTICE FAIL SUMMARY passes=%d failures=%d" % [passes.size(), failures.size()])
+	get_tree().quit(0 if failures.is_empty() else 1)
+
+
+func _run_resize_test() -> void:
+	var passes: Array = []
+	var failures: Array = []
+	print("GULU RESIZE TEST start")
+	await _wait(0.4)
+	_layout_hud_canvas(Vector2(800, 600))
+	_check(absf(_hud_canvas.scale.x - 0.625) < 0.001 and absf(_hud_canvas.position.y - 50.0) < 0.5,
+		"800x600 letterboxes the HUD (scale=%.3f y=%.1f)" % [_hud_canvas.scale.x, _hud_canvas.position.y], passes, failures)
+	_layout_hud_canvas(Vector2(2560, 1440))
+	_check(absf(_hud_canvas.scale.x - 1.8) < 0.001 and absf(_hud_canvas.position.x - 128.0) < 0.5,
+		"2560x1440 scales and centres (scale=%.3f x=%.1f)" % [_hud_canvas.scale.x, _hud_canvas.position.x], passes, failures)
+	_layout_hud_canvas(Vector2(1024, 768))
+	_check(absf(_hud_canvas.scale.x - 0.8) < 0.001 and absf(_hud_canvas.position.y - 64.0) < 0.5,
+		"1024x768 keeps the aspect (scale=%.3f y=%.1f)" % [_hud_canvas.scale.x, _hud_canvas.position.y], passes, failures)
+	_layout_hud_canvas(Vector2(1280, 800))
+	print("GULU RESIZE SUMMARY passes=%d failures=%d" % [passes.size(), failures.size()])
 	get_tree().quit(0 if failures.is_empty() else 1)
 func _count_joy_events(action: String) -> int:
 	if not InputMap.has_action(action):

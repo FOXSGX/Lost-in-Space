@@ -30,6 +30,9 @@ $preview = "C:\Users\31798\Documents\GitHub\Lost-in-Space-gulu\game\previews\gul
 & $godot --headless --path $preview -- --stage-boot-test # --stage=N 直达关卡
 & $godot --headless --path $preview -- --edge-test       # 赶路中重开 / 掉出场地 / 暂停保持
 & $godot --headless --path $preview -- --soak-test       # 随机移动/踢球/暂停/掉边压力测试
+& $godot --headless --path $preview -- --input-test      # 动作表完整性 / 同时移动+冲刺+蓄力 / 冲刺后踢球
+& $godot --headless --path $preview -- --practice-fail-test # 练习中途退出 / 超时 / 再进练习
+& $godot --headless --path $preview -- --resize-test     # 800x600 / 2560x1440 / 1024x768 HUD 缩放
 ```
 
 **录演示片**（23 秒，含 BGM/音效；需要开窗口，不能 headless）：
