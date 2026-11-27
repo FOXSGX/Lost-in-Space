@@ -1037,9 +1037,9 @@ func arena_spawn(arena: int) -> Dictionary:
 func arena_ball_spots(arena: int) -> Array:
 	match arena:
 		1:
-			return [Vector3(48.0, 0.0, 0.0), Vector3(50.0, 0.0, 2.5), Vector3(50.0, 0.0, -2.5)]
+			return [Vector3(50.0, 0.0, 0.0), Vector3(52.0, 0.0, 2.5), Vector3(52.0, 0.0, -2.5)]
 		2:
-			return [Vector3(48.0, 0.0, 26.0), Vector3(50.0, 0.0, 28.5), Vector3(50.0, 0.0, 23.5)]
+			return [Vector3(50.0, 0.0, 26.0), Vector3(52.0, 0.0, 28.5), Vector3(52.0, 0.0, 23.5)]
 		_:
 			return BALL_SPOTS
 
@@ -6005,7 +6005,13 @@ func _run_floor_test() -> void:
 	_round_active = true
 	_apply_active_map(1)
 	await _wait(0.1)
-	for probe in [Vector3(56.0, 0.8, 0.0), Vector3(56.0, 0.8, 5.0), Vector3(56.0, 0.8, 12.0), Vector3(56.0, 0.8, 21.0), Vector3(50.0, 0.8, -4.0)]:
+	var probes: Array = []
+	for spot in arena_ball_spots(1):
+		probes.append(spot)
+	for spot in arena_ball_spots(2):
+		probes.append(spot)
+	probes.append(Vector3(56.0, 0.8, 5.0))
+	for probe in probes:
 		ball.call("reset_to", probe)
 		ball.set("linear_velocity", Vector3.ZERO)
 		ball.set("sleeping", false)
