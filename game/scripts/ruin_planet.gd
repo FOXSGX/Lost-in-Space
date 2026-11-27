@@ -6,18 +6,15 @@ class_name RuinPlanet
 # 沿用霜烬星的范式：所有几何由代码生成，不引用外部美术资源；
 # 沿用 frost_field_interactions.gd 的模块化接口，由 Main3D 持有并驱动。
 #
-# 视角与归航号主舱一致：眼睛高度、鼠标环视、准星近战。
+# 视角与归航号主舱一致：眼睛高度、鼠标环视、探索交互。
 # 美术使用 ruin_cartoon_art.gd 的奶油白/青蓝/暖橙调色板与倒角网格。
 #
-# 本模块只负责「星球内容」：建筑外壳、食物点、感染体与噪音规则。
+# 本模块只负责「星球内容」：建筑外壳、食物点与探索规则。
 # 建筑内部子地图不在本轮范围内，只保留 enter_building() 入口。
 #
-# 设计要点：这一关的环境压力不是温度而是声音。
-# 「噪音吸引感染体」直接复用 SpaceEnemy3D 已有的 lure 机制，
-# 所以不需要另写一套敌人 AI。
 
-# 腐墟星用自己的感染体脚本（三种丧尸造型）；霜烬星仍然用 enemy_3d.tscn，互不影响。
-const RUIN_INFECTED := preload("res://scripts/ruin_infected_3d.gd")
+
+
 # 废弃超市的外形单独成一个模块；医院和学校仍走下面的通用方盒流程。
 const RUIN_MARKET := preload("res://scripts/ruin_market_building.gd")
 # 医院也有自己的外形模块：四层病房楼 + 两层门诊翼 + 急救车雨棚。
@@ -29,12 +26,12 @@ const RUIN_MARKET_INTERIOR := preload("res://scripts/ruin_market_interior.gd")
 const RUIN_SHELTER_INTERIOR := preload("res://scripts/ruin_shelter_interior.gd")
 # 与归航号主舱一致的精致卡通语言：奶油白、青蓝、暖橙、鼠尾草绿。
 const ART := preload("res://scripts/ruin_cartoon_art.gd")
+const SURFACE := preload("res://scripts/ruin_surface_lib.gd")
+const ATMOSPHERE := preload("res://scripts/core/art_atmosphere_kit.gd")
+const PHYSICAL := preload("res://scripts/core/physical_link_kit.gd")
 const RUIN_HUD := preload("res://scripts/ruin_hud_3d.gd")
 
-# 第一人称近战：以准星为中心的一个窄锥。距离和角度都比俯视版更紧，
-# 因为镜头在眼睛高度，玩家能明确看到自己是否对准。
-const MELEE_RANGE := 3.2
-const MELEE_MIN_DOT := 0.55
+
 const PLAYER_EYE_HEIGHT := 1.62
 # 返航登陆艇的范围与交互半径。
 const PAD_RADIUS := 4.2
@@ -43,6 +40,7 @@ const PAD_PROMPT_RADIUS := 5.2
 const OBJECTIVE_FOOD := 3
 const OBJECTIVE_BUILDINGS := 3
 const EXTRACTION_HOLD := 3.0
+const ENERGY_WHEEL_STEP := 0.25
 
 # ── 布局 ──
 # 建筑只做外壳：体块 + 招牌 + 门口交互点。内部子地图留待下一轮。
@@ -66,20 +64,25 @@ const HOSPITAL_QUEST_ITEMS := {
     "energy_access_card": "能源站门禁卡",
 }
 const NAVIGATION_QUEST_ITEMS := {
-    "school_observation_data": "天文观测数据",
     "market_navigation_module": "民用导航模块",
 }
 const ALL_QUEST_ITEMS := {
     "patient_records": "镇静实验病历",
     "coolant_stabilizer": "低温稳定剂",
     "energy_access_card": "能源站门禁卡",
-    "school_observation_data": "天文观测数据",
     "market_navigation_module": "民用导航模块",
-    "reactor_core": "反应堆启动核心",
+    "reactor_core": "星髓点火芯",
+}
+const QUEST_ITEM_LOCATIONS := {
+    "patient_records": "医院 2F 观察室",
+    "coolant_stabilizer": "医院 B1 药库",
+    "energy_access_card": "医院 1F 保安室",
+    "market_navigation_module": "超市 2F 办公室",
+    "reactor_core": "能源站 B2 应急舱",
 }
 
 # ── 食物与物资 ──
-# 设计意图：物资都刷在「会发出声音的地方」，翻找会产生噪音脉冲。
+# 设计意图：物资分散在废墟建筑里，翻找后回登陆艇撤离。
 const FOOD_SITES := [
     {"id": "food_a", "name": "翻倒的货架", "kind": "canned", "position": Vector2(-12.0, -14.0)},
     {"id": "food_b", "name": "自动售货机", "kind": "water", "position": Vector2(0.0, 12.5)},
@@ -91,43 +94,25 @@ const FOOD_SEARCH_RADIUS := 2.8
 const FOOD_SEARCH_TIME := 1.6
 
 # ── 环境补光 ──
-# 白天场景不再需要暗紫补光；只在广场和两栋主建筑门前留几盏暖色低强度补光，
-# 把人物与建筑从地面里"托"出来，不承担主照明。
+# 指南的五层布光：主光（唯一阴影）→ 补光 → 轮廓光 → 掠射光 → 可见灯具的实用光。
+# 补光只负责把背光面从死黑里托起来，不承担造型。
 const FILL_LIGHTS := [
-    {"position": Vector3(0.0, 5.0, 8.0), "energy": 1.1, "range": 24.0, "color": Color("#ffd9a4")},
-    {"position": Vector3(-40.0, 4.0, -14.0), "energy": 0.7, "range": 18.0, "color": Color("#ffd9a4")},
-    {"position": Vector3(40.0, 4.0, -18.0), "energy": 0.7, "range": 18.0, "color": Color("#ffd9a4")},
-    {"position": Vector3(-62.0, 3.5, 8.0), "energy": 0.6, "range": 16.0, "color": Color("#ffd9a4")},
-    # 东侧图书馆与南侧能源站各留一盏，避免大块空地在逆光时读成一片。
-    {"position": Vector3(64.0, 3.5, 16.0), "energy": 0.6, "range": 16.0, "color": Color("#ffd9a4")},
-    {"position": Vector3(2.0, 3.5, -36.0), "energy": 0.6, "range": 16.0, "color": Color("#ffd9a4")},
+    {"position": Vector3(0.0, 5.0, 8.0), "energy": 0.70, "range": 26.0, "color": Color("#e2c99f")},
+    {"position": Vector3(-40.0, 4.0, -14.0), "energy": 0.50, "range": 20.0, "color": Color("#e2c99f")},
+    {"position": Vector3(40.0, 4.0, -18.0), "energy": 0.50, "range": 20.0, "color": Color("#e2c99f")},
+    {"position": Vector3(-62.0, 3.5, 8.0), "energy": 0.40, "range": 16.0, "color": Color("#e2c99f")},
+    {"position": Vector3(64.0, 3.5, 16.0), "energy": 0.40, "range": 16.0, "color": Color("#e2c99f")},
+    {"position": Vector3(2.0, 3.5, -36.0), "energy": 0.50, "range": 18.0, "color": Color("#e2c99f")},
+    {"position": Vector3(46.0, 3.5, 30.0), "energy": 0.60, "range": 18.0, "color": Color("#e2c99f")},
 ]
 
-# ── 噪音 ──
-const NOISE_MAX := 1.0
-const NOISE_DECAY := 0.30
-const NOISE_SPRINT_PER_SEC := 0.45
-const NOISE_ATTACK := 0.25
-const NOISE_SEARCH := 0.60
-const NOISE_SCAN := 1.00
-const NOISE_VISIBLE_THRESHOLD := 0.05
-
-# ── 感染体 ──
-# 刷新规则：落地不再一次性放三只，改成按时间随机补充。
-# 目标是"不要太高也不要太低"：单人场上稳定在 3 只左右，
-# 打掉一只之后还要等十几秒才会补上，中间留出安静潜行的空档。
-const ZOMBIE_CAP_BASE := 3                        # 单人上限，每多一名玩家 +1
-const ZOMBIE_FIRST_DELAY := Vector2(7.0, 11.0)    # 落地后第一只出现的时间窗
-const ZOMBIE_SPAWN_INTERVAL := Vector2(15.0, 22.0)  # 之后的补充间隔
-const ZOMBIE_SPAWN_MIN_DISTANCE := 18.0           # 离所有玩家至少这么远
-const ZOMBIE_SPAWN_RETRY_DISTANCE := 10.0         # 找不到落点时放宽到这个距离
-const ZOMBIE_SPAWN_EDGE_MARGIN := 4.0             # 离地图边缘
-const ZOMBIE_LISTEN_RADIUS := 46.0
-# 三种造型按 2:1:1 装袋后洗牌抽取，避免连着刷同一种。
-const ZOMBIE_FORM_BAG := [0, 0, 1, 2]
-# 感染体状态的广播间隔：只在需要新建/删除/改血量时才有用，
-# 位置由 SpaceEnemy3D 自己的 sync_transform 平滑同步，不走这条通道。
-const ENEMY_SYNC_INTERVAL := 0.8
+# 掠射光：窄角、贴墙 10–20° 擦面，在 GL 没有 SSAO 的情况下把墙板缝、肋柱与岩石层理打出立体。
+const GRAZE_LIGHTS := [
+    {"position": Vector3(-38.0, 3.2, -9.0), "target": Vector3(-40.0, 2.2, -16.5), "energy": 2.0, "range": 18.0, "angle": 34.0, "color": Color("#b9c6bf")},
+    {"position": Vector3(38.0, 3.4, -12.0), "target": Vector3(40.0, 2.4, -20.5), "energy": 2.0, "range": 18.0, "angle": 34.0, "color": Color("#b9c6bf")},
+    {"position": Vector3(-62.0, 3.0, 26.0), "target": Vector3(-62.0, 2.0, 9.0), "energy": 1.8, "range": 16.0, "angle": 34.0, "color": Color("#b9c6bf")},
+    {"position": Vector3(2.0, 3.6, -30.0), "target": Vector3(2.0, 1.6, -42.0), "energy": 2.2, "range": 18.0, "angle": 32.0, "color": Color("#d8c3a0")},
+]
 
 # ── 独立世界 ──
 # 腐墟星用的是自己的世界根：登陆时把霜烬星的世界根整体隐藏，
@@ -147,8 +132,6 @@ var school_interior: Node3D
 var market_interior: Node3D
 var shelter_interior: Node3D
 var food_sites: Dictionary = {}
-var zombies: Dictionary = {}
-var noise: Dictionary = {}
 var taken_food: Array[String] = []
 var discovered_buildings: Array[String] = []
 var unlocked_buildings: Array[String] = []
@@ -159,14 +142,11 @@ var story_stage := "start"
 var story_timer := 0.0
 var story_ending := ""
 var _story_return_timer := -1.0
+# 每名玩家最近进入的室内入口/最低层；主机用来兜底“掉出地板”。
+var _interior_anchors: Dictionary = {}
 var search_jobs: Dictionary = {}
 var force_jobs: Dictionary = {}
 var pending_message := ""
-var next_zombie_id := 1
-var _spawn_timer := 0.0
-var _sync_timer := 0.0
-var _spawn_rng := RandomNumberGenerator.new()
-var _form_bag: Array = []
 var _environment: Environment
 var _hospital_environment: Environment
 var _energy_environment: Environment
@@ -175,6 +155,11 @@ var _market_environment: Environment
 var _shelter_environment: Environment
 var _pad_active_ring: MeshInstance3D
 var _pad_lights: Array[MeshInstance3D] = []
+var _link_flow: ShaderMaterial
+var _link_lamps: Array[StandardMaterial3D] = []
+var _link_state := ""
+var _pad_dial: Node3D
+var _pad_dial_value := -1.0
 var _time := 0.0
 var _floor_serial := 0
 
@@ -199,25 +184,22 @@ func build() -> void:
     _build_landing_pad()
     _build_street_dressing()
     _build_ground_scatter()
+    _build_street_details()
+    _build_atmosphere()
+    _build_physical_links()
     _build_horizon()
     _cull_thin_shadow_casters()
     _build_hud()
-    # 不再一次性刷三只：落地后先随机等一会儿，之后逐只出现。
-    _spawn_timer = _spawn_rng.randf_range(ZOMBIE_FIRST_DELAY.x, ZOMBIE_FIRST_DELAY.y)
 
 
 func reset() -> void:
-    # 建筑、物资和感染体全部挂在 world_root 下（感染体除外，见 _spawn_zombies），
-    # 所以释放根节点就能连带清空，不需要逐个遍历。
+    # 建筑、物资和世界物件全部挂在 world_root 下，释放根节点即可清空。
     if is_instance_valid(world_root):
         world_root.queue_free()
     world_root = null
     if is_instance_valid(hud):
         hud.queue_free()
     hud = null
-    for zombie in zombies.values():
-        if is_instance_valid(zombie):
-            zombie.queue_free()
     buildings.clear()
     hospital_interior = null
     energy_station_interior = null
@@ -231,57 +213,43 @@ func reset() -> void:
     story_ending = ""
     _story_return_timer = -1.0
     food_sites.clear()
-    zombies.clear()
-    noise.clear()
     taken_food.clear()
     discovered_buildings.clear()
     unlocked_buildings.clear()
     quest_items.clear()
     search_jobs.clear()
     force_jobs.clear()
-    next_zombie_id = 1
-    _spawn_timer = 0.0
-    _sync_timer = 0.0
-    _form_bag.clear()
+    _interior_anchors.clear()
     _pad_active_ring = null
     _pad_lights.clear()
-    _spawn_rng.randomize()
+    _link_flow = null
+    _link_lamps.clear()
+    _link_state = ""
+    _pad_dial = null
+    _pad_dial_value = -1.0
     _environment = null
     _time = 0.0
 
 
 func clear_run() -> void:
-    # 返航时清掉本局感染者与噪音，保留建筑/物资的发现状态。
-    # 下一次登陆会重新从登陆艇开始，不会在主舱里看到残留的感染体。
-    for zombie in zombies.values():
-        if is_instance_valid(zombie):
-            zombie.queue_free()
-    zombies.clear()
-    noise.clear()
+    # 返航时清掉本局临时状态，保留建筑/物资的发现状态。
     search_jobs.clear()
     force_jobs.clear()
-    _spawn_timer = _spawn_rng.randf_range(ZOMBIE_FIRST_DELAY.x, ZOMBIE_FIRST_DELAY.y)
-    _sync_timer = 0.0
+    _interior_anchors.clear()
 
 
 ## 再次登陆时重置一局目标，但保留已经建好的世界几何。
 func reset_run() -> void:
-    for zombie in zombies.values():
-        if is_instance_valid(zombie):
-            zombie.queue_free()
-    zombies.clear()
-    noise.clear()
     search_jobs.clear()
     taken_food.clear()
     discovered_buildings.clear()
     unlocked_buildings.clear()
     force_jobs.clear()
+    _interior_anchors.clear()
     _refresh_locks()
     for site in food_sites.values():
         if is_instance_valid(site.get("ring")):
             (site.ring as MeshInstance3D).visible = true
-    _spawn_timer = _spawn_rng.randf_range(ZOMBIE_FIRST_DELAY.x, ZOMBIE_FIRST_DELAY.y)
-    _sync_timer = 0.0
 
 
 # ── 构建 ──
@@ -293,12 +261,12 @@ func _build_scaffold() -> void:
     world_root.name = "RuinWorld3D"
     controller.add_child(world_root)
 
-    # 阴天废城：天空、雾和主光全部压低；保留冷青灰和脏暖色的对比。
+    # 傍晚阴天：天空、雾和主光保持低天光，但环境光按指南 GL 基线托到能读出结构。
     var sky_material := ProceduralSkyMaterial.new()
-    sky_material.sky_top_color = Color("#334449")
-    sky_material.sky_horizon_color = Color("#8c8777")
-    sky_material.sky_curve = 0.42
-    sky_material.ground_bottom_color = Color("#30332e")
+    sky_material.sky_top_color = Color("#2f3f45")
+    sky_material.sky_horizon_color = Color("#7d7f74")
+    sky_material.sky_curve = 0.50
+    sky_material.ground_bottom_color = Color("#2a2b26")
     sky_material.ground_horizon_color = Color("#56574b")
     sky_material.sun_angle_max = 10.0
     sky_material.sun_curve = 0.08
@@ -309,71 +277,77 @@ func _build_scaffold() -> void:
     env.background_mode = Environment.BG_SKY
     env.sky = sky
     env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-    env.ambient_light_color = Color("#6d7975")
-    env.ambient_light_energy = 0.34
+    env.ambient_light_color = Color("#7d8a82")
+    env.ambient_light_energy = 1.55
     env.reflected_light_source = Environment.REFLECTION_SOURCE_SKY
     env.fog_enabled = true
-    env.fog_light_color = Color("#707970")
-    env.fog_light_energy = 0.42
-    env.fog_density = 0.0085
-    env.fog_sky_affect = 0.18
+    env.fog_light_color = Color("#707a72")
+    env.fog_light_energy = 0.45
+    env.fog_density = 0.0055
+    env.fog_sky_affect = 0.22
     env.glow_enabled = true
-    env.glow_intensity = 0.05
-    env.glow_hdr_threshold = 1.5
+    env.glow_intensity = 0.06
+    env.glow_hdr_threshold = 1.3
     env.tonemap_mode = Environment.TONE_MAPPER_ACES
-    env.tonemap_exposure = 0.69
-    env.tonemap_white = 0.98
+    env.tonemap_exposure = 0.92
+    env.tonemap_white = 1.0
     env.adjustment_enabled = true
-    env.adjustment_brightness = 0.96
-    env.adjustment_saturation = 0.82
-    env.adjustment_contrast = 1.14
+    env.adjustment_brightness = 0.98
+    env.adjustment_saturation = 0.86
+    env.adjustment_contrast = 1.12
+    # gl_compatibility 基线：显式关闭 GL 下不存在的屏幕空间效果，避免换渲染器后跑偏。
+    env.ssr_enabled = false
+    env.ssil_enabled = false
+    env.volumetric_fog_enabled = false
+    env.sdfgi_enabled = false
+    env.ssao_enabled = false
     _environment = env
     # 室内单独一层相机环境：天光仍很暗，但补一点灰绿色环境光，
     # 避免医院病房在没有吊灯的角落彻底死黑。
     var hospital_env := env.duplicate(true) as Environment
     hospital_env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-    hospital_env.ambient_light_color = Color("#7f857b")
-    hospital_env.ambient_light_energy = 0.52
-    hospital_env.tonemap_exposure = 0.78
-    hospital_env.adjustment_saturation = 0.78
-    hospital_env.fog_density = 0.006
+    hospital_env.ambient_light_color = Color("#8a8f84")
+    hospital_env.ambient_light_energy = 0.45
+    hospital_env.tonemap_exposure = 0.88
+    hospital_env.adjustment_saturation = 0.82
+    hospital_env.fog_density = 0.0045
     _hospital_environment = hospital_env
     # 能源站更工业：青绿环境光、略高的对比，保留橙色应急灯。
     var energy_env := env.duplicate(true) as Environment
     energy_env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-    energy_env.ambient_light_color = Color("#71847d")
-    energy_env.ambient_light_energy = 0.72
-    energy_env.tonemap_exposure = 0.82
-    energy_env.adjustment_saturation = 0.76
-    energy_env.adjustment_contrast = 1.18
-    energy_env.fog_density = 0.005
+    energy_env.ambient_light_color = Color("#7f938c")
+    energy_env.ambient_light_energy = 0.55
+    energy_env.tonemap_exposure = 0.90
+    energy_env.adjustment_saturation = 0.80
+    energy_env.adjustment_contrast = 1.16
+    energy_env.fog_density = 0.0040
     _energy_environment = energy_env
     # 学校：旧荧光灯、灰尘和奶油色墙面，比医院略暖。
     var school_env := env.duplicate(true) as Environment
     school_env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-    school_env.ambient_light_color = Color("#8b8a78")
-    school_env.ambient_light_energy = 1.00
-    school_env.tonemap_exposure = 0.94
-    school_env.adjustment_saturation = 0.86
-    school_env.fog_density = 0.0035
+    school_env.ambient_light_color = Color("#948f7c")
+    school_env.ambient_light_energy = 0.55
+    school_env.tonemap_exposure = 0.92
+    school_env.adjustment_saturation = 0.88
+    school_env.fog_density = 0.0030
     _school_environment = school_env
     # 超市：冷白荧光灯、低饱和货架和一点暖橙入口灯。
     var market_env := env.duplicate(true) as Environment
     market_env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-    market_env.ambient_light_color = Color("#7f8a80")
-    market_env.ambient_light_energy = 1.00
-    market_env.tonemap_exposure = 0.94
-    market_env.adjustment_saturation = 0.84
-    market_env.fog_density = 0.0030
+    market_env.ambient_light_color = Color("#8a9488")
+    market_env.ambient_light_energy = 0.55
+    market_env.tonemap_exposure = 0.92
+    market_env.adjustment_saturation = 0.86
+    market_env.fog_density = 0.0028
     _market_environment = market_env
     # 地下庇护所：暖灯 + 青绿维生灯，比地表更安全、更封闭。
     var shelter_env := env.duplicate(true) as Environment
     shelter_env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-    shelter_env.ambient_light_color = Color("#8d8067")
-    shelter_env.ambient_light_energy = 0.78
+    shelter_env.ambient_light_color = Color("#96886e")
+    shelter_env.ambient_light_energy = 0.55
     shelter_env.tonemap_exposure = 0.90
-    shelter_env.adjustment_saturation = 0.86
-    shelter_env.fog_density = 0.0040
+    shelter_env.adjustment_saturation = 0.88
+    shelter_env.fog_density = 0.0035
     _shelter_environment = shelter_env
     var environment := WorldEnvironment.new()
     environment.name = "RuinEnvironment"
@@ -381,19 +355,27 @@ func _build_scaffold() -> void:
     world_root.add_child(environment)
 
     var light := DirectionalLight3D.new()
-    light.name = "RuinSun"
-    light.rotation_degrees = Vector3(-43.0, -38.0, 0.0)
-    light.light_energy = 0.75
-    light.light_color = Color("#c6d0c8")
-    # 白天场景需要阴影来读出建筑体积；把阴影距离收在地图尺度，
-    # 并抬高 bias 避免低模大平面的自阴影黑斑。
+    light.name = "RuinKeySun"
+    light.rotation_degrees = Vector3(-34.0, -28.0, 0.0)
+    light.light_energy = 1.80
+    light.light_color = Color("#d6dacb")
+    # 唯一开阴影的主光：建立明暗交界与地面投影。
     light.shadow_enabled = true
-    light.directional_shadow_max_distance = 120.0
-    light.shadow_bias = 0.06
-    light.shadow_normal_bias = 1.2
-    light.shadow_opacity = 0.50
-    light.light_angular_distance = 1.6
+    light.directional_shadow_max_distance = 110.0
+    light.shadow_bias = 0.05
+    light.shadow_normal_bias = 1.0
+    light.shadow_opacity = 0.62
+    light.light_angular_distance = 1.4
     world_root.add_child(light)
+
+    # 轮廓光：从主体斜后上方照边缘，把建筑从灰青天空里剥离；关阴影。
+    var rim := DirectionalLight3D.new()
+    rim.name = "RuinRimLight"
+    rim.rotation_degrees = Vector3(-18.0, 152.0, 0.0)
+    rim.light_energy = 0.65
+    rim.light_color = Color("#8fb6c2")
+    rim.shadow_enabled = false
+    world_root.add_child(rim)
 
     var ground_body := StaticBody3D.new()
     ground_body.name = "RuinGround"
@@ -408,18 +390,35 @@ func _build_scaffold() -> void:
     world_root.add_child(ground_body)
 
     # 可见地面用水平面片：法线固定朝上，不会被压扁盒体的顶面法线吃掉光照。
-    var ground := ART.plane(world_root, "RuinGroundMesh", Vector2(GROUND_EXTENT.x * 2.0 + 60.0, GROUND_EXTENT.y * 2.0 + 60.0), Vector3(0.0, 0.0, 0.0), Color("#9a8059"))
+    var ground := ART.plane(world_root, "RuinGroundMesh", Vector2(GROUND_EXTENT.x * 2.0 + 60.0, GROUND_EXTENT.y * 2.0 + 60.0), Vector3(0.0, 0.0, 0.0), ART.BASE_DIRT, false, 0.0, SURFACE.Family.CONC, 4.0)
     ground.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-    _build_ground_detail()
 
+    var fill_index := 0
     for raw in FILL_LIGHTS:
         var fill := OmniLight3D.new()
-        fill.name = "RuinFill"
+        fill.name = "RuinFill%d" % fill_index
+        fill_index += 1
         fill.position = Vector3(raw.position)
         fill.light_color = raw.color
         fill.light_energy = float(raw.energy)
         fill.omni_range = float(raw.range)
+        fill.shadow_enabled = false
         world_root.add_child(fill)
+
+    var graze_index := 0
+    for raw in GRAZE_LIGHTS:
+        var graze := SpotLight3D.new()
+        graze.name = "RuinGraze%d" % graze_index
+        graze_index += 1
+        graze.light_color = raw.color
+        graze.light_energy = float(raw.energy)
+        graze.spot_range = float(raw.range)
+        graze.spot_angle = float(raw.angle)
+        graze.spot_angle_attenuation = 1.15
+        graze.shadow_enabled = false
+        graze.position = Vector3(raw.position)
+        world_root.add_child(graze)
+        graze.look_at(Vector3(raw.target), Vector3.UP)
 
 
 ## 地面细节层。
@@ -445,15 +444,15 @@ func _build_ground_detail() -> void:
             var z0 := -span.y * 0.5 + float(row) * step.y
             _push_ground_quad(st, patch, grain, Vector2(x0, z0), step)
     st.generate_normals()
+    st.generate_tangents()
     var detail := MeshInstance3D.new()
     detail.name = "RuinGroundDetail"
     detail.mesh = st.commit()
     # 抬 1 厘米压住底下的单色盒子，避免同面深度打架
     detail.position = Vector3(0.0, 0.01, 0.0)
-    var material := StandardMaterial3D.new()
-    material.vertex_color_use_as_albedo = true
-    material.roughness = 1.0
-    detail.material_override = material
+    # 顶点色给宏观色斑；2K 混凝土法线/粗糙度给 1–2 m 的微表面。
+    # 大地面走轻量 PBR，避免整屏三平面 4 层 shader 拖慢 GL。
+    detail.material_override = SURFACE.pavement(Color.WHITE, Vector3.ONE, "conc", 0.95, true)
     # 地面不参与投影，否则整块地会自己给自己糊上一层阴影
     detail.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
     world_root.add_child(detail)
@@ -469,6 +468,7 @@ func _push_ground_quad(st: SurfaceTool, patch: FastNoiseLite, grain: FastNoiseLi
     # 只剩底下那块单色盒子，第一人称看过去就是一片没有信息的奶油色。
     for point in [a, d, c, a, c, b]:
         st.set_normal(Vector3.UP)
+        st.set_uv(Vector2(point.x, point.y) * 0.42)
         # 顶点色同样按 sRGB 书写；转成线性后再交给 albedo，否则会比地面亮一截。
         var tint := _ground_tint(patch, grain, point)
         st.set_color(tint.srgb_to_linear())
@@ -476,19 +476,19 @@ func _push_ground_quad(st: SurfaceTool, patch: FastNoiseLite, grain: FastNoiseLi
 
 
 func _ground_tint(patch: FastNoiseLite, grain: FastNoiseLite, point: Vector2) -> Color:
-    # 暖沙色铺地 + 青灰色水洼 + 鼠尾草绿苔痕，和主舱的地板/墙面是同一套低饱和色。
-    var color := Color("#9a8059")
+    # 暗泥炭褐铺地 + 氧化铅灰水渍 + 鼠尾草绿苔痕，和指南 65–75% 低饱和基底一致。
+    var color := Color("#665a49")
     var low := (patch.get_noise_2d(point.x, point.y) + 1.0) * 0.5
-    color = color.lerp(Color("#7f6a4d"), low * 0.55)
-    color = color.lerp(Color("#b59a70"), maxf(1.0 - low * 1.6, 0.0) * 0.45)
+    color = color.lerp(Color("#554c40"), low * 0.55)
+    color = color.lerp(Color("#7a6e5a"), maxf(1.0 - low * 1.6, 0.0) * 0.45)
     var g := grain.get_noise_2d(point.x, point.y)
     if g > 0.0:
-        color = color.lerp(color.lightened(0.045), g * 0.55)
+        color = color.lerp(color.lightened(0.04), g * 0.55)
     else:
-        color = color.lerp(color.darkened(0.045), -g * 0.55)
+        color = color.lerp(color.darkened(0.04), -g * 0.55)
     # 低洼积水：浅青灰，读到"潮"而不是"脏"。
     if g > 0.46:
-        color = color.lerp(Color("#6f8f8a"), clampf((g - 0.46) * 1.4, 0.0, 0.55))
+        color = color.lerp(Color("#5f7a78"), clampf((g - 0.46) * 1.4, 0.0, 0.55))
     # 建筑周边的接地阴影：只做很轻的一圈暖灰，避免变成一大块棕色地皮。
     for raw in BUILDINGS:
         var center := Vector2(raw.position)
@@ -497,7 +497,7 @@ func _ground_tint(patch: FastNoiseLite, grain: FastNoiseLite, point: Vector2) ->
         var distance := point.distance_to(center)
         if distance < reach:
             var weight := (1.0 - distance / reach) * 0.14
-            color = color.lerp(Color("#877252"), weight)
+            color = color.lerp(Color("#554c40"), weight)
     return color
 
 
@@ -578,7 +578,7 @@ func _build_buildings() -> void:
 func _finish_building(root: Node3D, size: Vector3, accent: Color, _display_name: String) -> void:
     ART.soft_shadow(root, Vector3(0.0, 0.01, 0.0), maxf(size.x, size.z) * 0.68, 0.90)
     ART.block(root, "BaseShadow", Vector3(size.x + 0.3, 0.28, size.z + 0.3), Vector3(0.0, 0.14, 0.0), Color("#7d674a"), 0.05)
-    var forecourt := ART.block(root, "Forecourt", Vector3(minf(size.x * 0.55, 12.0), 0.035, 4.6), Vector3(0.0, 0.0175, size.z * 0.5 + 2.2), ART.CREAM_DEEP, 0.03)
+    var forecourt := ART.block(root, "Forecourt", Vector3(minf(size.x * 0.55, 12.0), 0.035, 4.6), Vector3(0.0, 0.0175, size.z * 0.5 + 2.2), ART.CONCRETE, 0.03, false, 0.0, SURFACE.Family.CONC)
     forecourt.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
     for side: float in [-1.0, 1.0]:
         ART.bollard(root, Vector3(side * (size.x * 0.5 + 1.0), 0.035, size.z * 0.5 + 2.2))
@@ -601,20 +601,28 @@ func _build_door_lock(parent: Node3D, at: Vector3) -> Node3D:
     lock.name = "DoorLock"
     lock.position = at
     parent.add_child(lock)
-    ART.block(lock, "LockPlate", Vector3(0.26, 0.34, 0.08), Vector3.ZERO, Color("#c9a15b"), 0.03)
-    ART.block(lock, "LockCylinder", Vector3(0.16, 0.16, 0.05), Vector3(0.0, -0.02, 0.065), Color("#8a5a2b"), 0.02)
-    ART.block(lock, "LockKeyhole", Vector3(0.05, 0.11, 0.025), Vector3(0.0, -0.02, 0.095), ART.INK, 0.01)
-    ART.sphere(lock, "LockLED", Vector3(0.028, 0.028, 0.02), Vector3(0.0, 0.12, 0.075), ART.ORANGE, true, 0.45)
+    var plate := ART.block(lock, "LockPlate", Vector3(0.26, 0.36, 0.05), Vector3.ZERO, Color("#c9a15b"), 0.015, false, 0.0, SURFACE.Family.MACH)
+    plate.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+    ART.block(lock, "LockCylinder", Vector3(0.15, 0.15, 0.05), Vector3(0.0, -0.02, 0.045), Color("#7a5a32"), 0.02, false, 0.0, SURFACE.Family.MACH)
+    ART.block(lock, "LockKeyhole", Vector3(0.045, 0.10, 0.02), Vector3(0.0, -0.02, 0.075), ART.INK, 0.005, false, 0.0, SURFACE.Family.CAST)
+    # 锁灯带遮光罩：灯只从罩口露出，避免小圆点直接糊在锁板上。
+    ART.block(lock, "LockHood", Vector3(0.09, 0.05, 0.06), Vector3(0.0, 0.135, 0.045), ART.TEAL_DEEP, 0.008, false, 0.0, SURFACE.Family.CAST)
+    ART.sphere(lock, "LockLED", Vector3(0.03, 0.03, 0.022), Vector3(0.0, 0.11, 0.075), ART.ORANGE, true, 0.35)
+    # 只放两颗真实装配螺栓；指南红线：不无意义地撒螺母。
+    for sx: float in [-1.0, 1.0]:
+        ART.bolt(lock, "LockBolt", Vector3(sx * 0.095, 0.135, 0.045), 0.016, ART.CREAM_DEEP)
+    ART.block(lock, "LockTag", Vector3(0.16, 0.06, 0.015), Vector3(0.0, -0.145, 0.04), ART.ORANGE, 0.004, true, 0.15)
     return lock
 
 
 func _build_cartoon_building(root: Node3D, id: String, size: Vector3, accent: Color) -> MeshInstance3D:
-    var body := ART.block(root, "Shell", size, Vector3(0.0, size.y * 0.5, 0.0), ART.CREAM, 0.34)
+    # 外壳退成深色内墙，外层另铺带真实凹槽的分板；这样近看不是一整块数学平面。
+    var body := ART.block(root, "Shell", size, Vector3(0.0, size.y * 0.5, 0.0), ART.CREAM_DEEP, 0.34, false, 0.0, SURFACE.Family.PAINT_CLEAN)
     body.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
     ART.block(root, "Plinth", Vector3(size.x + 0.5, 0.55, size.z + 0.5), Vector3(0.0, 0.275, 0.0), ART.SAND_DEEP, 0.12)
     ART.block(root, "BaseShadow", Vector3(size.x + 0.24, 0.24, size.z + 0.24), Vector3(0.0, 0.12, 0.0), Color("#7d674a"), 0.04)
     # 深色勒脚 + 顶部檐口：近看时墙脚和屋顶各有一条明确收边。
-    ART.block(root, "BaseBand", Vector3(size.x + 0.2, 0.8, size.z + 0.2), Vector3(0.0, 0.4, 0.0), ART.SAND_DEEP, 0.05)
+    ART.block(root, "BaseBand", Vector3(size.x + 0.2, 0.8, size.z + 0.2), Vector3(0.0, 0.4, 0.0), ART.TEAL_DEEP, 0.05, false, 0.0, SURFACE.Family.PAINT_CLEAN)
     ART.block(root, "Cornice", Vector3(size.x + 0.7, 0.26, size.z + 0.7), Vector3(0.0, size.y - 0.18, 0.0), ART.CREAM_LIGHT, 0.06)
 
     # 建筑碰撞：整块盒体，外墙不可穿过。
@@ -648,23 +656,48 @@ func _build_cartoon_building(root: Node3D, id: String, size: Vector3, accent: Co
     var front_z: float = size.z * 0.5 + 0.05
     var window_count: int = maxi(2, int(size.x / 4.5))
     var window_width: float = minf(1.7, size.x / float(window_count) - 0.9)
+    var window_centers: Array[float] = []
     for index: int in window_count:
         var x: float = -size.x * 0.5 + (float(index) + 0.5) * (size.x / float(window_count))
         if absf(x) < 2.2:
             continue
-        ART.block(root, "WindowFrame%d" % index, Vector3(window_width + 0.34, 2.0, 0.14), Vector3(x, size.y * 0.58, front_z), ART.CREAM_LIGHT, 0.04)
-        ART.block(root, "WindowGlass%d" % index, Vector3(window_width, 1.66, 0.08), Vector3(x, size.y * 0.58, front_z + 0.05), ART.GLASS, 0.02, true, 0.12)
-        ART.block(root, "WindowMullion%d" % index, Vector3(0.07, 1.66, 0.05), Vector3(x, size.y * 0.58, front_z + 0.10), ART.CREAM_LIGHT, 0.01)
-        ART.block(root, "WindowSill%d" % index, Vector3(window_width + 0.46, 0.14, 0.30), Vector3(x, size.y * 0.58 - 0.96, front_z + 0.06), ART.SAND, 0.04)
-    # 正立面壁柱：把长墙分成几段，近看有节奏。
-    # 门洞中心不放假壁柱：它会和门板落在同一个深度平面上，
-    # 近距离/移动时出现一条奶油色的 z-fighting 光栅。
-    var bay_count: int = window_count + 1
-    for index: int in bay_count:
-        var bay_x: float = -size.x * 0.5 + (float(index) / float(bay_count)) * size.x
-        if absf(bay_x) < 1.9:
-            continue
-        ART.block(root, "Pilaster%d" % index, Vector3(0.34, size.y - 1.1, 0.20), Vector3(bay_x, size.y * 0.5, front_z + 0.10), ART.CREAM_LIGHT, 0.05)
+        window_centers.append(x)
+
+    # 立面分板：2.4 cm 真实凹槽 + 竖向肋柱，把长墙拆成有节奏的工业立面。
+    var sign_width: float = minf(size.x * 0.55, 7.0)
+    var front_skip: Array = [
+        Rect2(-1.7, 0.0, 3.4, 3.3),
+        Rect2(-sign_width * 0.5 - 0.15, size.y * 0.78 - 0.62, sign_width + 0.3, 1.24),
+        Rect2(-2.15, 3.02, 4.3, 0.62),
+    ]
+    for x in window_centers:
+        front_skip.append(Rect2(x - window_width * 0.5 - 0.3, size.y * 0.58 - 1.08, window_width + 0.6, 2.16))
+    ART.panel_facade(root, "FrontPanels", Vector3(0.0, 0.0, size.z * 0.5 + 0.02), Vector3.RIGHT, Vector3.UP, size.x, size.y, 3.1, 2.45, 0.032, [ART.CREAM_DEEP, ART.SAND_DEEP, ART.CREAM_DEEP, ART.CREAM], 11 + id.length(), front_skip)
+    var back_skip: Array = []
+    for x in window_centers:
+        back_skip.append(Rect2(x - window_width * 0.5 - 0.3, size.y * 0.58 - 1.08, window_width + 0.6, 2.16))
+    ART.panel_facade(root, "BackPanels", Vector3(0.0, 0.0, -size.z * 0.5 - 0.02), Vector3.LEFT, Vector3.UP, size.x, size.y, 3.1, 2.45, 0.032, [ART.SAND_DEEP, ART.CREAM_DEEP, ART.CREAM_DEEP, ART.CREAM], 23 + id.length(), back_skip)
+    for side: float in [-1.0, 1.0]:
+        var side_skip: Array = []
+        for index: int in 2:
+            var z: float = -size.z * 0.25 + float(index) * size.z * 0.5
+            var u: float = z if side < 0.0 else -z
+            side_skip.append(Rect2(u - 0.85, size.y * 0.56 - 0.95, 1.7, 1.9))
+        var side_right := Vector3(0.0, 0.0, 1.0) if side < 0.0 else Vector3(0.0, 0.0, -1.0)
+        ART.panel_facade(root, "SidePanels%s" % ("L" if side < 0.0 else "R"), Vector3(side * (size.x * 0.5 + 0.02), 0.0, 0.0), side_right, Vector3.UP, size.z, size.y, 2.9, 2.45, 0.032, [ART.CREAM_DEEP, ART.SAND_DEEP, ART.CREAM], 37 + id.length() + int(side) * 7, side_skip)
+
+    for index in window_centers.size():
+        var x: float = window_centers[index]
+        var y: float = size.y * 0.58
+        ART.block(root, "WindowReveal%d" % index, Vector3(window_width + 0.38, 2.04, 0.06), Vector3(x, y, front_z - 0.03), ART.TEAL_DEEP, 0.02, false, 0.0, SURFACE.Family.PAINT_WORN)
+        var glass := ART.block(root, "WindowGlass%d" % index, Vector3(window_width, 1.66, 0.05), Vector3(x, y, front_z + 0.02), ART.GLASS, 0.02)
+        glass.material_override = SURFACE.glass(ART.GLASS)
+        ART.block(root, "WindowMullion%d" % index, Vector3(0.07, 1.70, 0.06), Vector3(x, y, front_z + 0.06), ART.CREAM_LIGHT, 0.01)
+        ART.block(root, "WindowSill%d" % index, Vector3(window_width + 0.5, 0.12, 0.34), Vector3(x, y - 0.98, front_z + 0.08), ART.SAND, 0.03, false, 0.0, SURFACE.Family.CONC)
+        # 部分窗户钉上封板：这是“废墟”最便宜也最可信的一条语言，但只出现在少数窗户上。
+        if index % 3 == 1:
+            ART.block(root, "WindowBoardA%d" % index, Vector3(window_width * 0.92, 0.22, 0.04), Vector3(x, y + 0.26, front_z + 0.09), ART.SAND_DEEP, 0.008, false, 0.0, SURFACE.Family.PAINT_WORN).rotation_degrees.z = 4.0
+            ART.block(root, "WindowBoardB%d" % index, Vector3(window_width * 0.92, 0.22, 0.04), Vector3(x, y - 0.18, front_z + 0.09), ART.SAND_DEEP, 0.008, false, 0.0, SURFACE.Family.PAINT_WORN).rotation_degrees.z = -3.0
     # 侧立面各开两扇，第一人称横穿时建筑不是一块纯色墙。
     for side: float in [-1.0, 1.0]:
         for index: int in 2:
@@ -672,12 +705,24 @@ func _build_cartoon_building(root: Node3D, id: String, size: Vector3, accent: Co
             ART.block(root, "SideFrame%d_%d" % [int(side), index], Vector3(0.12, 1.7, 1.5), Vector3(side * (size.x * 0.5 + 0.02), size.y * 0.56, z), ART.CREAM_LIGHT, 0.04)
             ART.block(root, "SideGlass%d_%d" % [int(side), index], Vector3(0.06, 1.48, 1.28), Vector3(side * (size.x * 0.5 + 0.09), size.y * 0.56, z), ART.GLASS, 0.02, true, 0.10)
 
-    ART.block(root, "DoorRecess", Vector3(2.7, 2.9, 0.16), Vector3(0.0, 1.45, front_z + 0.02), ART.TEAL_DEEP, 0.08)
-    ART.block(root, "Door", Vector3(2.2, 2.5, 0.10), Vector3(0.0, 1.25, front_z + 0.16), ART.TEAL, 0.06)
-    ART.block(root, "DoorFrameT", Vector3(3.0, 0.18, 0.34), Vector3(0.0, 2.96, front_z + 0.12), ART.ORANGE, 0.04)
+    # 门：凹进的门洞 + 门槛 + 门板分缝 + 踢脚 + 铰链 + 闭门器。门锁由 _build_door_lock() 负责。
+    ART.block(root, "DoorRecess", Vector3(2.7, 2.9, 0.18), Vector3(0.0, 1.45, front_z + 0.02), ART.INK, 0.08, false, 0.0, SURFACE.Family.CAST)
+    var door := ART.block(root, "Door", Vector3(2.2, 2.5, 0.12), Vector3(0.0, 1.25, front_z + 0.16), ART.TEAL, 0.06, false, 0.0, SURFACE.Family.PAINT_WORN)
+    door.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
+    ART.block(root, "DoorThreshold", Vector3(2.4, 0.06, 0.34), Vector3(0.0, 0.03, front_z + 0.18), ART.SAND_DEEP, 0.012, false, 0.0, SURFACE.Family.CONC)
+    ART.block(root, "DoorKickPlate", Vector3(2.0, 0.22, 0.04), Vector3(0.0, 0.26, front_z + 0.225), ART.CREAM_DEEP, 0.01, false, 0.0, SURFACE.Family.MACH)
+    for seam_index: int in 3:
+        ART.block(root, "DoorSeam", Vector3(2.06, 0.02, 0.02), Vector3(0.0, 0.85 + float(seam_index) * 0.62, front_z + 0.228), ART.TEAL_DEEP, 0.004, false, 0.0, SURFACE.Family.PAINT_WORN)
+    for hinge_side: float in [-1.0, 1.0]:
+        for hinge_index: int in 3:
+            ART.block(root, "DoorHinge", Vector3(0.07, 0.16, 0.05), Vector3(hinge_side * 1.06, 0.55 + float(hinge_index) * 0.72, front_z + 0.235), ART.CREAM_LIGHT, 0.008, false, 0.0, SURFACE.Family.MACH)
+    ART.block(root, "DoorCloser", Vector3(0.34, 0.10, 0.14), Vector3(0.0, 2.36, front_z + 0.235), ART.INK, 0.015, false, 0.0, SURFACE.Family.CAST)
+    var handle := ART.cylinder(root, "DoorHandleArm", 0.035, 0.26, Vector3(0.62, 1.22, front_z + 0.26), ART.CREAM_LIGHT, false, 0.0, SURFACE.Family.MACH)
+    handle.rotation_degrees.z = 90.0
+    ART.sphere(root, "DoorHandle", Vector3(0.11, 0.11, 0.11), Vector3(0.62, 1.22, front_z + 0.25), ART.CREAM_LIGHT)
+    ART.block(root, "DoorFrameT", Vector3(3.0, 0.18, 0.34), Vector3(0.0, 2.96, front_z + 0.12), ART.CREAM_LIGHT, 0.04, false, 0.0, SURFACE.Family.PAINT_CLEAN)
     for side: float in [-1.0, 1.0]:
-        ART.block(root, "DoorFrame", Vector3(0.18, 3.0, 0.34), Vector3(side * 1.46, 1.5, front_z + 0.12), ART.ORANGE, 0.04)
-    ART.sphere(root, "DoorHandle", Vector3(0.1, 0.1, 0.1), Vector3(0.65, 1.25, front_z + 0.22), ART.CREAM_LIGHT)
+        ART.block(root, "DoorFrame", Vector3(0.18, 3.0, 0.34), Vector3(side * 1.46, 1.5, front_z + 0.12), ART.CREAM_LIGHT, 0.04, false, 0.0, SURFACE.Family.PAINT_CLEAN)
     _build_door_lock(root, Vector3(0.65, 1.04, front_z + 0.27))
     if id == "library":
         # 图书馆锁死：门缝焊上钢条，外面再加一道横梁，视觉上也别像能撬开。
@@ -696,28 +741,54 @@ func _build_cartoon_building(root: Node3D, id: String, size: Vector3, accent: Co
     for index: int in 3:
         ART.block(root, "DoorSignMark%d" % index, Vector3(0.32, 0.16, 0.04), Vector3(-0.62 + float(index) * 0.62, 3.95, front_z + 0.22), ART.CREAM_LIGHT, 0.01)
 
-    # 雨棚：暖橙薄板 + 两根奶油支柱。
-    var awning := ART.block(root, "Awning", Vector3(3.8, 0.16, 1.7), Vector3(0.0, 3.22, front_z + 0.75), ART.ORANGE, 0.07)
+    # 雨棚：暖橙薄板 + 两根奶油支柱 + 斜撑 + 织物肋 + 滴水沿。
+    var awning := ART.block(root, "Awning", Vector3(3.8, 0.16, 1.7), Vector3(0.0, 3.22, front_z + 0.75), ART.TEAL, 0.07, false, 0.0, SURFACE.Family.PAINT_CLEAN)
     awning.rotation_degrees.x = -7.0
+    ART.block(root, "AwningDrip", Vector3(3.86, 0.10, 0.08), Vector3(0.0, 3.13, front_z + 1.58), ART.TEAL_DEEP, 0.02, false, 0.0, SURFACE.Family.PAINT_CLEAN)
+    for rib_index: int in 5:
+        ART.block(root, "AwningRib", Vector3(0.035, 0.035, 1.62), Vector3(-1.5 + float(rib_index) * 0.75, 3.17, front_z + 0.75), ART.CREAM_LIGHT, 0.008, false, 0.0, SURFACE.Family.MACH).rotation_degrees.x = -7.0
     for side: float in [-1.0, 1.0]:
-        ART.cylinder(root, "AwningPost", 0.06, 3.0, Vector3(side * 1.7, 1.5, front_z + 1.45), ART.CREAM_LIGHT)
+        ART.cylinder(root, "AwningPost", 0.06, 3.0, Vector3(side * 1.7, 1.5, front_z + 1.45), ART.CREAM_LIGHT, false, 0.0, SURFACE.Family.MACH)
+        ART.block(root, "AwningBracket", Vector3(0.06, 0.06, 0.62), Vector3(side * 1.7, 2.86, front_z + 1.16), ART.CREAM_DEEP, 0.01, false, 0.0, SURFACE.Family.MACH).rotation_degrees.x = 36.0
+        ART.block(root, "AwningPostFoot", Vector3(0.20, 0.05, 0.20), Vector3(side * 1.7, 0.025, front_z + 1.45), ART.SAND_DEEP, 0.012, false, 0.0, SURFACE.Family.CONC)
 
-    # 招牌色带：用几何条纹代替悬浮文字。
-    ART.block(root, "SignBand", Vector3(minf(size.x * 0.55, 7.0), 0.95, 0.26), Vector3(0.0, size.y * 0.78, front_z + 0.05), accent, 0.06, true, 0.35)
+    # 招牌色带：用几何条纹代替悬浮文字；加背板与铆钉交代装配。
+    ART.block(root, "SignBack", Vector3(sign_width + 0.12, 1.07, 0.10), Vector3(0.0, size.y * 0.78, front_z + 0.00), ART.TEAL_DEEP, 0.02, false, 0.0, SURFACE.Family.CAST)
+    ART.block(root, "SignBand", Vector3(sign_width, 0.95, 0.26), Vector3(0.0, size.y * 0.78, front_z + 0.05), accent, 0.06, true, 0.35)
     for index: int in 3:
         ART.block(root, "SignStripe%d" % index, Vector3(0.46, 0.34, 0.08), Vector3(-1.1 + float(index) * 1.1, size.y * 0.78, front_z + 0.20), ART.CREAM_LIGHT, 0.02)
+    for index: int in 4:
+        ART.block(root, "SignRivet", Vector3(0.05, 0.05, 0.03), Vector3(-sign_width * 0.5 + 0.12 + float(index) * (sign_width - 0.24) / 3.0, size.y * 0.78 + 0.40, front_z + 0.10), ART.CREAM_LIGHT, 0.006, false, 0.0, SURFACE.Family.MACH)
 
-    # 屋顶设备：奶油水箱 + 青蓝压边 + 一块玻璃天窗。
-    ART.cylinder(root, "WaterTank", 0.8, 1.4, Vector3(-size.x * 0.24, size.y + 1.1, -size.z * 0.18), ART.CREAM_LIGHT, false)
-    ART.cylinder(root, "WaterTankBand", 0.83, 0.12, Vector3(-size.x * 0.24, size.y + 1.1, -size.z * 0.18), ART.TEAL)
-    ART.block(root, "RoofAC", Vector3(1.4, 0.75, 1.0), Vector3(size.x * 0.26, size.y + 0.65, -size.z * 0.2), ART.CREAM_DEEP, 0.1)
-    ART.block(root, "Skylight", Vector3(2.4, 0.12, 1.4), Vector3(size.x * 0.2, size.y + 0.48, size.z * 0.18), ART.GLASS_LIGHT, 0.04, true, 0.12)
+    # 屋顶设备：车削水箱 + 压边 + 空调外机 + 天窗；每件都有基座和地脚。
+    ART.block(root, "RoofCurbTank", Vector3(1.9, 0.16, 1.9), Vector3(-size.x * 0.24, size.y + 0.16, -size.z * 0.18), ART.SAND_DEEP, 0.02, false, 0.0, SURFACE.Family.CONC)
+    ART.lathe(root, "WaterTank", PackedVector2Array([Vector2(0.0, 0.0), Vector2(0.82, 0.02), Vector2(0.84, 0.12), Vector2(0.80, 1.30), Vector2(0.72, 1.38), Vector2(0.0, 1.38)]), 20, Vector3(-size.x * 0.24, size.y + 0.24, -size.z * 0.18), ART.CREAM_LIGHT, SURFACE.Family.PAINT_CLEAN)
+    ART.torus(root, "WaterTankBand", 0.82, 0.88, Vector3(-size.x * 0.24, size.y + 0.86, -size.z * 0.18), ART.TEAL, false, 0.0, SURFACE.Family.PAINT_WORN)
+    ART.lathe(root, "WaterTankCap", PackedVector2Array([Vector2(0.0, 0.0), Vector2(0.74, 0.02), Vector2(0.66, 0.14), Vector2(0.30, 0.22), Vector2(0.0, 0.24)]), 20, Vector3(-size.x * 0.24, size.y + 1.62, -size.z * 0.18), ART.TEAL_DEEP, SURFACE.Family.PAINT_WORN)
+    ART.block(root, "RoofCurbAC", Vector3(1.7, 0.14, 1.3), Vector3(size.x * 0.26, size.y + 0.16, -size.z * 0.2), ART.SAND_DEEP, 0.02, false, 0.0, SURFACE.Family.CONC)
+    ART.block(root, "RoofAC", Vector3(1.4, 0.75, 1.0), Vector3(size.x * 0.26, size.y + 0.65, -size.z * 0.2), ART.CREAM_DEEP, 0.1, false, 0.0, SURFACE.Family.PAINT_CLEAN)
+    for grille_index: int in 4:
+        ART.block(root, "ACGrille", Vector3(1.16, 0.04, 0.05), Vector3(size.x * 0.26, size.y + 0.42 + float(grille_index) * 0.11, -size.z * 0.2 + 0.52), ART.INK, 0.006, false, 0.0, SURFACE.Family.CAST)
+    ART.block(root, "SkylightCurb", Vector3(2.7, 0.14, 1.7), Vector3(size.x * 0.2, size.y + 0.20, size.z * 0.18), ART.SAND_DEEP, 0.02, false, 0.0, SURFACE.Family.CONC)
+    var skylight := ART.block(root, "Skylight", Vector3(2.4, 0.10, 1.4), Vector3(size.x * 0.2, size.y + 0.30, size.z * 0.18), ART.GLASS_LIGHT, 0.04)
+    skylight.material_override = SURFACE.glass(ART.GLASS_LIGHT)
+    # 屋顶检修梯：两根方钢轨 + 圆钢踏棍 + 护笼，交代“怎么上屋顶”。
+    for side: float in [-1.0, 1.0]:
+        ART.block(root, "RoofLadderRail", Vector3(0.06, 3.2, 0.06), Vector3(size.x * 0.5 + 0.10, size.y + 1.4, -size.z * 0.5 + 2.4 + side * 0.34), ART.TEAL_DEEP, 0.01, false, 0.0, SURFACE.Family.MACH)
+    for rung_index: int in 7:
+        ART.block(root, "RoofLadderRung", Vector3(0.05, 0.05, 0.72), Vector3(size.x * 0.5 + 0.10, size.y + 0.22 + float(rung_index) * 0.42, -size.z * 0.5 + 2.4), ART.TEAL_LIGHT, 0.008, false, 0.0, SURFACE.Family.MACH)
 
     if id == "school":
         # 学校：屋顶加一座小钟楼，远处先认轮廓。
         ART.block(root, "BellTower", Vector3(3.2, 3.4, 3.2), Vector3(-size.x * 0.28, size.y + 1.75, size.z * 0.12), ART.CREAM, 0.18)
         ART.cone(root, "BellRoof", 0.2, 2.3, 2.0, Vector3(-size.x * 0.28, size.y + 4.4, size.z * 0.12), ART.CORAL)
         ART.sphere(root, "Bell", Vector3(0.5, 0.5, 0.5), Vector3(-size.x * 0.28, size.y + 2.35, size.z * 0.12 + 1.65), ART.ORANGE, true, 0.5)
+        # 学校整栋封闭：门洞钉木板和钢条，不再作为可进入建筑。
+        ART.block(root, "SchoolSealBoardA", Vector3(2.7, 0.32, 0.12), Vector3(0.0, 1.15, front_z + 0.36), ART.SAND_DEEP, 0.02).rotation_degrees.z = 4.0
+        ART.block(root, "SchoolSealBoardB", Vector3(2.7, 0.32, 0.12), Vector3(0.0, 1.78, front_z + 0.36), ART.SAND_DEEP, 0.02).rotation_degrees.z = -3.0
+        ART.block(root, "SchoolSealBrace", Vector3(0.14, 2.2, 0.14), Vector3(-0.72, 1.45, front_z + 0.44), ART.TEAL_DEEP, 0.02).rotation_degrees.z = 18.0
+        ART.block(root, "SchoolSealBrace", Vector3(0.14, 2.2, 0.14), Vector3(0.72, 1.45, front_z + 0.44), ART.TEAL_DEEP, 0.02).rotation_degrees.z = -18.0
+        ART.block(root, "SchoolSealSign", Vector3(1.2, 0.34, 0.08), Vector3(0.0, 2.62, front_z + 0.40), ART.ORANGE, 0.02, true, 0.4)
     elif id == "library":
         # 图书馆：门前四根奶油圆柱，屋顶用青蓝区分。
         for index: int in 4:
@@ -726,9 +797,11 @@ func _build_cartoon_building(root: Node3D, id: String, size: Vector3, accent: Co
     elif id == "energy_station":
         # 能源站：储能柜、充电塔、变压器和顶棚太阳能板，不再有加油机。
         ART.block(root, "EnergyCanopy", Vector3(size.x + 3.0, 0.34, 7.0), Vector3(0.0, 4.2, front_z + 2.6), ART.TEAL, 0.12)
-        ART.block(root, "EnergyCanopyTrim", Vector3(size.x + 3.2, 0.12, 7.2), Vector3(0.0, 4.40, front_z + 2.6), ART.ORANGE, 0.04)
+        ART.block(root, "EnergyCanopyTrim", Vector3(size.x + 3.2, 0.12, 7.2), Vector3(0.0, 4.40, front_z + 2.6), ART.CREAM_LIGHT, 0.04)
         for side: float in [-1.0, 1.0]:
-            ART.cylinder(root, "CanopyPost", 0.18, 4.0, Vector3(side * (size.x * 0.5 + 0.4), 2.0, front_z + 5.0), ART.CREAM_LIGHT)
+            ART.i_beam(root, "CanopyPost", 4.0, 0.30, 0.26, 0.035, 0.035, Vector3(side * (size.x * 0.5 + 0.4), 0.0, front_z + 5.0), ART.TEAL_DEEP, 0.0)
+            ART.block(root, "CanopyBrace", Vector3(0.06, 0.06, 1.55), Vector3(side * (size.x * 0.5 + 0.4), 3.42, front_z + 4.30), ART.TEAL_LIGHT, 0.01, false, 0.0, SURFACE.Family.MACH).rotation_degrees.x = 42.0
+        ART.block(root, "CanopyGutter", Vector3(size.x + 3.2, 0.10, 0.12), Vector3(0.0, 4.02, front_z + 6.02), ART.SAND_DEEP, 0.015, false, 0.0, SURFACE.Family.MACH)
         # 顶棚下的冷白灯带。
         ART.block(root, "CanopyLightStrip", Vector3(size.x + 1.4, 0.05, 0.16), Vector3(0.0, 4.00, front_z + 2.6), Color("#d8e6de"), 0.02, true, 0.55)
         var canopy_light := OmniLight3D.new()
@@ -770,9 +843,37 @@ func _build_cartoon_building(root: Node3D, id: String, size: Vector3, accent: Co
         # 站前入口的橙色能量标识带。
         ART.block(root, "EnergyBoltA", Vector3(0.16, 0.58, 0.05), Vector3(-0.22, 5.65, front_z + 0.30), ART.ORANGE, 0.02, true, 0.6).rotation_degrees.z = -28.0
         ART.block(root, "EnergyBoltB", Vector3(0.16, 0.58, 0.05), Vector3(0.18, 5.65, front_z + 0.30), ART.ORANGE, 0.02, true, 0.6).rotation_degrees.z = 28.0
+        # 排风塔 + 星髓晶簇 + 菌群：能源站是爆发原点，外景也要能读出本星生态。
+        var stack_x: float = size.x * 0.5 + 1.8
+        ART.lathe(root, "EnergyVentStack", PackedVector2Array([
+            Vector2(0.0, 0.0), Vector2(0.66, 0.0), Vector2(0.63, 0.10), Vector2(0.44, 0.18),
+            Vector2(0.40, 4.60), Vector2(0.54, 4.82), Vector2(0.52, 5.02), Vector2(0.0, 5.02),
+        ]), 18, Vector3(stack_x, 0.0, front_z + 3.2), ART.TEAL_DEEP, SURFACE.Family.PAINT_WORN)
+        for band: int in 3:
+            ART.torus(root, "VentStackBand", 0.41, 0.47, Vector3(stack_x, 0.80 + float(band) * 1.40, front_z + 3.2), ART.ORANGE, false, 0.0, SURFACE.Family.PAINT_ACCENT)
+        ART.crystal_cluster(root, "EnergyStarMarrow", Vector3(stack_x - 0.95, 0.0, front_z + 3.35), 0.85, 1301)
+        ART.fungus_cluster(root, "EnergyVentFungus", Vector3(stack_x - 0.55, 0.02, front_z + 3.85), Vector3(0.2, 0.0, -0.6), 0.85, 1302, true)
+        ART.mycelium_patch(root, "EnergyVentMycelium", Vector3(stack_x - 1.25, 0.02, front_z + 3.05), 1.2, 1303)
+
+    # 落水管：从檐口到地面，带管卡与落水口；承力/排水关系一眼可读。
+    for corner: Array in [[-1.0, -1.0], [1.0, -1.0], [-1.0, 1.0], [1.0, 1.0]]:
+        var px: float = float(corner[0]) * (size.x * 0.5 - 0.22)
+        var pz: float = float(corner[1]) * (size.z * 0.5 - 0.22)
+        ART.pipe_run(root, "Downpipe", [Vector3(px, 0.28, pz), Vector3(px, size.y - 0.30, pz)], 0.055, ART.TEAL_DEEP, SURFACE.Family.MACH, true)
+        ART.block(root, "DownpipeShoe", Vector3(0.22, 0.10, 0.22), Vector3(px, 0.16, pz), ART.SAND_DEEP, 0.01, false, 0.0, SURFACE.Family.CONC)
+
+    # 女儿墙断茬 + 外露钢筋：先有完整屋顶收边，再局部打断，读作“后来塌的”。
+    for index: int in 3:
+        var chunk := ART.block(root, "ParapetChunk%d" % index, Vector3(0.9, 0.30, 0.34), Vector3(-rim_x + 1.3 + float(index) * 1.45, rim_y + 0.15, rim_z - 0.17), ART.CREAM_DEEP, 0.03, false, 0.0, SURFACE.Family.CONC)
+        chunk.rotation_degrees.z = float(index % 2) * 5.0 - 2.0
+        ART.cylinder(root, "Rebar%d" % index, 0.012, 0.62, Vector3(-rim_x + 1.4 + float(index) * 1.45, rim_y + 0.46, rim_z - 0.18), ART.CORAL, false, 0.0, SURFACE.Family.CAST).rotation_degrees = Vector3(0.0, 0.0, 14.0 - float(index) * 9.0)
 
     ART.soft_shadow(root, Vector3(0.0, 0.012, 0.0), maxf(size.x, size.z) * 0.62, 0.85)
-    var forecourt := ART.block(root, "Forecourt", Vector3(minf(size.x * 0.6, 13.0), 0.035, 4.4), Vector3(0.0, 0.0175, size.z * 0.5 + 2.1), ART.CREAM_DEEP, 0.03)
+    # 接地：径向暗晕 + 两圈碎石，消除“直角插进地里”的展台感。
+    ATMOSPHERE.build_ground_skirt(root, "BuildingSkirt", Vector3(0.0, 0.0, 0.0), Vector2(size.x + 3.4, size.z + 3.4), Color(0.035, 0.033, 0.030), 0.62)
+    ATMOSPHERE.build_gravel_cluster(root, "BuildingGravelA", Vector3(size.x * 0.5 + 0.7, 0.0, size.z * 0.5 + 0.5), 0.95, 11, 700 + id.length() * 13)
+    ATMOSPHERE.build_gravel_cluster(root, "BuildingGravelB", Vector3(-size.x * 0.5 - 0.6, 0.0, -size.z * 0.5 - 0.5), 0.85, 9, 800 + id.length() * 17)
+    var forecourt := ART.block(root, "Forecourt", Vector3(minf(size.x * 0.6, 13.0), 0.035, 4.4), Vector3(0.0, 0.0175, size.z * 0.5 + 2.1), ART.CONCRETE, 0.03, false, 0.0, SURFACE.Family.CONC)
     forecourt.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
     var ring := ART.torus(root, "EntryRing", 1.5, 1.56, Vector3(0.0, 0.08, size.z * 0.5 + 1.6), accent, true, 0.9)
     ring.visible = false
@@ -820,7 +921,7 @@ func _build_food_sites() -> void:
 ## 铺装分缝：每 6 米一道浅色缝，给第一人称一个稳定的尺度参照。
 ## 只加视觉，不加碰撞；压在细节层之上、道路之下。
 func _build_ground_grid() -> void:
-    var seam := Color("#bda57e")
+    var seam := Color("#7a7060")
     var half_x: float = GROUND_EXTENT.x - 4.0
     var half_z: float = GROUND_EXTENT.y - 4.0
     var x: float = -72.0
@@ -839,7 +940,8 @@ func _build_ground_grid() -> void:
         Vector3(48.0, 0.0, 12.0), Vector3(-56.0, 0.0, -24.0),
     ]
     for index: int in puddles.size():
-        var puddle := ART.cylinder(_world(), "Puddle", 1.1 + float(index) * 0.15, 0.014, puddles[index] + Vector3(0.0, 0.028, 0.0), Color("#7fa5a0"))
+        var puddle := ART.cylinder(_world(), "Puddle", 1.1 + float(index) * 0.15, 0.014, puddles[index] + Vector3(0.0, 0.028, 0.0), Color("#5f7a78"))
+        puddle.material_override = SURFACE.wet()
         puddle.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 
 
@@ -906,34 +1008,35 @@ func _add_cylinder_floor(radius: float, height: float, center: Vector3) -> void:
 ## 一条东西向主街 + 一条南北向支路 + 中央广场。
 ## 路面只做视觉，不另加碰撞；玩家仍然踩在整块地面碰撞体上。
 func _build_roads() -> void:
-    var street_color := Color("#6f8783")
-    var street_dark := Color("#657d79")
+    var street_color := Color("#474b49")
+    var street_dark := Color("#3f4443")
+    var walk_color := ART.CONCRETE
     # 主街：从市场门前穿过广场，再通往医院方向。
-    var avenue := ART.plane(_world(), "Avenue", Vector2(GROUND_EXTENT.x * 2.0 - 10.0, 7.2), Vector3(0.0, 0.035, 6.0), street_color)
+    var avenue := ART.plane(_world(), "Avenue", Vector2(GROUND_EXTENT.x * 2.0 - 10.0, 7.2), Vector3(0.0, 0.035, 6.0), street_color, false, 0.0, SURFACE.Family.CONC, 3.2)
     avenue.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
     _add_box_floor(Vector3(GROUND_EXTENT.x * 2.0 - 10.0, 0.035, 7.2), Vector3(0.0, 0.0175, 6.0))
     for side: float in [-1.0, 1.0]:
-        var curb := ART.block(_world(), "AvenueCurb", Vector3(GROUND_EXTENT.x * 2.0 - 10.0, 0.10, 0.5), Vector3(0.0, 0.05, 6.0 + side * 3.85), ART.CREAM_DEEP, 0.03)
+        var curb := ART.block(_world(), "AvenueCurb", Vector3(GROUND_EXTENT.x * 2.0 - 10.0, 0.10, 0.5), Vector3(0.0, 0.05, 6.0 + side * 3.85), ART.SAND_DEEP, 0.03, false, 0.0, SURFACE.Family.CONC)
         curb.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-        var sidewalk := ART.plane(_world(), "AvenueSidewalk", Vector2(GROUND_EXTENT.x * 2.0 - 10.0, 3.0), Vector3(0.0, 0.04, 6.0 + side * 5.4), ART.CREAM_DEEP)
+        var sidewalk := ART.plane(_world(), "AvenueSidewalk", Vector2(GROUND_EXTENT.x * 2.0 - 10.0, 3.0), Vector3(0.0, 0.04, 6.0 + side * 5.4), walk_color, false, 0.0, SURFACE.Family.CONC, 2.0)
         sidewalk.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
         _add_box_floor(Vector3(GROUND_EXTENT.x * 2.0 - 10.0, 0.04, 3.0), Vector3(0.0, 0.02, 6.0 + side * 5.4))
     # 南北支路：从能源站经过广场，通往北侧的学校与图书馆之间。
-    var cross := ART.plane(_world(), "CrossStreet", Vector2(6.4, GROUND_EXTENT.y * 2.0 - 12.0), Vector3(0.0, 0.035, -4.0), street_dark)
+    var cross := ART.plane(_world(), "CrossStreet", Vector2(6.4, GROUND_EXTENT.y * 2.0 - 12.0), Vector3(0.0, 0.035, -4.0), street_dark, false, 0.0, SURFACE.Family.CONC, 3.2)
     cross.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
     _add_box_floor(Vector3(6.4, 0.035, GROUND_EXTENT.y * 2.0 - 12.0), Vector3(0.0, 0.0175, -4.0))
     for side: float in [-1.0, 1.0]:
-        var cross_curb := ART.block(_world(), "CrossCurb", Vector3(0.5, 0.10, GROUND_EXTENT.y * 2.0 - 12.0), Vector3(side * 3.45, 0.05, -4.0), ART.CREAM_DEEP, 0.03)
+        var cross_curb := ART.block(_world(), "CrossCurb", Vector3(0.5, 0.10, GROUND_EXTENT.y * 2.0 - 12.0), Vector3(side * 3.45, 0.05, -4.0), ART.SAND_DEEP, 0.03, false, 0.0, SURFACE.Family.CONC)
         cross_curb.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-        var cross_walk := ART.plane(_world(), "CrossSidewalk", Vector2(3.0, GROUND_EXTENT.y * 2.0 - 12.0), Vector3(side * 5.0, 0.04, -4.0), ART.CREAM_DEEP)
+        var cross_walk := ART.plane(_world(), "CrossSidewalk", Vector2(3.0, GROUND_EXTENT.y * 2.0 - 12.0), Vector3(side * 5.0, 0.04, -4.0), walk_color, false, 0.0, SURFACE.Family.CONC, 2.0)
         cross_walk.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
         _add_box_floor(Vector3(3.0, 0.04, GROUND_EXTENT.y * 2.0 - 12.0), Vector3(side * 5.0, 0.02, -4.0))
     # 中央广场：圆形铺装 + 一圈青色环，作为玩家认路的地标。
-    ART.cylinder(_world(), "Plaza", 9.0, 0.09, Vector3(0.0, 0.045, 6.0), ART.SAND)
+    ART.cylinder(_world(), "Plaza", 9.0, 0.09, Vector3(0.0, 0.045, 6.0), ART.CONCRETE, false, 0.0, SURFACE.Family.CONC)
     _add_cylinder_floor(9.0, 0.09, Vector3(0.0, 0.045, 6.0))
     ART.torus(_world(), "PlazaRing", 8.55, 8.85, Vector3(0.0, 0.10, 6.0), ART.TEAL)
-    ART.torus(_world(), "PlazaRingInner", 4.6, 4.8, Vector3(0.0, 0.10, 6.0), ART.ORANGE)
-    # 车道虚线：暖橙色小方块，比白线更符合整套配色。
+    ART.torus(_world(), "PlazaRingInner", 4.6, 4.8, Vector3(0.0, 0.10, 6.0), ART.ORANGE, false, 0.0, SURFACE.Family.PAINT_ACCENT)
+    # 车道虚线：暖橙色小方块，比白线更符合整套配色；只有可操作/警示件才用橙。
     for index: int in 11:
         var x: float = -60.0 + float(index) * 12.0
         if absf(x) < 9.5:
@@ -955,7 +1058,7 @@ func _build_roads() -> void:
         var size := Vector3(raw.size)
         var front_z: float = building_point.y + size.z * 0.5
         var path_center := Vector3(building_point.x, 0.06, front_z + 3.6)
-        ART.plane(_world(), "ShopPath", Vector2(5.0, 6.0), path_center, ART.CREAM_DEEP)
+        ART.plane(_world(), "ShopPath", Vector2(5.0, 6.0), path_center, ART.CONCRETE, false, 0.0, SURFACE.Family.CONC, 2.0)
         _add_box_floor(Vector3(5.0, 0.06, 6.0), Vector3(building_point.x, 0.03, front_z + 3.6))
         # 门前平台：比路面高 3.5cm，和视觉 forecourt 对齐。
         _add_box_floor(Vector3(minf(size.x * 0.6, 13.0), 0.035, 4.6), Vector3(building_point.x, 0.0175, front_z + 2.2))
@@ -969,28 +1072,69 @@ func _build_landing_pad() -> void:
     pad.name = "RuinLandingPad"
     pad.position = Vector3(SPAWN_POSITION.x, 0.0, SPAWN_POSITION.y)
     _world().add_child(pad)
-    ART.cylinder(pad, "PadBase", PAD_RADIUS, 0.12, Vector3(0.0, 0.06, 0.0), ART.CREAM_DEEP)
+    # 停机坪：车削圆盘 + 倒角边缘 + 系留环 + 地面导引箭头。
+    ART.lathe(pad, "PadBase", PackedVector2Array([
+        Vector2(0.0, 0.0), Vector2(PAD_RADIUS - 0.10, 0.0), Vector2(PAD_RADIUS, 0.02),
+        Vector2(PAD_RADIUS - 0.05, 0.12), Vector2(0.0, 0.12),
+    ]), 40, Vector3.ZERO, ART.CONCRETE, SURFACE.Family.CONC)
     _add_cylinder_floor(PAD_RADIUS, 0.12, Vector3(SPAWN_POSITION.x, 0.06, SPAWN_POSITION.y))
-    ART.torus(pad, "PadRing", PAD_RADIUS - 0.22, PAD_RADIUS - 0.04, Vector3(0.0, 0.13, 0.0), ART.ORANGE, true, 0.45)
+    ART.torus(pad, "PadRing", PAD_RADIUS - 0.22, PAD_RADIUS - 0.04, Vector3(0.0, 0.13, 0.0), ART.ORANGE, true, 0.22)
     # 撤离开放后出现的一圈青绿灯带；未开放时隐藏。
-    _pad_active_ring = ART.torus(pad, "PadActiveRing", PAD_RADIUS - 0.52, PAD_RADIUS - 0.30, Vector3(0.0, 0.15, 0.0), ART.TEAL_LIGHT, true, 0.9)
+    _pad_active_ring = ART.torus(pad, "PadActiveRing", PAD_RADIUS - 0.52, PAD_RADIUS - 0.30, Vector3(0.0, 0.15, 0.0), ART.TEAL_LIGHT, true, 0.55)
     _pad_active_ring.visible = false
-    ART.torus(pad, "PadInner", 2.2, 2.34, Vector3(0.0, 0.13, 0.0), ART.TEAL, true, 0.35)
+    ART.torus(pad, "PadInner", 2.2, 2.34, Vector3(0.0, 0.13, 0.0), ART.TEAL, true, 0.22)
+    for index: int in 6:
+        var angle: float = TAU * float(index) / 6.0
+        ART.torus(pad, "TieDownRing", 0.10, 0.16, Vector3(cos(angle) * (PAD_RADIUS - 1.25), 0.125, sin(angle) * (PAD_RADIUS - 1.25)), ART.CREAM_LIGHT, false, 0.0, SURFACE.Family.MACH)
     _pad_lights.clear()
     for index: int in 4:
         var angle: float = TAU * float(index) / 4.0 + PI * 0.25
-        var light_position := Vector3(cos(angle) * (PAD_RADIUS - 0.7), 0.2, sin(angle) * (PAD_RADIUS - 0.7))
-        var pad_light := ART.sphere(pad, "PadLight%d" % index, Vector3(0.34, 0.22, 0.34), light_position, ART.ORANGE, true, 0.9)
+        var light_position := Vector3(cos(angle) * (PAD_RADIUS - 0.7), 0.18, sin(angle) * (PAD_RADIUS - 0.7))
+        ART.block(pad, "PadLightHousing%d" % index, Vector3(0.34, 0.18, 0.34), light_position, ART.TEAL_DEEP, 0.02, false, 0.0, SURFACE.Family.CAST)
+        var pad_light := ART.sphere(pad, "PadLight%d" % index, Vector3(0.24, 0.16, 0.24), light_position + Vector3(0.0, 0.12, 0.0), ART.ORANGE, true, 0.9)
         _pad_lights.append(pad_light)
-    # 信标柱：青蓝柱身 + 奶油灯罩，放在停机坪左后方，避免正对镜头挡住城市。
-    ART.cylinder(pad, "BeaconPole", 0.10, 2.7, Vector3(-4.6, 1.35, -3.4), ART.TEAL_DEEP)
-    ART.sphere(pad, "BeaconLamp", Vector3(0.5, 0.5, 0.5), Vector3(-4.6, 2.8, -3.4), ART.LAMP, true, 1.2)
-    ART.torus(pad, "BeaconRing", 0.58, 0.66, Vector3(-4.6, 2.8, -3.4), ART.ORANGE, true, 0.7)
+    # 信标柱：车削柱身 + 法兰 + 灯罩，放在停机坪左后方，避免正对镜头挡住城市。
+    ART.lathe(pad, "BeaconPole", PackedVector2Array([
+        Vector2(0.0, 0.0), Vector2(0.20, 0.0), Vector2(0.18, 0.08), Vector2(0.10, 0.18),
+        Vector2(0.085, 2.55), Vector2(0.12, 2.62), Vector2(0.0, 2.64),
+    ]), 16, Vector3(-4.6, 0.0, -3.4), ART.TEAL_DEEP, SURFACE.Family.PAINT_CLEAN)
+    ART.sphere(pad, "BeaconLamp", Vector3(0.46, 0.46, 0.46), Vector3(-4.6, 2.86, -3.4), ART.LAMP, true, 1.0)
+    ART.cone(pad, "BeaconHood", 0.06, 0.30, 0.18, Vector3(-4.6, 3.12, -3.4), ART.TEAL_DEEP, SURFACE.Family.PAINT_CLEAN)
+    ART.torus(pad, "BeaconRing", 0.42, 0.48, Vector3(-4.6, 2.86, -3.4), ART.ORANGE, true, 0.55)
     # 地面上的"归航"箭头，用几何三角形代替文字。
     for index: int in 3:
         var arrow := ART.block(pad, "Arrow%d" % index, Vector3(0.5, 0.02, 1.5), Vector3(-1.2 + float(index) * 1.2, 0.14, 0.4), ART.CREAM_LIGHT, 0.02)
         arrow.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+    # 2 组货箱 + 2 只油桶，用捆扎带固定；给出“这里有人补给过”的痕迹。
+    for index: int in 2:
+        var crate_at := Vector3(3.2, 0.14, -0.6 - float(index) * 1.1)
+        ART.block(pad, "PadCrate%d" % index, Vector3(0.9, 0.62, 0.8), crate_at + Vector3(0.0, 0.31, 0.0), ART.CONCRETE, 0.05, false, 0.0, SURFACE.Family.PAINT_WORN)
+        ART.block(pad, "PadCrateBand%d" % index, Vector3(0.94, 0.08, 0.84), crate_at + Vector3(0.0, 0.46, 0.0), ART.ORANGE, 0.008, false, 0.0, SURFACE.Family.PAINT_ACCENT)
+    for index: int in 2:
+        ART.lathe(pad, "FuelDrum%d" % index, PackedVector2Array([
+            Vector2(0.0, 0.0), Vector2(0.30, 0.0), Vector2(0.31, 0.04), Vector2(0.31, 0.80),
+            Vector2(0.27, 0.86), Vector2(0.0, 0.86),
+        ]), 18, Vector3(-2.4 + float(index) * 0.8, 0.14, -1.8), ART.ORANGE_DEEP, SURFACE.Family.PAINT_ACCENT)
+    # 控制台：实体表盘 + 3 盏状态灯 + 贴壁图示铭牌，读目标/撤离状态。
+    var console_root := Node3D.new()
+    console_root.name = "PadControlConsole"
+    console_root.position = Vector3(-2.6, 0.14, 2.4)
+    pad.add_child(console_root)
+    ART.block(console_root, "ConsolePlinth", Vector3(0.92, 0.34, 0.62), Vector3(0.0, 0.17, 0.0), ART.CONCRETE, 0.02, false, 0.0, SURFACE.Family.CONC)
+    ART.block(console_root, "ConsoleBody", Vector3(0.80, 0.56, 0.52), Vector3(0.0, 0.56, 0.0), ART.TEAL_DEEP, 0.035, false, 0.0, SURFACE.Family.PAINT_WORN)
+    ART.block(console_root, "ConsoleTop", Vector3(0.86, 0.06, 0.58), Vector3(0.0, 0.86, 0.0), ART.CREAM_LIGHT, 0.015, false, 0.0, SURFACE.Family.MACH)
+    _pad_dial = PHYSICAL.build_live_dial(console_root, "PadObjectiveDial", Vector3(0.0, 0.90, -0.06), Vector3(-10.0, 0.0, 0.0), 0.16, 0.0, 1.0)
+    for index: int in 3:
+        _link_lamps.append(PHYSICAL.build_status_lamp(console_root, "PadStatusLamp%d" % index, Vector3(-0.22 + float(index) * 0.22, 0.90, 0.22), 0.05, SURFACE.surface(ART.INK, SURFACE.Family.CAST)))
+    PHYSICAL.build_diagram_plaque(console_root, "PadSchematic", Vector3(0.0, 1.02, 0.30), Vector3(-14.0, 0.0, 0.0), Vector2(0.78, 0.32), [
+        {"num": 1, "icon": "lock", "col": Color(1.0, 0.55, 0.12)},
+        {"num": 2, "icon": "cart", "col": Color(0.30, 0.85, 1.0)},
+        {"num": 3, "icon": "gate", "col": Color(0.30, 1.0, 0.65)},
+    ])
     ART.soft_shadow(pad, Vector3(0.0, 0.01, 0.0), PAD_RADIUS * 1.05, 0.3)
+    ATMOSPHERE.build_ground_skirt(pad, "PadSkirt", Vector3(0.0, 0.0, 0.0), Vector2(PAD_RADIUS * 2.5, PAD_RADIUS * 2.5), Color(0.030, 0.030, 0.028), 0.60)
+    ATMOSPHERE.build_gravel_cluster(pad, "PadGravelA", Vector3(PAD_RADIUS - 0.2, 0.0, 1.4), 0.9, 9, 1201)
+    ATMOSPHERE.build_gravel_cluster(pad, "PadGravelB", Vector3(-PAD_RADIUS + 0.2, 0.0, -1.6), 0.8, 8, 1202)
 
 
 ## 街道陈设：路灯、花坛、长椅、树和公交站。
@@ -1074,7 +1218,7 @@ func _build_ground_scatter() -> void:
     rng.seed = 20261028
     var placed := 0
     var attempts := 0
-    while placed < 26 and attempts < 200:
+    while placed < 38 and attempts < 260:
         attempts += 1
         var point := Vector2(rng.randf_range(-70.0, 70.0), rng.randf_range(-46.0, 46.0))
         if not _open_ground(point):
@@ -1084,12 +1228,12 @@ func _build_ground_scatter() -> void:
         root.position = Vector3(point.x, 0.0, point.y)
         _world().add_child(root)
         for index: int in 3:
-            var blade := ART.cone(root, "Blade%d" % index, 0.0, 0.16, rng.randf_range(0.35, 0.62), Vector3(rng.randf_range(-0.18, 0.18), 0.2, rng.randf_range(-0.18, 0.18)), ART.SAGE_DEEP if index % 2 == 0 else ART.SAGE)
+            var blade := ART.cone(root, "Blade%d" % index, 0.0, 0.16, rng.randf_range(0.35, 0.62), Vector3(rng.randf_range(-0.18, 0.18), 0.2, rng.randf_range(-0.18, 0.18)), ART.SAGE_DEEP if index % 2 == 0 else ART.SAGE, SURFACE.Family.FOLIAGE)
             blade.rotation_degrees.z = rng.randf_range(-14.0, 14.0)
         placed += 1
     placed = 0
     attempts = 0
-    while placed < 20 and attempts < 200:
+    while placed < 30 and attempts < 260:
         attempts += 1
         var point := Vector2(rng.randf_range(-70.0, 70.0), rng.randf_range(-46.0, 46.0))
         if not _open_ground(point):
@@ -1114,33 +1258,186 @@ func _open_ground(point: Vector2) -> bool:
     return true
 
 
-## 远景：环状低丘、几栋远处建筑和一圈树。
-## 全部无碰撞、不投影，靠雾把地图边缘收住；第一人称下抬头能看到完整天空。
+## 街道细节：雨水篦子、井盖、修补条、裂缝、配电箱、消防栓、倒下的路牌、碎石与菌斑。
+## 只加视觉，不加碰撞；位置避开主路中心与建筑入口。
+func _build_street_details() -> void:
+    var drains: Array[Vector3] = [
+        Vector3(12.0, 0.0, 9.62), Vector3(-18.0, 0.0, 9.62),
+        Vector3(12.0, 0.0, 2.38), Vector3(-18.0, 0.0, 2.38),
+    ]
+    for point in drains:
+        ART.drain_grate(_world(), "StormDrain", Vector3(point.x, surface_height(point.x, point.z) + 0.004, point.z), Vector2(0.72, 0.42))
+    for point: Vector3 in [Vector3(0.0, 0.0, 0.0), Vector3(-30.0, 0.0, 12.0), Vector3(22.0, 0.0, -4.0)]:
+        var manhole := ART.lathe(_world(), "ManholeCover", PackedVector2Array([
+            Vector2(0.0, 0.0), Vector2(0.42, 0.0), Vector2(0.44, 0.02), Vector2(0.42, 0.045),
+            Vector2(0.32, 0.055), Vector2(0.0, 0.055),
+        ]), 20, Vector3(point.x, surface_height(point.x, point.z) + 0.004, point.z), ART.INK, SURFACE.Family.CAST)
+        manhole.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+    # 沥青修补条：同一路面上的“后来补过”的色差，比随机噪点更像真实街道。
+    var patches := [
+        {"pos": Vector3(-8.0, 0.0, 6.0), "size": Vector2(6.0, 2.6), "yaw": 3.0},
+        {"pos": Vector3(26.0, 0.0, 6.4), "size": Vector2(4.0, 2.0), "yaw": -2.0},
+        {"pos": Vector3(-50.0, 0.0, -4.0), "size": Vector2(2.6, 6.0), "yaw": 1.0},
+    ]
+    for raw: Dictionary in patches:
+        var patch := ART.plane(_world(), "AsphaltPatch", raw.size, Vector3((raw.pos as Vector3).x, 0.042, (raw.pos as Vector3).z), Color("#3b4542"), false, 0.0, SURFACE.Family.CONC, 2.6)
+        patch.rotation_degrees.y = float(raw.yaw)
+        patch.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+    # 裂缝：只做细长深色片，不抢主视觉。
+    var rng := RandomNumberGenerator.new()
+    rng.seed = 20261125
+    for index: int in 7:
+        var at := Vector3(rng.randf_range(-64.0, 64.0), 0.046, rng.randf_range(-36.0, 30.0))
+        if absf(at.z - 6.0) < 4.6 or absf(at.x) < 4.2:
+            continue
+        var crack := ART.plane(_world(), "PavementCrack", Vector2(rng.randf_range(1.2, 3.4), 0.045), at, Color("#262c2b"))
+        crack.rotation_degrees.y = rng.randf_range(0.0, 180.0)
+        crack.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+
+    # 配电箱：底座 + 柜体 + 百叶 + 警告牌 + 落地导管。
+    var cabinet := Node3D.new()
+    cabinet.name = "UtilityCabinet"
+    cabinet.position = Vector3(-52.0, surface_height(-52.0, 10.2), 10.2)
+    cabinet.rotation_degrees.y = -90.0
+    _world().add_child(cabinet)
+    ART.block(cabinet, "CabinetPlinth", Vector3(1.25, 0.18, 0.78), Vector3(0.0, 0.09, 0.0), ART.CONCRETE, 0.02, false, 0.0, SURFACE.Family.CONC)
+    ART.block(cabinet, "CabinetBody", Vector3(1.10, 1.70, 0.64), Vector3(0.0, 1.02, 0.0), ART.TEAL_DEEP, 0.035, false, 0.0, SURFACE.Family.PAINT_WORN)
+    ART.block(cabinet, "CabinetDoor", Vector3(0.94, 1.46, 0.06), Vector3(0.0, 1.08, 0.34), ART.TEAL, 0.02, false, 0.0, SURFACE.Family.PAINT_WORN)
+    for vent_index: int in 5:
+        ART.block(cabinet, "CabinetVent", Vector3(0.64, 0.035, 0.03), Vector3(0.0, 0.62 + float(vent_index) * 0.09, 0.38), ART.INK, 0.006, false, 0.0, SURFACE.Family.CAST)
+    ART.block(cabinet, "CabinetWarning", Vector3(0.40, 0.12, 0.03), Vector3(0.0, 1.62, 0.39), ART.ORANGE, 0.006, true, 0.12)
+    ART.pipe_run(cabinet, "CabinetConduit", [Vector3(0.36, 0.10, 0.0), Vector3(0.36, -0.28, 0.48), Vector3(0.36, -0.34, 1.10)], 0.045, ART.TEAL_DEEP, SURFACE.Family.MACH, true)
+
+    # 消防栓：两颗，暖橙只给可操作/安全件。
+    for at: Vector3 in [Vector3(-34.0, 0.0, 10.6), Vector3(30.0, 0.0, 10.6)]:
+        var hydrant := Node3D.new()
+        hydrant.name = "Hydrant"
+        hydrant.position = Vector3(at.x, surface_height(at.x, at.z), at.z)
+        _world().add_child(hydrant)
+        ART.lathe(hydrant, "HydrantBody", PackedVector2Array([
+            Vector2(0.0, 0.0), Vector2(0.20, 0.0), Vector2(0.19, 0.06), Vector2(0.13, 0.16),
+            Vector2(0.115, 0.56), Vector2(0.08, 0.62), Vector2(0.0, 0.64),
+        ]), 14, Vector3.ZERO, ART.ORANGE, SURFACE.Family.PAINT_ACCENT)
+        ART.lathe(hydrant, "HydrantCap", PackedVector2Array([Vector2(0.0, 0.0), Vector2(0.09, 0.02), Vector2(0.06, 0.12), Vector2(0.0, 0.14)]), 12, Vector3(0.0, 0.64, 0.0), ART.ORANGE_DEEP, SURFACE.Family.PAINT_ACCENT)
+        for side: float in [-1.0, 1.0]:
+            ART.cylinder(hydrant, "HydrantNozzle", 0.055, 0.20, Vector3(side * 0.18, 0.40, 0.0), ART.CREAM_LIGHT, false, 0.0, SURFACE.Family.MACH).rotation_degrees.z = 90.0
+
+    # 倒下的路牌：杆体横倒、牌面贴地，交代“这里没人维护”。
+    var fallen := Node3D.new()
+    fallen.name = "FallenStreetSign"
+    fallen.position = Vector3(-20.0, surface_height(-20.0, 10.8), 10.8)
+    fallen.rotation_degrees.y = 18.0
+    _world().add_child(fallen)
+    var pole := ART.cylinder(fallen, "SignPole", 0.045, 2.6, Vector3(0.0, 0.25, 0.0), ART.TEAL_DEEP, false, 0.0, SURFACE.Family.MACH)
+    pole.rotation_degrees.z = 82.0
+    var plate := ART.block(fallen, "SignPlate", Vector3(0.92, 0.56, 0.05), Vector3(1.1, 0.30, 0.42), ART.CREAM_LIGHT, 0.02, false, 0.0, SURFACE.Family.PAINT_WORN)
+    plate.rotation_degrees = Vector3(0.0, 24.0, 78.0)
+    for mark_index: int in 2:
+        ART.block(fallen, "SignPlateMark", Vector3(0.58, 0.08, 0.03), Vector3(1.1, 0.34 + float(mark_index) * 0.14, 0.46), ART.ORANGE, 0.006, false, 0.0, SURFACE.Family.PAINT_ACCENT)
+
+    # 碎石堆与菌斑：城市边缘保持干净，只沿排水口/背阴墙脚出现少量。
+    ART.rubble_field(_world(), "StreetRubbleWest", Vector3(-70.0, 0.0, 8.0), 1.4, 9, 901, 1.0)
+    ART.rubble_field(_world(), "StreetRubbleEast", Vector3(68.0, 0.0, -8.0), 1.2, 7, 902, 0.9)
+    ART.rubble_field(_world(), "StreetRubbleNorth", Vector3(-12.0, 0.0, -22.0), 1.6, 8, 903, 1.1)
+    ART.fungus_cluster(_world(), "DrainFungusA", Vector3(12.0, surface_height(12.0, 9.4) + 0.01, 9.4), Vector3.UP, 0.62, 501, true)
+    ART.fungus_cluster(_world(), "DrainFungusB", Vector3(-18.0, surface_height(-18.0, 2.6) + 0.01, 2.6), Vector3.UP, 0.50, 502, true)
+    ART.mycelium_patch(_world(), "DrainMycelium", Vector3(12.0, surface_height(12.0, 9.2) + 0.012, 9.2), 0.55, 503)
+
+
+## 环境微动态：广场与登陆艇的缓飘尘、井盖蒸汽、能源站排风蒸汽、顶棚极淡假体积光。
+func _build_atmosphere() -> void:
+    ATMOSPHERE.build_ambient_motes(_world(), "PlazaDustMotes", Vector3(0.0, 2.2, 6.0), Vector3(10.0, 2.4, 8.0), Color(0.78, 0.80, 0.70), 24, 0.05)
+    ATMOSPHERE.build_ambient_motes(_world(), "PadDustMotes", Vector3(SPAWN_POSITION.x, 1.8, SPAWN_POSITION.y), Vector3(6.0, 2.0, 6.0), Color(0.80, 0.82, 0.72), 16, 0.045)
+    ATMOSPHERE.build_steam_vent(_world(), "ManholeSteam", Vector3(0.0, 0.12, 0.0), Vector3(0.15, 1.0, 0.10), Color(0.82, 0.85, 0.80), 8, 0.24)
+    ATMOSPHERE.build_steam_vent(_world(), "EnergyVentSteam", Vector3(2.0, 5.1, -37.2), Vector3(0.20, 1.0, -0.15), Color(0.84, 0.88, 0.84), 10, 0.30)
+    ATMOSPHERE.build_godray_cone(_world(), "EnergyCanopyShaft", Vector3(2.0, 4.0, -34.6), Vector3(0.0, -1.0, 0.12), 3.6, 0.9, 2.2, Color(0.88, 0.92, 0.82), 0.09)
+
+
+## 物理因果：能源站→城区的装甲导管、状态灯与贴壁图示铭牌。
+## 状态只读既有玩法变量（目标进度 / 撤离开放 / 剧情标记），不新增权威。
+func _build_physical_links() -> void:
+    var jacket := SURFACE.surface(ART.TEAL_DEEP, SURFACE.Family.PAINT_WORN, {"rough_paint": 0.52})
+    _link_flow = PHYSICAL.make_flow_material(Color(0.28, 0.86, 1.0), 0.55, 0.55, 8.0)
+    var points: Array[Vector3] = [
+        Vector3(6.2, 0.20, -37.0), Vector3(8.6, 0.20, -30.0),
+        Vector3(8.6, 0.20, -12.0), Vector3(8.6, 0.20, -2.0),
+    ]
+    PHYSICAL.build_conduit_run(_world(), "EnergyCityConduit", points, 0.075, jacket, _link_flow, Vector3(0.0, 0.06, 0.0), true)
+    var housing := SURFACE.surface(ART.INK, SURFACE.Family.CAST)
+    for index: int in 3:
+        var at: Vector3 = points[mini(index + 1, points.size() - 1)]
+        _link_lamps.append(PHYSICAL.build_status_lamp(_world(), "EnergyCityLamp%d" % index, at + Vector3(0.0, 0.36, 0.0), 0.075, housing))
+    PHYSICAL.build_diagram_plaque(_world(), "EnergyCitySchematic", Vector3(7.4, 1.15, -34.0), Vector3(0.0, -90.0, 0.0), Vector2(0.90, 0.36), [
+        {"num": 1, "icon": "lock", "col": Color(1.0, 0.55, 0.12)},
+        {"num": 2, "icon": "cart", "col": Color(0.30, 0.85, 1.0)},
+        {"num": 3, "icon": "gate", "col": Color(0.30, 1.0, 0.65)},
+    ])
+    _update_physical_links(true)
+
+
+## 只读现有状态更新导管/灯/表盘；每帧只在数值变化时写参数。
+func _update_physical_links(force := false) -> void:
+    var objective := clampf(float(taken_food.size() + discovered_buildings.size()) / float(OBJECTIVE_FOOD + OBJECTIVE_BUILDINGS), 0.0, 1.0)
+    if _pad_dial != null and (force or absf(objective - _pad_dial_value) > 0.004):
+        PHYSICAL.set_dial_value(_pad_dial, objective)
+        _pad_dial_value = objective
+    var ready := extraction_ready()
+    var state := "active" if ready else ("ready" if objective > 0.0 else "locked")
+    if not force and state == _link_state:
+        return
+    _link_state = state
+    PHYSICAL.set_flow_state(_link_flow, state)
+    for lamp in _link_lamps:
+        PHYSICAL.set_lamp_state(lamp, state)
+
+
+
 func _build_horizon() -> void:
     var rng := RandomNumberGenerator.new()
     rng.seed = 20261028
     var hill_parent := Node3D.new()
     hill_parent.name = "RuinHorizon"
     _world().add_child(hill_parent)
+    # 远景低丘：面化岩块 + 层理，不再是“球 + 噪声”。
     for index: int in 14:
         var angle: float = TAU * float(index) / 14.0 + rng.randf_range(-0.08, 0.08)
         var radius: float = rng.randf_range(96.0, 116.0)
-        var point := Vector3(cos(angle) * radius, -1.5, sin(angle) * radius)
         var hill_size := Vector3(rng.randf_range(28.0, 42.0), rng.randf_range(8.0, 15.0), rng.randf_range(24.0, 38.0))
-        var hill := ART.sphere(hill_parent, "Hill%d" % index, hill_size, point, ART.SAGE_DEEP if index % 2 == 0 else ART.TEAL)
-        hill.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-    # 远处城市剪影：奶油/青蓝体块，给地平线一点"这里曾经是殖民城"的读法。
+        var point := Vector3(cos(angle) * radius, hill_size.y * 0.5 - 2.0, sin(angle) * radius)
+        ART.rock_chunk(hill_parent, "Hill%d" % index, hill_size, 2000 + index * 13, point, 12,
+            Color("#5c5648"), Color("#3c3a33"), Color("#6f685a"))
+    # 远处城市剪影：保留体块，但加女儿墙/水塔/竖向分缝，阅读成“殖民城”，不是一堆方盒。
     for index: int in 10:
         var angle: float = TAU * float(index) / 10.0 + 0.22
         var radius: float = rng.randf_range(82.0, 98.0)
         var height: float = rng.randf_range(10.0, 24.0)
         var width: float = rng.randf_range(8.0, 15.0)
         var point := Vector3(cos(angle) * radius, 0.0, sin(angle) * radius)
-        var distant := ART.block(hill_parent, "DistantBlock%d" % index, Vector3(width, height, width * 0.8), point + Vector3(0.0, height * 0.5, 0.0), ART.CREAM_DEEP if index % 2 == 0 else ART.TEAL, 0.4)
+        var distant := ART.block(hill_parent, "DistantBlock%d" % index, Vector3(width, height, width * 0.8), point + Vector3(0.0, height * 0.5, 0.0), ART.CREAM_DEEP if index % 2 == 0 else ART.TEAL, 0.4, false, 0.0, SURFACE.Family.PAINT_CLEAN)
         distant.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+        ART.block(hill_parent, "DistantParapet%d" % index, Vector3(width + 0.8, 0.30, width * 0.8 + 0.8), point + Vector3(0.0, height + 0.15, 0.0), ART.SAND_DEEP, 0.06, false, 0.0, SURFACE.Family.PAINT_CLEAN).cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+        if index % 3 == 0:
+            ART.lathe(hill_parent, "DistantTank%d" % index, PackedVector2Array([
+                Vector2(0.0, 0.0), Vector2(1.1, 0.0), Vector2(1.0, 0.20), Vector2(0.9, 2.0), Vector2(0.0, 2.1),
+            ]), 12, point + Vector3(width * 0.18, height + 0.30, 0.0), ART.CREAM_LIGHT, SURFACE.Family.PAINT_CLEAN).cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+    # 北侧广播塔：全图唯一一处远距红点，作为方向锚；塔身有交叉斜撑和拉索。
+    var tower_root := Node3D.new()
+    tower_root.name = "CollapsedRadioTower"
+    tower_root.position = Vector3(0.0, 0.0, -88.0)
+    hill_parent.add_child(tower_root)
+    ART.lathe(tower_root, "Mast", PackedVector2Array([
+        Vector2(0.0, 0.0), Vector2(0.55, 0.0), Vector2(0.45, 6.0), Vector2(0.30, 12.0),
+        Vector2(0.16, 18.0), Vector2(0.10, 21.0), Vector2(0.0, 21.2),
+    ]), 8, Vector3.ZERO, ART.TEAL_DEEP, SURFACE.Family.PAINT_WORN)
+    for arm_index: int in 4:
+        var arm_y: float = 4.0 + float(arm_index) * 4.2
+        ART.block(tower_root, "TowerArm", Vector3(3.2 - float(arm_index) * 0.55, 0.10, 0.10), Vector3(0.0, arm_y, 0.0), ART.TEAL_LIGHT, 0.01, false, 0.0, SURFACE.Family.MACH)
+        ART.pipe_run(tower_root, "TowerGuy", [Vector3(0.0, arm_y, 0.0), Vector3(3.4 - float(arm_index) * 0.5, 0.0, 0.0)], 0.018, ART.TEAL_DEEP, SURFACE.Family.MACH, false)
+        ART.pipe_run(tower_root, "TowerGuy", [Vector3(0.0, arm_y, 0.0), Vector3(-3.4 + float(arm_index) * 0.5, 0.0, 0.0)], 0.018, ART.TEAL_DEEP, SURFACE.Family.MACH, false)
+    ART.sphere(tower_root, "TowerAviationLight", Vector3(0.34, 0.34, 0.34), Vector3(0.0, 21.4, 0.0), Color("#d24a3a"), true, 0.7)
     # 地图外圈树线：从地面边缘一直排到远景，遮住可行走范围的硬边。
-    for index: int in 22:
-        var angle: float = TAU * float(index) / 22.0
+    for index: int in 16:
+        var angle: float = TAU * float(index) / 16.0
         var radius: float = rng.randf_range(78.0, 92.0)
         var point := Vector3(cos(angle) * radius, 0.0, sin(angle) * radius)
         var tree := ART.tree(hill_parent, point, index * 13 + 5, rng.randf_range(1.2, 2.0))
@@ -1171,174 +1468,6 @@ func _cull_thin_shadow_casters() -> void:
 
 
 # ── 刷新 ──
-
-func _tick_spawns(delta: float) -> void:
-    # 世界被隐藏（已经返航、或还没登陆）时不要继续刷怪。
-    if not is_instance_valid(world_root) or not world_root.visible:
-        return
-    _spawn_timer = maxf(_spawn_timer - delta, 0.0)
-    if _spawn_timer > 0.0:
-        return
-    if zombies.size() >= _zombie_cap():
-        # 满员时也继续走计时：玩家清掉一只后仍要等一个间隔才会补上，
-        # 否则会变成"打完立刻原地刷新"。
-        _spawn_timer = _next_interval()
-        return
-    if _spawn_one():
-        _spawn_timer = _next_interval()
-    else:
-        # 没找到合适落点（玩家挤在角落或建筑密集），过几秒再试。
-        _spawn_timer = 3.0
-
-
-func _zombie_cap() -> int:
-    # 单人 3 只，每多一名玩家 +1；快速重启时菌群狂暴，额外 +2。
-    var extra := 2 if story_plan == "engineer" else 0
-    return ZOMBIE_CAP_BASE + maxi(controller.connected_ids.size() - 1, 0) + extra
-
-
-func _next_interval() -> float:
-    var interval := _spawn_rng.randf_range(ZOMBIE_SPAWN_INTERVAL.x, ZOMBIE_SPAWN_INTERVAL.y)
-    if story_plan == "engineer":
-        interval *= 0.45
-    return interval
-
-
-func _pick_form() -> int:
-    # 用"袋子"而不是纯随机：每袋 2 个步行者 + 1 个鼓胀者 + 1 个爬行者，
-    # 洗完再抽，既保证比例又不会连着三只都是同一种。
-    if _form_bag.is_empty():
-        _form_bag = ZOMBIE_FORM_BAG.duplicate()
-        for index in range(_form_bag.size() - 1, 0, -1):
-            var other := _spawn_rng.randi_range(0, index)
-            var swap: int = int(_form_bag[index])
-            _form_bag[index] = _form_bag[other]
-            _form_bag[other] = swap
-    return int(_form_bag.pop_back())
-
-
-func _spawn_one() -> bool:
-    var point := _pick_spawn_point()
-    if point == Vector2.INF:
-        return false
-    var enemy := RUIN_INFECTED.new() as SpaceEnemy3D
-    if enemy == null:
-        return false
-    enemy.setup_form(_pick_form())
-    enemy.setup(next_zombie_id, controller.connected_ids.size())
-    # SpaceEnemy3D 的默认标签是霜烬星的「霜噬生物 / 追踪热量」，
-    # 在腐墟星必须换掉，否则感染体顶着霜烬星的名字。
-    enemy.set_creature_label("感染体", "循声而来 · 空格攻击")
-    # 必须挂在 Main3D 下：SpaceEnemy3D.server_tick 用 get_parent() 取控制器来结算伤害。
-    enemy.position = Vector3(point.x, surface_height(point.x, point.y), point.y)
-    controller.add_child(enemy)
-    zombies[next_zombie_id] = enemy
-    next_zombie_id += 1
-    return true
-
-
-func _pick_spawn_point() -> Vector2:
-    # 先按正常距离撒点；连续找不到再放宽一点，
-    # 避免四人分散站开后完全刷不出来。
-    for attempt in 24:
-        var margin := ZOMBIE_SPAWN_MIN_DISTANCE if attempt < 16 else ZOMBIE_SPAWN_RETRY_DISTANCE
-        var point := Vector2(
-            _spawn_rng.randf_range(-GROUND_EXTENT.x + ZOMBIE_SPAWN_EDGE_MARGIN, GROUND_EXTENT.x - ZOMBIE_SPAWN_EDGE_MARGIN),
-            _spawn_rng.randf_range(-GROUND_EXTENT.y + ZOMBIE_SPAWN_EDGE_MARGIN, GROUND_EXTENT.y - ZOMBIE_SPAWN_EDGE_MARGIN)
-        )
-        if _inside_building(point):
-            continue
-        if not _far_from_players(point, margin):
-            continue
-        return point
-    return Vector2.INF
-
-
-func _inside_building(point: Vector2) -> bool:
-    # 建筑内部这一轮还没开放，感染体不能刷在实心体块里。
-    for raw in BUILDINGS:
-        var center := Vector2(raw.position)
-        var size := Vector3(raw.size)
-        var half := Vector2(size.x, size.z) * 0.5 + Vector2(2.0, 2.0)
-        if absf(point.x - center.x) < half.x and absf(point.y - center.y) < half.y:
-            return true
-    return false
-
-
-func _far_from_players(point: Vector2, margin: float) -> bool:
-    for peer_id in controller.players.keys():
-        var player := controller.players.get(peer_id) as SpacePlayer3D
-        if player == null:
-            continue
-        var flat := Vector2(player.global_position.x, player.global_position.z)
-        if flat.distance_to(point) < margin:
-            return false
-    return true
-
-
-# ── 感染体同步 ──
-
-## 只给同步用的快照。位置只在客户端第一次建出这只感染体时用到，
-## 之后靠 SpaceEnemy3D 自己的 sync_transform 平滑跟随。
-func enemy_snapshot() -> Array:
-    var result: Array = []
-    for id in zombies.keys():
-        var zombie := zombies[id] as SpaceEnemy3D
-        if zombie == null or not is_instance_valid(zombie) or zombie.health <= 0:
-            continue
-        result.append({
-            "id": zombie.enemy_id,
-            "form": int(zombie.form),
-            "health": zombie.health,
-            "position": zombie.global_position,
-        })
-    return result
-
-
-## 客户端按主机发来的快照补齐/清理感染体。
-## 敌人完全由主机驱动，客户端不自己刷怪，所以这里就是"对齐"。
-func apply_enemy_snapshot(entries: Array) -> void:
-    var seen: Dictionary = {}
-    for raw in entries:
-        if not raw is Dictionary:
-            continue
-        var data: Dictionary = raw
-        var id := int(data.get("id", 0))
-        if id <= 0:
-            continue
-        seen[id] = true
-        var zombie := zombies.get(id) as SpaceEnemy3D
-        if zombie == null or not is_instance_valid(zombie):
-            zombie = _spawn_from_snapshot(data)
-            if zombie == null:
-                continue
-        zombie.health = int(data.get("health", zombie.health))
-    # 主机那边已经清掉的（被打死）要同步移除，否则客户端会留下打不死的残影。
-    for id in zombies.keys():
-        if seen.has(int(id)):
-            continue
-        var stale := zombies[id] as Node
-        if is_instance_valid(stale):
-            stale.queue_free()
-        zombies.erase(id)
-
-
-func _spawn_from_snapshot(data: Dictionary) -> SpaceEnemy3D:
-    var enemy := RUIN_INFECTED.new() as SpaceEnemy3D
-    if enemy == null:
-        return null
-    enemy.setup_form(int(data.get("form", 0)))
-    enemy.setup(int(data.get("id", 1)), controller.connected_ids.size())
-    enemy.set_creature_label("感染体", "循声而来 · 空格攻击")
-    enemy.position = Vector3(data.get("position", Vector3.ZERO))
-    controller.add_child(enemy)
-    enemy.health = int(data.get("health", enemy.max_health))
-    zombies[enemy.enemy_id] = enemy
-    next_zombie_id = maxi(next_zombie_id, enemy.enemy_id + 1)
-    return enemy
-
-
-# ── 环境 ──
 
 func _apply_camera_environment() -> void:
     if _environment == null:
@@ -1381,67 +1510,21 @@ func _world() -> Node3D:
     return world_root
 
 
-# ── 噪音 ──
 
-func add_noise(peer_id: int, amount: float) -> void:
-    if not controller.is_host:
-        return
-    var current := float(noise.get(peer_id, 0.0))
-    noise[peer_id] = clampf(current + amount, 0.0, NOISE_MAX)
-
-
-func noise_level(peer_id: int) -> float:
-    return float(noise.get(peer_id, 0.0))
-
-
-func loudest_noise() -> Dictionary:
-    var best_level := 0.0
-    var best_position := Vector3.ZERO
-    for peer_id in noise.keys():
-        var level := float(noise[peer_id])
-        if level <= best_level or level < NOISE_VISIBLE_THRESHOLD:
-            continue
-        var player := controller.players.get(peer_id) as SpacePlayer3D
-        if player == null:
-            continue
-        best_level = level
-        best_position = player.global_position
-    return {"position": best_position, "level": best_level}
-
-
-# ── 每帧 ──
 
 func tick(delta: float) -> void:
     _time += delta
     # 每个端都要跑：客户端也要把自己的镜头切到腐墟星的环境。
     _apply_camera_environment()
+    _update_physical_links()
     if hud != null:
         hud.tick(delta)
     if not controller.is_host:
         return
-    _tick_noise(delta)
+    _tick_void_recovery()
     _tick_search(delta)
     _tick_force_jobs(delta)
     _tick_story(delta)
-    _refresh_zombie_registry()
-    _tick_spawns(delta)
-    _tick_zombies(delta)
-    _sync_timer -= delta
-    if _sync_timer <= 0.0:
-        _sync_timer = ENEMY_SYNC_INTERVAL
-        controller.broadcast_ruin_enemies(enemy_snapshot())
-
-
-func _tick_noise(delta: float) -> void:
-    for peer_id in noise.keys():
-        var player := controller.players.get(peer_id) as SpacePlayer3D
-        if player == null or player.downed:
-            noise[peer_id] = maxf(float(noise[peer_id]) - NOISE_DECAY * 2.0 * delta, 0.0)
-            continue
-        # 冲刺本身就在制造噪音——这是本关 Shift 的代价。
-        if player.sprinting and player.velocity.length() > 0.2:
-            add_noise(peer_id, NOISE_SPRINT_PER_SEC * delta)
-        noise[peer_id] = maxf(float(noise[peer_id]) - NOISE_DECAY * delta, 0.0)
 
 
 func _tick_search(delta: float) -> void:
@@ -1463,37 +1546,6 @@ func _tick_search(delta: float) -> void:
         else:
             search_jobs[peer_id] = job
 
-
-func _tick_zombies(delta: float) -> void:
-    _refresh_zombie_registry()
-    var noise_info := loudest_noise()
-    var lure_active := float(noise_info.level) > 0.0
-    var lure_position: Vector3 = noise_info.position
-    for id in zombies.keys():
-        var zombie := zombies[id] as SpaceEnemy3D
-        if zombie == null or not is_instance_valid(zombie):
-            zombies.erase(id)
-            continue
-        # server_tick 内部已经处理移动、位置同步和伤害结算，这里不要再重复调用一次。
-        zombie.server_tick(delta, controller.players, lure_position, lure_active, controller.storm_active)
-
-
-func _refresh_zombie_registry() -> void:
-    # 注册表会因为节点被 queue_free（延迟生效）而变脏：死掉的那只还留在表里，
-    # 而活着的那几只如果一旦被误判为无效就会被永久移除——表现为"其他怪静止不动、
-    # 走到身边也打不到"。这里每帧从场景树重建一次，保证表里永远只有活着的感染体。
-    var alive: Dictionary = {}
-    for child in controller.get_children():
-        var enemy := child as SpaceEnemy3D
-        if enemy == null or not is_instance_valid(enemy):
-            continue
-        if enemy.health <= 0:
-            continue
-        alive[enemy.enemy_id] = enemy
-    zombies = alive
-
-
-# ── 交互 ──
 
 func nearest(player: SpacePlayer3D) -> Dictionary:
     if player == null:
@@ -1664,13 +1716,13 @@ func prompt(player: SpacePlayer3D) -> String:
     if String(target.kind) == "energy_physics_door":
         return "[E] 推开重型维护门"
     if String(target.kind) == "energy_secret_door":
-        return "[E] 打开配电间暗门"
+        return "[E] 使用门禁通讯 · 庇护所"
     if String(target.kind) == "energy_quest_item":
         return "[E] 取走%s" % quest_item_label(String(target.id))
     if String(target.kind) == "energy_pump_console":
-        return "[E] 关闭菌群泵"
+        return "[E] 转动手轮 · 关闭菌群泵 %d%%" % int(round(float(story_flags.get("pump_wheel", 0.0)) * 100.0))
     if String(target.kind) == "energy_reactor_console":
-        return "[E] 重启主反应堆"
+        return "[E] 转动手轮 · 重启主反应堆 %d%%" % int(round(float(story_flags.get("reactor_wheel", 0.0)) * 100.0))
     if String(target.kind) == "shelter_exit":
         return "[E] 离开庇护所 · 回到能源站"
     if String(target.kind) == "shelter_npc":
@@ -1699,6 +1751,8 @@ func prompt(player: SpacePlayer3D) -> String:
         var name := String(buildings[target.id].name)
         if String(target.id) == "library":
             return "[E] 检查封死的门 · %s" % name
+        if String(target.id) == "school":
+            return "学校大门被木板封死，无法进入"
         if is_building_locked(String(target.id)):
             var tool_hint := "撬锁" if has_lockpick(player.peer_id) else "撬锁（缺工具）"
             return "%s · [E] %s · [R] 暴力撬开" % [name, tool_hint]
@@ -1768,9 +1822,9 @@ func handle_action(peer_id: int, action: String) -> bool:
         return true
     if String(target.kind) == "energy_secret_door":
         if action == "ruin_force_door":
-            controller.show_feedback_rpc.rpc("暗门不需要撬，靠近按 E 启动配电柜。", Color("#ffbd75"), 1.8)
+            controller.show_feedback_rpc.rpc("这是门禁通讯，不需要撬；按 E 呼叫里面的人。", Color("#ffbd75"), 1.8)
         elif controller.is_host:
-            controller.enter_shelter(peer_id)
+            open_shelter_dialogue(peer_id, "")
         return true
     if String(target.kind) == "energy_quest_item":
         if action == "ruin_force_door":
@@ -1782,13 +1836,13 @@ func handle_action(peer_id: int, action: String) -> bool:
         if action == "ruin_force_door":
             controller.show_feedback_rpc.rpc("控制台不需要撬。", Color("#ffbd75"), 1.8)
         elif controller.is_host:
-            _shutdown_colony_pump(peer_id)
+            _turn_energy_wheel(peer_id, "pump")
         return true
     if String(target.kind) == "energy_reactor_console":
         if action == "ruin_force_door":
             controller.show_feedback_rpc.rpc("控制台不需要撬。", Color("#ffbd75"), 1.8)
         elif controller.is_host:
-            _restart_reactor_after_pump(peer_id)
+            _turn_energy_wheel(peer_id, "reactor")
         return true
     if String(target.kind) == "shelter_exit":
         if action == "ruin_force_door":
@@ -1837,7 +1891,12 @@ func handle_action(peer_id: int, action: String) -> bool:
             finish_story_ending("leave")
             return true
         if story_plan == "doctor" and story_ending == "":
-            controller.show_feedback_rpc.rpc("还不能走：先关闭 B1 菌群泵，再重启主反应堆。", Color("#ffbd75"), 2.6)
+            if not bool(story_flags.get("reactor_restarted", false)):
+                controller.show_feedback_rpc.rpc("还不能走：先关闭 B1 菌群泵，再回 B2 重启主反应堆。", Color("#ffbd75"), 2.6)
+            elif not bool(story_flags.get("launch_key", false)):
+                controller.show_feedback_rpc.rpc("还不能走：回庇护所/配电间门外通讯，领取跃迁钥匙。", Color("#ffbd75"), 2.8)
+            else:
+                finish_story_ending("true")
             return true
         if extraction_ready():
             controller.show_feedback_rpc.rpc("撤离已开放：全员留在登陆艇上，保持 %.0f 秒。" % EXTRACTION_HOLD, Color("#9ff5c9"), 2.0)
@@ -1851,6 +1910,9 @@ func handle_action(peer_id: int, action: String) -> bool:
                 controller.show_feedback_rpc.rpc("图书馆大门从里面焊死了，撬棍也撬不开。", Color("#ffbd75"), 2.4)
             else:
                 controller.show_feedback_rpc.rpc("门缝被焊死，里面还用书架顶住了。打不开。", Color("#ffbd75"), 2.4)
+            return true
+        if building_id == "school":
+            controller.show_feedback_rpc.rpc("学校已经封死，木板和钢条钉在门外，进不去。", Color("#ffbd75"), 2.4)
             return true
         if is_building_locked(building_id):
             if action == "ruin_force_door":
@@ -1894,7 +1956,6 @@ func _tick_force_jobs(delta: float) -> void:
         job.elapsed = float(job.elapsed) + delta
         if float(job.elapsed) >= FORCE_TIME:
             force_jobs.erase(peer_id)
-            add_noise(int(peer_id), 0.85)
             controller.stop_ruin_force(int(peer_id), true)
             unlock_building(int(peer_id), building_id)
             controller.show_feedback_rpc.rpc("%s 的门被暴力撬开了。" % building_name(building_id), Color("#ffbd75"), 2.2)
@@ -1934,6 +1995,9 @@ func _refresh_locks() -> void:
 
 ## 主机在玩家完成撬锁后调用。门锁状态进快照，客户端晚加入也能看到门已开。
 func unlock_building(peer_id: int, building_id: String) -> void:
+    if building_id == "school":
+        controller.show_feedback_rpc.rpc("学校已经封死，木板和钢条钉在门外，进不去。", Color("#ffbd75"), 2.4)
+        return
     if building_id == "library":
         controller.show_feedback_rpc.rpc("图书馆大门被焊死，无法进入。", Color("#ffbd75"), 2.2)
         return
@@ -1948,6 +2012,9 @@ func unlock_building(peer_id: int, building_id: String) -> void:
 
 func enter_building(peer_id: int, building_id: String) -> void:
     if not buildings.has(building_id):
+        return
+    if building_id == "school":
+        controller.show_feedback_rpc.rpc("学校已经封死，木板和钢条钉在门外，进不去。", Color("#ffbd75"), 2.4)
         return
     if building_id == "library":
         controller.show_feedback_rpc.rpc("图书馆大门从里面焊死，里面还用书架顶住了。进不去。", Color("#ffbd75"), 2.4)
@@ -2062,6 +2129,34 @@ func is_inside_shelter(point: Vector3) -> bool:
     return shelter_interior != null and bool(shelter_interior.call("is_inside", point))
 
 
+## 主机记录玩家最近进入的室内入口与最低楼层；用于掉出地板后的兜底。
+func note_interior_entry(peer_id: int, spawn: Vector3, base_y: float) -> void:
+    _interior_anchors[peer_id] = {"spawn": spawn, "base": base_y}
+
+
+func clear_interior_entry(peer_id: int) -> void:
+    _interior_anchors.erase(peer_id)
+
+
+func _tick_void_recovery() -> void:
+    if not controller.is_host:
+        return
+    for peer_id: int in controller.players:
+        var player := controller.players.get(peer_id) as SpacePlayer3D
+        if player == null or player.downed or player.lava_dead:
+            continue
+        var anchor: Dictionary = _interior_anchors.get(peer_id, {})
+        if not anchor.is_empty():
+            var anchor_spawn: Vector3 = anchor.get("spawn", Vector3.ZERO)
+            # 只在室内平面附近兜底；玩家被正常传送/走到别的建筑时不能误拉回。
+            var planar := Vector2(player.global_position.x - anchor_spawn.x, player.global_position.z - anchor_spawn.z)
+            if planar.length() <= 30.0 and player.global_position.y < float(anchor.get("base", 0.0)) - 2.5:
+                controller.recover_ruin_player(peer_id, anchor_spawn)
+        elif player.global_position.y < -5.0:
+            # 没有室内锚点却掉到地面以下：回登陆艇，避免无限下落。
+            controller.recover_ruin_player(peer_id, pad_position() + Vector3(0.0, 0.4, 2.5))
+
+
 func shelter_npc_positions() -> Dictionary:
     if shelter_interior == null:
         return {}
@@ -2087,6 +2182,18 @@ func quest_item_total() -> int:
     return ALL_QUEST_ITEMS.size()
 
 
+func quest_intel_unlocked() -> bool:
+    return bool(story_flags.get("quest_intel", false)) or not quest_items.is_empty()
+
+
+func quest_item_hud_text() -> String:
+    var lines: Array[String] = ["任务物品 %d/%d" % [quest_items.size(), ALL_QUEST_ITEMS.size()]]
+    for item_id: String in ALL_QUEST_ITEMS:
+        var mark := "✓" if has_quest_item(item_id) else "○"
+        lines.append("%s %s · %s" % [mark, String(ALL_QUEST_ITEMS[item_id]), String(QUEST_ITEM_LOCATIONS.get(item_id, "未知位置"))])
+    return "\n".join(lines)
+
+
 func hospital_quest_hud_text() -> String:
     var records := "✓" if has_quest_item("patient_records") else "○"
     var stabilizer := "✓" if has_quest_item("coolant_stabilizer") else "○"
@@ -2099,13 +2206,12 @@ func hospital_quest_hud_text() -> String:
 
 
 func school_quest_hud_text() -> String:
-    var observation := "✓" if has_quest_item("school_observation_data") else "○"
-    var navigation := "✓" if has_quest_item("market_navigation_module") else "○"
-    return "导航线索 · 观测数据%s 民用导航模块%s" % [observation, navigation]
+    return market_quest_hud_text()
 
 
 func market_quest_hud_text() -> String:
-    return school_quest_hud_text()
+    var navigation := "✓" if has_quest_item("market_navigation_module") else "○"
+    return "导航线索 · 民用导航模块%s" % navigation
 
 
 func has_quest_item(item_id: String) -> bool:
@@ -2127,6 +2233,7 @@ func _collect_hospital_quest_item(peer_id: int, item_id: String) -> void:
         return
     quest_items[item_id] = true
     hospital_interior.call("collect_task_item", item_id)
+    controller._update_hud()
     var label := quest_item_label(item_id)
     var hospital_count := 0
     for id: String in HOSPITAL_QUEST_ITEMS.keys():
@@ -2134,12 +2241,12 @@ func _collect_hospital_quest_item(peer_id: int, item_id: String) -> void:
             hospital_count += 1
     if hospital_count >= HOSPITAL_QUEST_ITEMS.size():
         controller.show_feedback_rpc.rpc("医院支线完成 · 病历 / 稳定剂 / 门禁卡已集齐", Color("#9ff5c9"), 3.0)
-        controller._record_journal("医院支线完成", "三件医院线索已集齐：镇静实验病历、低温稳定剂、能源站门禁卡。可以回庇护所向工程师/医生对质，或前往能源站深层。")
+        controller._record_journal("医院支线完成", "三件医院线索已集齐：镇静实验病历、低温稳定剂、能源站门禁卡。可以回配电间门外通过门禁通讯向工程师/医生对质，或前往能源站深层。")
     else:
         controller.show_feedback_rpc.rpc("取得任务物 · %s" % label, Color("#9ff5c9"), 2.4)
     match item_id:
         "patient_records":
-            controller._record_journal("任务物 · 镇静实验病历", "镇静剂只能压住运动，压不住菌群。医院在爆发初期把感染者固定在病床上反复注射，后来护士也开始重复同样的动作。")
+            controller._record_journal("任务物 · 镇静实验病历", "镇静剂只能压住运动，压不住菌群。医院在爆发初期把病人固定在病床上反复注射，后来护士也开始重复同样的动作。")
         "coolant_stabilizer":
             controller._record_journal("任务物 · 低温稳定剂", "矿工低温手术用的稳定剂。能让反应堆重启时不过热，但只够撑一次重启。")
         "energy_access_card":
@@ -2156,9 +2263,7 @@ func _collect_navigation_quest_item(peer_id: int, item_id: String, interior: Nod
     if player == null:
         return
     var inside := false
-    if inside_kind == "school":
-        inside = is_inside_school(player.global_position)
-    elif inside_kind == "market":
+    if inside_kind == "market":
         inside = is_inside_market(player.global_position)
     if not inside:
         return
@@ -2169,19 +2274,18 @@ func _collect_navigation_quest_item(peer_id: int, item_id: String, interior: Nod
         return
     quest_items[item_id] = true
     interior.call("collect_task_item", item_id)
+    controller._update_hud()
     var label := quest_item_label(item_id)
     var nav_count := 0
     for id: String in NAVIGATION_QUEST_ITEMS.keys():
         if has_quest_item(id):
             nav_count += 1
     if nav_count >= NAVIGATION_QUEST_ITEMS.size():
-        controller.show_feedback_rpc.rpc("导航密钥拼合完成 · 观测数据 + 民用导航模块", Color("#9ff5c9"), 3.2)
-        controller._record_journal("导航密钥拼合完成", "学校的菌群扩散观测数据与超市运输无人机导航模块拼合，得到进入能源站循环管网的路线。")
+        controller.show_feedback_rpc.rpc("导航密钥完成 · 民用导航模块", Color("#9ff5c9"), 3.2)
+        controller._record_journal("导航密钥拼合完成", "超市运输无人机导航模块保存着离开腐墟星的安全跃迁路线。")
     else:
         controller.show_feedback_rpc.rpc("取得任务物 · %s" % label, Color("#9ff5c9"), 2.4)
     match item_id:
-        "school_observation_data":
-            controller._record_journal("任务物 · 天文观测数据", "天文台记录到菌群沿能源站循环管网扩散的路线。学生的最后一条广播说：不要往地下走。")
         "market_navigation_module":
             controller._record_journal("任务物 · 民用导航模块", "超市仓库里的旧运输无人机导航模块。保存着殖民城地下管线和能源站应急入口的坐标。")
     controller.sync_ruin_progress.rpc(snapshot())
@@ -2201,15 +2305,15 @@ func _collect_energy_core(peer_id: int) -> void:
         return
     quest_items["reactor_core"] = true
     energy_station_interior.call("collect_task_item", "reactor_core")
-    controller.show_feedback_rpc.rpc("取得任务物 · 反应堆启动核心", Color("#9ff5c9"), 2.2)
-    controller._record_journal("任务物 · 反应堆启动核心", "从 B2 应急弹射舱取出的点火核心。核心本身完好，但没有低温稳定剂就会在重启时过热。")
+    controller._update_hud()
+    controller.show_feedback_rpc.rpc("取得任务物 · 星髓点火芯", Color("#9ff5c9"), 2.2)
+    controller._record_journal("任务物 · 星髓点火芯", "从 B2 应急弹射舱取出的点火芯。它是星髓菌群的代谢结晶，不是普通电池；没有低温稳定剂就会在重启时过热。")
     _refresh_story_stage()
     controller.sync_ruin_progress.rpc(snapshot())
 
 
 func story_ready() -> bool:
     return has_quest_item("coolant_stabilizer") \
-        and has_quest_item("school_observation_data") \
         and has_quest_item("market_navigation_module") \
         and has_quest_item("reactor_core")
 
@@ -2218,12 +2322,12 @@ func story_missing_text() -> String:
     var missing: Array[String] = []
     if not has_quest_item("coolant_stabilizer"):
         missing.append("低温稳定剂（医院 B1）")
-    if not has_quest_item("school_observation_data"):
-        missing.append("天文观测数据（学校 3F）")
+    if not has_quest_item("energy_access_card"):
+        missing.append("E-07 门禁卡（医院 1F）")
+    if not has_quest_item("reactor_core"):
+        missing.append("星髓点火芯（能源站 B2）")
     if not has_quest_item("market_navigation_module"):
         missing.append("民用导航模块（超市 2F）")
-    if not has_quest_item("reactor_core"):
-        missing.append("反应堆启动核心（能源站 B2）")
     return "还缺：" + "、".join(missing)
 
 
@@ -2234,14 +2338,27 @@ func story_objective_text() -> String:
         return "快速重启 · 在 %02d:%02d 前登艇" % [int(story_timer / 60.0), int(story_timer) % 60]
     if story_plan == "doctor":
         if not bool(story_flags.get("pump_shutdown", false)):
-            return "医生的方案 · 去能源站 B1 关闭菌群泵"
-        return "菌群泵已关闭 · 回 B2 重启主反应堆"
+            return "医生的方案 · 能源站 B1 泵房：关闭菌群泵"
+        if not bool(story_flags.get("reactor_restarted", false)):
+            return "菌群泵已关闭 · 能源站 B2 反应堆控制台：转动手轮重启主反应堆"
+        if not bool(story_flags.get("launch_key", false)):
+            return "反应堆已重启 · 回庇护所/配电间门外通讯，领取跃迁钥匙"
+        return "跃迁钥匙已到手 · 回登陆艇撤离"
     if story_plan == "leave":
-        return "隐瞒真相 · 直接登艇离开"
-    if not bool(story_flags.get("met_engineer", false)) and not bool(story_flags.get("met_doctor", false)):
-        return "进入能源站配电间暗门，寻找地下庇护所"
+        return "隐瞒真相 · 回登陆艇直接离开"
+    if not bool(story_flags.get("met_engineer", false)) or not bool(story_flags.get("met_doctor", false)):
+        return "能源站 1F · 核心井北侧：到配电间门外使用门禁通讯\n分别和老工程师、年轻医生通话"
     if story_ready():
-        return "三件套已齐 · 回庇护所决定撤离方案"
+        return "点火三件套已齐 · 回配电间门外用门禁通讯决定撤离方案"
+    # 推荐顺序，但仍然允许玩家自由探索；只把"下一步最该做什么"说清楚。
+    if not has_quest_item("coolant_stabilizer"):
+        return "医院 B1 西侧药库：取低温稳定剂\n医院 1F 保安室：拿 E-07 门禁卡"
+    if not has_quest_item("energy_access_card") and not has_quest_item("reactor_core"):
+        return "能源站 B2 应急舱：取星髓点火芯\n路线：1F 西侧楼梯 → B1 → B2，需要 E-07 门禁卡"
+    if not has_quest_item("reactor_core"):
+        return "能源站 B2 应急舱：取星髓点火芯\n路线：1F 西侧楼梯 → B1 → B2"
+    if not has_quest_item("market_navigation_module"):
+        return "超市 2F 办公室：取民用导航模块"
     return "搜集撤离三件套 · " + story_missing_text()
 
 
@@ -2269,59 +2386,122 @@ func _refresh_story_stage() -> void:
         story_stage = "ready"
 
 
-func open_shelter_dialogue(peer_id: int, npc_id: String) -> void:
+func _needs_launch_key() -> bool:
+    return story_plan == "doctor" \
+        and bool(story_flags.get("reactor_restarted", false)) \
+        and not bool(story_flags.get("launch_key", false))
+
+
+func _grant_launch_key(peer_id: int) -> void:
+    if not _needs_launch_key():
+        return
+    story_flags["launch_key"] = true
+    story_stage = "extraction"
+    if controller._items != null:
+        controller._items.add_item(peer_id, "launch_key", -1, {}, true)
+        controller._items.publish()
+    set_extraction_active(true)
+    controller.show_feedback_rpc.rpc("取得关键道具 · 跃迁钥匙 · 回登陆艇撤离", Color("#9ff5c9"), 4.0)
+    controller._record_journal("关键道具 · 跃迁钥匙", "庇护所联络人把跃迁钥匙交给你。登陆艇的跃迁电池已经充满，现在回登陆艇才算真正离开腐墟星。")
+    controller.sync_ruin_progress.rpc(snapshot())
+
+
+func open_shelter_dialogue(peer_id: int, npc_id: String = "") -> void:
     if not controller.is_host or shelter_interior == null:
         return
     var player := controller.players.get(peer_id) as SpacePlayer3D
-    if player == null or not is_inside_shelter(player.global_position):
+    if player == null:
         return
-    var npcs: Dictionary = shelter_npc_positions()
-    if not npcs.has(npc_id):
+    var inside := is_inside_shelter(player.global_position)
+    var near_intercom := false
+    if energy_station_interior != null:
+        var door_point: Vector3 = energy_station_interior.call("secret_door_position")
+        near_intercom = player.global_position.distance_to(door_point) <= 3.2
+    if not inside and not near_intercom:
         return
-    if player.global_position.distance_to(npcs[npc_id]) > 3.0:
-        return
+    # 第一次接通门禁通讯后，任务栏才显示六件任务道具及其位置。
+    story_flags["quest_intel"] = true
+    controller._update_hud()
     var engineer := npc_id == "engineer"
+    var doctor := npc_id == "doctor"
+    if not engineer and not doctor:
+        var engineer_met := bool(story_flags.get("met_engineer", false))
+        var doctor_met := bool(story_flags.get("met_doctor", false))
+        if not engineer_met:
+            npc_id = "engineer"
+        elif not doctor_met:
+            npc_id = "doctor"
+        else:
+            var talk_count := int(story_flags.get("shelter_talk_count", 0))
+            npc_id = "engineer" if talk_count % 2 == 0 else "doctor"
+        engineer = npc_id == "engineer"
+    if inside:
+        var npcs: Dictionary = shelter_npc_positions()
+        if not npcs.has(npc_id):
+            return
+        if player.global_position.distance_to(npcs[npc_id]) > 3.0:
+            return
     var met_key := "met_engineer" if engineer else "met_doctor"
     var met := bool(story_flags.get(met_key, false))
+    var both_met := bool(story_flags.get("met_engineer", false)) and bool(story_flags.get("met_doctor", false))
     var body := ""
     var options: Array[String] = []
+    if _needs_launch_key():
+        body = "反应堆已经平稳重启，登陆艇电池正在充电。\n但跃迁钥匙还在我手里——没有它，你走不了。\n回来拿钥匙，再回登陆艇。"
+        options = ["领取跃迁钥匙"]
+        controller.show_ruin_dialogue(peer_id, npc_id, "【当前目标】" + story_objective_text().replace("\n", "  ·  ") + "\n\n" + body, options)
+        return
     if not met:
         if engineer:
-            body = "你终于从地表下来了。主反应堆撑不了多久，重启需要点火核心、医院的低温稳定剂，还有一套导航密钥。\n核心在能源站 B2 应急舱，用 E-07 门禁卡能开。稳定剂在医院 B1。导航数据在学校和超市。\n别信医生那套‘先关泵’——我们没有时间。"
+            body = "你终于从地表下来了。登陆艇的跃迁电池已经死了，这颗星上只有能源站的主反应堆还能给它充电。\n反应堆在爆发时紧急停堆，点火芯弹进了 B2 应急舱——用医院 1F 的 E-07 门禁卡能开。还要医院 B1 的低温稳定剂，不然点火芯会过热；学校天文台和超市仓库的导航件拼成导航密钥，船才跳得出去。\n别信医生那套‘先关泵’——我们没有时间。"
         else:
-            body = "别急着听工程师的。反应堆重启会把地下菌群一起激活，三十年前的那次喷发就是这么来的。\n医院病历能证明镇静剂对菌群无效。学校有扩散观测，超市有运输无人机导航模块。\n如果你拿到核心，先来告诉我——关掉 B1 的菌群泵，再重启，星球还有救。"
+            body = "别急着听工程师的。点火芯是星髓菌群的代谢结晶，不是一块干净电池；重启会把地下菌群一起激活，三十年前那次喷发就是这么来的。\n医院 B1 有低温稳定剂，1F 有 E-07 门禁卡，2F 的镇静实验病历能证明镇静剂对菌群无效。学校和超市的导航件也带上，那是我们唯一的出路。\n先关掉 B1 的菌群泵，再重启，星球还有救。"
+        options = ["我会回来"]
+    elif story_ready() and not both_met:
+        body = "点火芯、稳定剂、导航密钥都在你手上，但先和另一边把话谈完。\n撤离方案需要工程师和医生都在场——一个知道反应堆怎么点，一个知道点了之后会发生什么。"
         options = ["我会回来"]
     elif story_ready():
         if engineer:
-            body = "三件套齐了。现在就能重启。医生会说会激活菌群，但她没有证据。\n你选哪条路？"
+            body = "点火三件套齐了。现在就能重启。医生会说会激活菌群，但她没有证据。\n你选哪条路？"
+            if has_quest_item("patient_records"):
+                body += "\n还有那张病历……当年签字同意深层钻探的人是我。等这次结束，我会给你一个交代。"
         else:
-            body = "核心、稳定剂、导航密钥都在你手上。先关 B1 菌群泵，再重启，才有真结局。\n工程师的方案更快，但会把整颗星球烧掉。"
+            body = "核心、稳定剂、导航密钥都在你手上。先关 B1 菌群泵，再回 B2 重启，然后回登陆艇。\n工程师的方案更快，但会把整颗星球烧掉。"
         options = ["按工程师方案：立即重启", "按医生方案：先关菌群泵", "隐瞒真相：直接离开"]
     else:
         body = "东西还没齐。\n" + story_missing_text()
         if engineer and has_quest_item("patient_records"):
             body += "\n还有那张病历……当年签字同意钻探的人是我。等这次结束，我会给你一个交代。"
         options = ["继续搜索"]
-    controller.show_ruin_dialogue(peer_id, npc_id, body, options)
+    controller.show_ruin_dialogue(peer_id, npc_id, "【当前目标】" + story_objective_text().replace("\n", "  ·  ") + "\n\n" + body, options)
 
 
 func choose_shelter_dialogue(peer_id: int, npc_id: String, index: int) -> void:
     if not controller.is_host:
         return
+    story_flags["shelter_talk_count"] = int(story_flags.get("shelter_talk_count", 0)) + 1
     var met_key := "met_engineer" if npc_id == "engineer" else "met_doctor"
     if not bool(story_flags.get(met_key, false)):
         story_flags[met_key] = true
         if story_stage == "start":
             story_stage = "explore"
         if not bool(story_flags.get("met_engineer", false)) or not bool(story_flags.get("met_doctor", false)):
-            controller.show_feedback_rpc.rpc("庇护所已建立联系 · 继续搜集撤离三件套", Color("#9ff5c9"), 2.4)
+            controller.show_feedback_rpc.rpc("庇护所已建立联系 · 继续搜集点火三件套", Color("#9ff5c9"), 2.4)
         else:
-            controller.show_feedback_rpc.rpc("庇护所已建立联系 · 工程师和医生都在等你带回三件套", Color("#9ff5c9"), 2.4)
+            controller.show_feedback_rpc.rpc("庇护所已建立联系 · 工程师和医生都在等你带回点火三件套", Color("#9ff5c9"), 2.4)
         controller.hide_ruin_dialogue(peer_id)
         _refresh_story_stage()
         controller.sync_ruin_progress.rpc(snapshot())
         return
+    if _needs_launch_key():
+        if index == 0:
+            _grant_launch_key(peer_id)
+        controller.hide_ruin_dialogue(peer_id)
+        return
     if not story_ready():
+        controller.hide_ruin_dialogue(peer_id)
+        return
+    if not (bool(story_flags.get("met_engineer", false)) and bool(story_flags.get("met_doctor", false))):
         controller.hide_ruin_dialogue(peer_id)
         return
     if index == 2:
@@ -2356,6 +2536,30 @@ func _apply_story_plan(plan: String) -> void:
     controller.sync_ruin_progress.rpc(snapshot())
 
 
+func _turn_energy_wheel(peer_id: int, kind: String) -> void:
+    var player := controller.players.get(peer_id) as SpacePlayer3D
+    if player == null or energy_station_interior == null or not is_inside_energy_station(player.global_position):
+        return
+    if kind == "reactor" and not bool(story_flags.get("pump_shutdown", false)):
+        controller.show_feedback_rpc.rpc("菌群泵还没关闭，反应堆手轮被机械锁死。", Color("#ffbd75"), 2.2)
+        return
+    var console_point: Vector3 = energy_station_interior.call("pump_console_position") if kind == "pump" else energy_station_interior.call("reactor_console_position")
+    if player.global_position.distance_to(console_point) > 2.8:
+        return
+    var key := "pump_wheel" if kind == "pump" else "reactor_wheel"
+    var progress := clampf(float(story_flags.get(key, 0.0)) + ENERGY_WHEEL_STEP, 0.0, 1.0)
+    story_flags[key] = progress
+    energy_station_interior.call("turn_energy_wheel", kind, progress)
+    if progress < 0.999:
+        controller.show_feedback_rpc.rpc("转动手轮 · %d%%" % int(round(progress * 100.0)), Color("#ffd28a"), 0.7)
+        controller.sync_ruin_progress.rpc(snapshot())
+        return
+    if kind == "pump":
+        _shutdown_colony_pump(peer_id)
+    else:
+        _restart_reactor_after_pump(peer_id)
+
+
 func _shutdown_colony_pump(peer_id: int) -> void:
     if story_plan != "doctor" or bool(story_flags.get("pump_shutdown", false)):
         return
@@ -2373,10 +2577,19 @@ func _restart_reactor_after_pump(peer_id: int) -> void:
     if story_plan != "doctor" or not bool(story_flags.get("pump_shutdown", false)):
         controller.show_feedback_rpc.rpc("菌群泵还没关闭，不能重启。", Color("#ffbd75"), 2.4)
         return
+    if bool(story_flags.get("reactor_restarted", false)):
+        controller.show_feedback_rpc.rpc("主反应堆已经重启 · 回登陆艇撤离。", Color("#9ff5c9"), 2.4)
+        return
     var player := controller.players.get(peer_id) as SpacePlayer3D
     if player == null or not is_inside_energy_station(player.global_position):
         return
-    finish_story_ending("true")
+    # 重启不是终点：登陆艇还要从反应堆接收充电，玩家必须回艇按 E 才算离开。
+    story_flags["reactor_restarted"] = true
+    story_stage = "return_dialogue"
+    set_extraction_active(false)
+    controller.show_feedback_rpc.rpc("主反应堆平稳重启 · 回配电间门外通讯领取跃迁钥匙", Color("#9ff5c9"), 4.0)
+    controller._record_journal("主反应堆已重启", "菌群泵停机后反应堆平稳重启，登陆艇的跃迁电池开始充电。但跃迁钥匙还在庇护所联络人手里，必须先回去通讯。")
+    controller.sync_ruin_progress.rpc(snapshot())
 
 
 func finish_story_ending(ending_id: String) -> void:
@@ -2391,11 +2604,11 @@ func finish_story_ending(ending_id: String) -> void:
     var body := ""
     match ending_id:
         "engineer":
-            body = "反应堆粗暴重启，地表在几分钟内被菌群二次喷发吞没。登陆艇在冲击波前升空，腐墟星从星图上消失。"
+            body = "反应堆粗暴重启，点火芯过热，地表在几分钟内被菌群二次喷发吞没。登陆艇在冲击波前升空，腐墟星从星图上消失。"
         "true":
-            body = "菌群泵停机后反应堆平稳重启。地下菌群退回深层，殖民城保住了。工程师承认了当年的签字，医生把样本留在原地。"
+            body = "菌群泵停机后反应堆平稳重启，星髓点火芯给登陆艇充满跃迁电池。地下菌群退回深层，殖民城保住了。工程师承认了当年的签字，医生把样本留在原地。"
         "leave":
-            body = "你没有重启反应堆，也没有关泵。登陆艇带着三件套离开，但能源不足，只能迫降附近星球。"
+            body = "你没有重启反应堆，点火芯也没能给登陆艇充电。登陆艇带着导航密钥强行离开，但能源不足，只能迫降附近星球。"
         "destroyed":
             body = "倒计时结束，反应堆熔毁引发菌群喷发。登陆艇没能起飞，腐墟星地表彻底沦陷。"
     controller.show_feedback_rpc.rpc(title, Color("#ffbd75") if ending_id != "true" else Color("#9ff5c9"), 6.0)
@@ -2437,7 +2650,6 @@ func _finish_search(peer_id: int, site_id: String) -> void:
         controller._items.publish()
     taken_food.append(site_id)
     # 翻找会产生声音——这是这一关最重要的取舍。
-    add_noise(peer_id, NOISE_SEARCH)
     if is_instance_valid(site.ring):
         site.ring.visible = false
     # 搜刮价值进入返航结算，让"多翻一处"有可见收益。
@@ -2464,52 +2676,6 @@ func _finish_search(peer_id: int, site_id: String) -> void:
 
 # ── 对外数据 ──
 
-func nearest_zombie(from_position: Vector3, limit: float) -> SpaceEnemy3D:
-    # 感染体不在 Main3D 的 enemies 字典里，攻击判定必须通过这个方法查询，
-    # 否则在腐墟星上按空格永远只会提示"超出射程"。
-    var best: SpaceEnemy3D
-    var best_distance := limit
-    for zombie in zombies.values():
-        var candidate := zombie as SpaceEnemy3D
-        # 必须跳过已经死掉的感染体：queue_free() 是延迟生效的，
-        # 如果还把它当成最近目标，后续每一次攻击都会打在尸体上。
-        if candidate == null or not is_instance_valid(candidate) or candidate.health <= 0:
-            continue
-        var distance := Vector2(from_position.x, from_position.z).distance_to(Vector2(candidate.global_position.x, candidate.global_position.z))
-        if distance <= best_distance:
-            best_distance = distance
-            best = candidate
-    return best
-
-
-func nearest_zombie_in_aim(player: SpacePlayer3D, limit: float, min_dot: float) -> SpaceEnemy3D:
-    # 第一人称近战：从眼睛沿准星方向找一个夹角内、且中间没有墙的目标。
-    # 使用玩家的 aim_direction()，服务端能拿到同步过来的朝向与俯仰。
-    if player == null:
-        return null
-    var origin: Vector3 = player.global_position + Vector3.UP * PLAYER_EYE_HEIGHT
-    var aim: Vector3 = player.aim_direction()
-    var best: SpaceEnemy3D
-    var best_distance := limit
-    for zombie in zombies.values():
-        var candidate := zombie as SpaceEnemy3D
-        if candidate == null or not is_instance_valid(candidate) or candidate.health <= 0:
-            continue
-        var center: Vector3 = candidate.global_position + Vector3.UP * 1.05
-        var offset: Vector3 = center - origin
-        var distance := offset.length()
-        if distance > limit or distance < 0.05:
-            continue
-        if aim.dot(offset / distance) < min_dot:
-            continue
-        if not _line_clear(player, origin, center):
-            continue
-        if distance < best_distance:
-            best_distance = distance
-            best = candidate
-    return best
-
-
 func _line_clear(player: SpacePlayer3D, from_point: Vector3, to_point: Vector3) -> bool:
     var world := controller.get_world_3d()
     if world == null:
@@ -2530,6 +2696,8 @@ func map_size() -> Vector2:
 func extraction_ready() -> bool:
     if story_plan == "engineer" or story_plan == "leave":
         return true
+    if story_plan == "doctor" and bool(story_flags.get("reactor_restarted", false)):
+        return bool(story_flags.get("launch_key", false))
     if story_ending != "":
         return true
     return taken_food.size() >= OBJECTIVE_FOOD and discovered_buildings.size() >= OBJECTIVE_BUILDINGS
@@ -2548,6 +2716,7 @@ func set_extraction_active(active: bool) -> void:
     for light in _pad_lights:
         if is_instance_valid(light):
             light.material_override = ART.material(color, true, energy)
+    _update_physical_links(true)
 
 
 func pad_position() -> Vector3:
@@ -2568,11 +2737,10 @@ func extraction_position() -> Vector3:
 func set_visible(value: bool) -> void:
     if is_instance_valid(world_root):
         world_root.visible = value
+        # 返航/收起世界时暂停微尘与蒸汽，避免在主舱里空转。
+        for particle in world_root.find_children("*", "CPUParticles3D", true, false):
+            (particle as CPUParticles3D).emitting = value
         # 感染体挂在 Main3D 下而不是 world_root 下，需要单独处理。
-        for zombie in zombies.values():
-            if is_instance_valid(zombie):
-                zombie.visible = value
-                zombie.set_physics_process(value)
     if is_instance_valid(hud):
         hud.visible = value and controller.game_started and controller.current_planet_id == "ruin"
     if value:
@@ -2592,7 +2760,6 @@ func snapshot() -> Dictionary:
         "taken_food": taken_food,
         "buildings": discovered_buildings,
         "unlocked": unlocked_buildings,
-        "noise": noise,
         "quest_items": quest_items.keys(),
         "story": {
             "flags": story_flags.duplicate(true),
@@ -2609,7 +2776,6 @@ func apply_snapshot(data: Dictionary) -> void:
     discovered_buildings.assign(data.get("buildings", []))
     unlocked_buildings.assign(data.get("unlocked", []))
     unlocked_buildings.erase("library")
-    noise = data.get("noise", {})
     quest_items.clear()
     for id in data.get("quest_items", []):
         quest_items[String(id)] = true
@@ -2629,6 +2795,11 @@ func apply_snapshot(data: Dictionary) -> void:
     story_ending = String(story.get("ending", ""))
     if story_ending != "":
         _story_return_timer = -1.0
+    # 客户端也要看到登陆艇已开放：工程师/离开方案，或医生方案已重启反应堆。
+    set_extraction_active(story_plan in ["engineer", "leave"] or bool(story_flags.get("launch_key", false)))
+    if energy_station_interior != null:
+        energy_station_interior.call("turn_energy_wheel", "pump", float(story_flags.get("pump_wheel", 0.0)))
+        energy_station_interior.call("turn_energy_wheel", "reactor", float(story_flags.get("reactor_wheel", 0.0)))
     _refresh_locks()
     for id in taken_food:
         if food_sites.has(id):

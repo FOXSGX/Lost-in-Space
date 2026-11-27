@@ -20,17 +20,22 @@ var root: Node3D
 var accent := Color("#a38143")
 var entry_ring: MeshInstance3D
 
-const SHELL := Color("#b19b7e")
-const SHELL_DARK := Color("#998266")
-const PLINTH := Color("#80684a")
+const SURFACE := preload("res://scripts/ruin_surface_lib.gd")
+const ART := preload("res://scripts/ruin_cartoon_art.gd")
+const ATMOSPHERE := preload("res://scripts/core/art_atmosphere_kit.gd")
+const PHYSICAL := preload("res://scripts/core/physical_link_kit.gd")
+
+const SHELL := Color("#94876f")
+const SHELL_DARK := Color("#8a7c65")
+const PLINTH := Color("#6d6759")
 const ROOF := Color("#8a4f3e")
-const RIM := Color("#c3ad90")
-const METAL := Color("#33595f")
-const METAL_LIGHT := Color("#5e8584")
-const FRAME := Color("#244850")
-const GLASS := Color("#4d7c7f")
-const HOLE := Color("#1a2f35")
-const AWNING := Color("#9b5a2c")
+const RIM := Color("#c6bba3")
+const METAL := Color("#2e5259")
+const METAL_LIGHT := Color("#6b9294")
+const FRAME := Color("#1d363c")
+const GLASS := Color("#4b6f72")
+const HOLE := Color("#1b2629")
+const AWNING := Color("#2e5259")
 const RUST := Color("#83503d")
 const WOOD := Color("#735034")
 
@@ -53,6 +58,14 @@ func build(building_root: Node3D, size: Vector3, accent_color: Color, owner: Nod
     _build_side_props(half_z)
     _build_parking_lot()
     _build_collision(size)
+    # 接地与排水：径向暗晕 + 两圈碎石 + 四角落水管，消除“整栋楼插在地里”的读法。
+    ATMOSPHERE.build_ground_skirt(root, "BuildingSkirt", Vector3(0.0, 0.0, 0.0), Vector2(size.x + 3.4, size.z + 3.4), Color(0.035, 0.033, 0.030), 0.62)
+    ATMOSPHERE.build_gravel_cluster(root, "BuildingGravelA", Vector3(size.x * 0.5 + 0.6, 0.0, size.z * 0.5 + 0.3), 1.0, 11, 611)
+    ATMOSPHERE.build_gravel_cluster(root, "BuildingGravelB", Vector3(-size.x * 0.5 - 0.6, 0.0, -size.z * 0.5 - 0.4), 0.9, 9, 612)
+    for corner: Array in [[-1.0, -1.0], [1.0, -1.0], [1.0, 1.0]]:
+        var px: float = float(corner[0]) * (size.x * 0.5 - 0.22)
+        var pz: float = float(corner[1]) * (size.z * 0.5 - 0.22)
+        ART.pipe_run(root, "MarketDownpipe", [Vector3(px, 0.28, pz), Vector3(px, 6.0, pz)], 0.05, METAL, SURFACE.Family.MACH, true)
     entry_ring = _mesh(root, "EntryRing", _torus(1.5, 1.56), Vector3(0.0, 0.08, half_z + 1.6), accent, true)
     entry_ring.visible = false
 
@@ -159,7 +172,7 @@ func _build_entrance(half_z: float) -> void:
     _box_to(lock, "LockPlate", Vector3(0.26, 0.34, 0.07), Vector3.ZERO, Color("#c9a15b"))
     _box_to(lock, "LockCylinder", Vector3(0.16, 0.16, 0.05), Vector3(0.0, -0.02, 0.05), Color("#8a5a2b"))
     _box_to(lock, "LockKeyhole", Vector3(0.05, 0.11, 0.025), Vector3(0.0, -0.02, 0.08), HOLE)
-    _box_to(lock, "LockLED", Vector3(0.05, 0.05, 0.02), Vector3(0.0, 0.12, 0.06), AWNING, true)
+    _box_to(lock, "LockLED", Vector3(0.05, 0.05, 0.02), Vector3(0.0, 0.12, 0.06), Color("#a8612f"), true)
 
     # 雨棚：断成两截，右侧那截塌得更厉害，边缘还挂着一片撕下来的布
     var canopy_a := _box("CanopyA", Vector3(4.6, 0.28, 3.2), Vector3(-0.9, 3.98, half_z + 1.9), AWNING)
@@ -188,8 +201,8 @@ func _build_entrance(half_z: float) -> void:
     _box_to(sign_root, "SignFrameB", Vector3(4.2, 0.09, 0.26), Vector3(0.0, -0.71, 0.02), PLINTH)
     _box_to(sign_root, "SignFrameL", Vector3(0.09, 1.41, 0.26), Vector3(-2.06, 0.0, 0.02), PLINTH)
     _box_to(sign_root, "SignFrameR", Vector3(0.09, 1.41, 0.26), Vector3(2.06, 0.0, 0.02), PLINTH)
-    # Reuse the cabin storage symbol; the previous cart asset was absent.
-    var icon: Texture2D = preload("res://assets/ship-hub/computer-icons/store.svg")
+    # 图标：Tabler Icons 的 shopping-cart（MIT 许可），见 assets/icons/LICENSES.md
+    var icon := load("res://assets/icons/shopping-cart.svg") as Texture2D
     if icon != null:
         var plate := MeshInstance3D.new()
         plate.name = "SignIcon"
@@ -619,9 +632,15 @@ func _box(node_name: String, size: Vector3, at: Vector3, color: Color, glow := f
 
 
 func _box_to(parent: Node3D, node_name: String, size: Vector3, at: Vector3, color: Color, glow := false) -> MeshInstance3D:
-    var mesh := BoxMesh.new()
-    mesh.size = size
-    return _mesh(parent, node_name, mesh, at, color, glow)
+    # 倒角盒替换裸 BoxMesh：30 m 剪影和 1.5 m 近景都靠这条倒角高光读体积。
+    var bevel := clampf(minf(size.x, minf(size.y, size.z)) * 0.18, 0.004, 0.045)
+    var instance := MeshInstance3D.new()
+    instance.name = node_name
+    instance.mesh = ART.chamfer_box(size, bevel)
+    instance.position = at
+    instance.material_override = _make_material(color, glow)
+    parent.add_child(instance)
+    return instance
 
 
 func _cyl(node_name: String, radius: float, height: float, at: Vector3, color: Color, glow := false) -> MeshInstance3D:
@@ -661,21 +680,15 @@ func _mesh(parent: Node3D, node_name: String, mesh: Mesh, at: Vector3, color: Co
     return instance
 
 
-## 预览工程里没有 Main3D 的材质工厂，这里按游戏里同样的参数自己建一份：
-## 普通件 roughness 0.72，发光件加 0.85 的自发光。
-func _make_material(color: Color, glow: bool) -> StandardMaterial3D:
-    var material := StandardMaterial3D.new()
-    # 与 ruin_cartoon_art.gd 一致：十六进制色按 sRGB 书写，材质里转成线性。
-    var linear := color.srgb_to_linear()
-    material.albedo_color = Color(linear.r, linear.g, linear.b, color.a)
-    material.roughness = 0.72
+## 材质接管：普通件走 2K 家族分层材质，发光件统一软膝，玻璃走专用玻璃材质。
+func _make_material(color: Color, glow: bool) -> Material:
     if glow:
-        material.emission_enabled = true
-        material.emission = linear
-        # 0.85 的发光在 ACES 下会把金色招牌烧成白色，招牌就废了
-        material.emission_energy_multiplier = 0.30
-        material.roughness = 0.4
-    return material
+        return SURFACE.glow(color, 0.55)
+    if color == GLASS:
+        return SURFACE.glass(GLASS)
+    if color == HOLE:
+        return SURFACE.surface(HOLE, SURFACE.Family.CAST)
+    return SURFACE.auto_surface(color)
 
 
 func _torus(inner: float, outer: float) -> TorusMesh:

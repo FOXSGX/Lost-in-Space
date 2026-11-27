@@ -36,7 +36,6 @@ func run() -> void:
 	check(client.current_planet_id == "ruin", "客户端快照没有切到腐墟星")
 	check(client._ruin_planet != null, "客户端没有建立腐墟星世界")
 	check(client._ruin_planet.world_root.visible, "客户端腐墟星世界不可见")
-	check(client._ruin_planet.zombies.size() == 1, "客户端没有应用感染者快照")
 	check(client.salvage_value == 12, "客户端没有同步回收价值")
 	var player: SpacePlayer3D = client.players.get(1) as SpacePlayer3D
 	check(player != null, "客户端没有生成本地玩家")

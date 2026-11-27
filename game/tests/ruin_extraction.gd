@@ -44,7 +44,7 @@ func run() -> void:
 
 	# 查看 3 栋建筑。
 	for index: int in RuinPlanet.OBJECTIVE_BUILDINGS:
-		ruin.enter_building(1, ["market", "hospital", "school"][index])
+		ruin.enter_building(1, ["market", "hospital", "energy_station"][index])
 	check(ruin.discovered_buildings.size() >= RuinPlanet.OBJECTIVE_BUILDINGS, "查看建筑数量没有达到目标")
 	check(ruin.extraction_ready(), "目标和完成后没有判定撤离开放")
 

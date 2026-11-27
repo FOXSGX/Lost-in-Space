@@ -4,6 +4,9 @@ class_name Main3D
 const PORT := 24567
 var network_port := PORT
 const MAX_PLAYERS := 4
+## 临时调试：true 时跳过起飞核心/归航能源/物资限制，可自由选星。
+## 恢复正式航程时改回 false。
+const DEBUG_FREE_DESTINATION := true
 const PLAYER_SCENE := preload("res://scenes/player_3d.tscn")
 const ENEMY_SCENE := preload("res://scenes/enemy_3d.tscn")
 const OBSTACLE_SCENE := preload("res://scenes/frost_obstacle_3d.tscn")
@@ -46,6 +49,7 @@ var kit_assignments: Dictionary = {}
 # ── 星币与星际集市 ───────────────────────────────────────────
 const RUIN_PLANET := preload("res://scripts/ruin_planet.gd")
 var _ruin_planet: RuinPlanet
+var _resonance_stage: ResonanceStage3D
 const SKIN_CATALOG := [
     {"id": "ranger", "name": "侦察兵 · 标准型", "price": 0, "tag": "帅气"},
     {"id": "gala", "name": "轨道贵族 · 黑金礼服", "price": 1200, "tag": "帅气"},
@@ -134,7 +138,7 @@ const SIGNAL_COOLDOWN := 10.0
 const KEY_BINDINGS_PATH := "user://controls.cfg"
 const KEY_BINDING_ACTIONS := ["sprint", "toggle_map", "toggle_journal", "toggle_equipment"]
 const KEY_BINDING_LABELS := {"sprint": "加速", "toggle_map": "地图", "toggle_journal": "日志", "toggle_equipment": "切换装备栏"}
-const KEY_BINDING_DEFAULTS := {"sprint": KEY_SHIFT, "toggle_map": KEY_M, "toggle_journal": KEY_J, "toggle_equipment": KEY_TAB}
+const KEY_BINDING_DEFAULTS := {"sprint": KEY_SHIFT, "toggle_map": KEY_M, "toggle_journal": KEY_J, "toggle_equipment": KEY_I}
 const LANDMARK_DATA := [
     {"id": "weather_station", "position": Vector2(-130.0, -88.0), "name": "旧气象站", "region": "西北·静默台地", "thought": "天线还在转，但所有记录都被人为删过。有人不想让后来者知道这里发生了什么。", "entry": "旧气象站的日志被分段擦除，只留下一个反复出现的坐标：冰层下方。"},
     {"id": "ice_rift", "position": Vector2(132.0, -94.0), "name": "冰层裂谷", "region": "东北·热脉裂谷", "thought": "裂缝里有热气，温度变化却像呼吸。这里的东西可能还活着。", "entry": "冰层裂谷下方存在规律性的热脉冲，间隔与信标失联时间一致。"},
@@ -236,6 +240,10 @@ var _menu_time := 0.0
 var _status_label: Label
 var _game_status_label: Label
 var _progress_label: Label
+var _task_items_label: Label
+var _task_title_label: Label
+var _task_hint_label: Label
+var _task_hud_collapsed := false
 var _vitals_label: Label
 var _hint_label: Label
 var _thought_label: Label
@@ -266,6 +274,8 @@ var _ruin_dialogue_options: VBoxContainer
 var _ruin_dialogue_visible := false
 var _ruin_dialogue_npc := ""
 var _ruin_dialogue_previous_mouse := Input.MOUSE_MODE_CAPTURED
+var _ruin_dialogue_option_count := 0
+var _ruin_dialogue_reopen_lock_until := 0
 var _side_quest_panel: Panel
 var _side_quest_label: Label
 var _vitals_panel: Panel
@@ -378,6 +388,12 @@ func _input(event: InputEvent) -> void:
     if _ruin_dialogue_visible:
         if is_escape:
             _hide_ruin_dialogue_panel()
+        elif key_event.keycode in [KEY_E, KEY_ENTER, KEY_KP_ENTER, KEY_SPACE]:
+            _choose_ruin_dialogue(0)
+        elif key_event.keycode >= KEY_1 and key_event.keycode <= KEY_9:
+            var option_index := key_event.keycode - KEY_1
+            if option_index < _ruin_dialogue_option_count:
+                _choose_ruin_dialogue(option_index)
         get_viewport().set_input_as_handled()
         return
     if _items != null and _items.choice_open and is_escape:
@@ -415,6 +431,10 @@ func _input(event: InputEvent) -> void:
             _ship_session.close_panel()
         elif game_started or ship_active:
             _open_settings()
+        get_viewport().set_input_as_handled()
+        return
+    if key_event.pressed and not key_event.echo and key_event.keycode == KEY_TAB and game_started and not minigame_active and not is_journal_visible() and not _items.choice_open:
+        _toggle_task_hud()
         get_viewport().set_input_as_handled()
         return
     if _event_matches_action(key_event, "toggle_equipment") and (ship_active or game_started) and not minigame_active and not is_journal_visible() and not _items.choice_open and not _ship_session.has_panel():
@@ -533,7 +553,7 @@ func _process(delta: float) -> void:
         contract_sync_accumulator = 0.0
         sync_contract_state.rpc(mission_elapsed, salvage_value, knowledge_flags.keys(), taken_samples, scan_revealed_clues)
         if current_planet_id == "ruin" and _ruin_planet != null:
-            # 腐墟星的噪音、已翻找物资、已登记建筑走独立可靠同步。
+            # 腐墟星的已翻找物资、已登记建筑走独立可靠同步。
             sync_ruin_progress.rpc(_ruin_planet.snapshot())
     _vitals_accumulator += delta
     if _vitals_accumulator >= 0.1:
@@ -589,9 +609,13 @@ func _build_ui() -> void:
     vision_material.shader = vision_shader
     _vision_overlay.material = vision_material
     _game_layer.add_child(_vision_overlay)
-    _objective_panel = _panel(_game_layer, Vector2(24, 84), Vector2(410, 126), Color(0.025, 0.08, 0.13, 0.82), Color("#254d62"), 12)
-    _progress_label = _ui_label(_objective_panel, "", Vector2(16, 12), Vector2(378, 102), 16, Color("#d9eef4"))
-    _side_quest_panel = _panel(_game_layer, Vector2(24, 220), Vector2(410, 76), Color(0.08, 0.055, 0.14, 0.88), Color("#9b79d6"), 12)
+    _objective_panel = _panel(_game_layer, Vector2(104, 112), Vector2(420, 228), Color(0.025, 0.08, 0.13, 0.86), Color("#4cc8d8"), 12)
+    _task_title_label = _ui_label(_objective_panel, "当前目标", Vector2(16, 6), Vector2(388, 20), 15, UIStyleKit.VISOR_CYAN)
+    _progress_label = _ui_label(_objective_panel, "", Vector2(16, 24), Vector2(388, 44), 13, Color("#e8f7ff"))
+    _task_items_label = _ui_label(_objective_panel, "", Vector2(16, 84), Vector2(388, 116), 11, Color("#9ff5c9"))
+    _task_hint_label = _ui_label(_objective_panel, "Tab 收起任务栏", Vector2(16, 204), Vector2(388, 16), 11, Color("#8CB4CA"))
+    _apply_task_hud_layout()
+    _side_quest_panel = _panel(_game_layer, Vector2(24, 424), Vector2(410, 76), Color(0.08, 0.055, 0.14, 0.88), Color("#9b79d6"), 12)
     _side_quest_label = _ui_label(_side_quest_panel, "", Vector2(14, 9), Vector2(382, 58), 15, Color("#eadfff"))
     _compass_panel = _panel(_game_layer, Vector2.ZERO, Vector2(390, 54), Color(0.025, 0.08, 0.13, 0.86), Color("#62e8dc"), 12)
     _place_hud(_compass_panel, Control.PRESET_CENTER_TOP, Vector2(-195, 22), Vector2(390, 54))
@@ -600,6 +624,8 @@ func _build_ui() -> void:
     _compass_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
     _vitals_panel = _panel(_game_layer, Vector2.ZERO, Vector2(350, 68), Color(0.025, 0.08, 0.13, 0.82), Color("#254d62"), 12)
     _place_hud(_vitals_panel, Control.PRESET_TOP_RIGHT, Vector2(-374, 22), Vector2(350, 68))
+    # 新头盔 VITALS 面板已包含生命/氧气/体温，旧右上读数不再重复显示。
+    _vitals_panel.visible = false
     _vitals_label = _ui_label(_vitals_panel, "", Vector2(16, 12), Vector2(318, 46), 16, Color("#d9eef4"))
     _hint_label = _ui_label(_game_layer, "", Vector2.ZERO, Vector2(570, 24), 14, Color("#a7c4d3"))
     _place_hud(_hint_label, Control.PRESET_BOTTOM_RIGHT, Vector2(-594, -44), Vector2(570, 24))
@@ -608,7 +634,7 @@ func _build_ui() -> void:
     _place_hud(_alert_label, Control.PRESET_CENTER_TOP, Vector2(-260, 28), Vector2(520, 56))
     _alert_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
     _interaction_panel = _panel(_game_layer, Vector2.ZERO, Vector2(560, 50), Color(0.025, 0.08, 0.13, 0.92), Color("#59c8d1"), 12)
-    _place_hud(_interaction_panel, Control.PRESET_CENTER_BOTTOM, Vector2(-280, -76), Vector2(560, 50))
+    _place_hud(_interaction_panel, Control.PRESET_CENTER_BOTTOM, Vector2(-280, -166), Vector2(560, 50))
     _interaction_panel.visible = false
     _interaction_label = _ui_label(_interaction_panel, "", Vector2(16, 8), Vector2(528, 34), 20, Color("#f1fbff"))
     _interaction_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -618,7 +644,7 @@ func _build_ui() -> void:
     _interaction_progress.min_value = 0.0
     _interaction_progress.max_value = 1.0
     _interaction_progress.mouse_filter = Control.MOUSE_FILTER_IGNORE
-    _place_hud(_interaction_progress, Control.PRESET_CENTER_BOTTOM, Vector2(-280, -84), Vector2(560, 6))
+    _place_hud(_interaction_progress, Control.PRESET_CENTER_BOTTOM, Vector2(-280, -174), Vector2(560, 6))
     var progress_background := StyleBoxFlat.new()
     progress_background.bg_color = Color(0.02, 0.08, 0.13, 0.86)
     progress_background.set_corner_radius_all(3)
@@ -630,7 +656,7 @@ func _build_ui() -> void:
     _interaction_progress.visible = false
     _game_layer.add_child(_interaction_progress)
     _subtitle_panel = _panel(_game_layer, Vector2.ZERO, Vector2(700, 92), Color(0.012, 0.035, 0.065, 0.92), Color("#254d62"), 12)
-    _place_hud(_subtitle_panel, Control.PRESET_CENTER_BOTTOM, Vector2(-350, -184), Vector2(700, 92))
+    _place_hud(_subtitle_panel, Control.PRESET_CENTER_BOTTOM, Vector2(-350, -252), Vector2(700, 92))
     _subtitle_panel.visible = false
     _thought_label = _ui_label(_subtitle_panel, "", Vector2(22, 12), Vector2(656, 68), 19, Color("#e1f6ff"))
     _story_label = _ui_label(_subtitle_panel, "", Vector2(22, 12), Vector2(656, 68), 19, Color("#f3d7a4"))
@@ -719,6 +745,8 @@ func _setup_key_bindings() -> void:
             code = int(KEY_BINDING_DEFAULTS[action])
         if action == "toggle_journal" and code == KEY_TAB:
             code = KEY_J
+        if action == "toggle_equipment" and code == KEY_TAB:
+            code = KEY_I
         _key_bindings[action] = code
         _apply_key_binding(action, code)
 
@@ -890,13 +918,9 @@ func _panel(parent: Node, position: Vector2, size: Vector2, fill: Color, border:
     var panel := Panel.new()
     panel.position = position
     panel.size = size
-    var style := StyleBoxFlat.new()
-    style.bg_color = fill
-    style.border_color = border
-    style.set_border_width_all(1)
-    style.set_corner_radius_all(radius)
-    style.shadow_color = Color(0, 0, 0, 0.38)
-    style.shadow_size = 12
+    # 与太空舱/霜烬星 2.0 共用头盔面罩玻璃 UI：深空玻璃底 + 冷青描边。
+    var style := UIStyleKit.visor_box(border, 3, 14, 10)
+    style.bg_color = UIStyleKit.VISOR_GLASS_DEEP.lerp(fill, 0.18)
     panel.add_theme_stylebox_override("panel", style)
     parent.add_child(panel)
     return panel
@@ -906,6 +930,7 @@ func _ui_label(parent: Node, text: String, position: Vector2, size: Vector2, fon
     label.text = text
     label.position = position
     label.size = size
+    label.add_theme_font_override("font", UIStyleKit.FONT_REG)
     label.add_theme_font_size_override("font_size", font_size)
     label.add_theme_color_override("font_color", color)
     label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -933,6 +958,7 @@ func _ui_button(parent: Control, text: String, position: Vector2, size: Vector2,
     button.add_theme_stylebox_override("pressed", pressed)
     button.add_theme_color_override("font_color", Color("#e8faff") if not primary else Color("#07222c"))
     button.add_theme_color_override("font_hover_color", Color("#ffffff") if not primary else Color("#062027"))
+    UIStyleKit.style_button(button, "teal" if primary else "sand")
     button.pressed.connect(callback)
     parent.add_child(button)
     return button
@@ -944,7 +970,7 @@ func _ensure_ruin_dialogue_panel() -> void:
     _place_hud(_ruin_dialogue_panel, Control.PRESET_CENTER, Vector2(-380, -215), Vector2(760, 430))
     _ruin_dialogue_panel.visible = false
     _ruin_dialogue_title = _ui_label(_ruin_dialogue_panel, "", Vector2(34, 24), Vector2(690, 42), 28, Color("#f1fbff"))
-    _ruin_dialogue_body = _ui_label(_ruin_dialogue_panel, "", Vector2(36, 76), Vector2(688, 190), 17, Color("#d6ece7"))
+    _ruin_dialogue_body = _ui_label(_ruin_dialogue_panel, "", Vector2(36, 76), Vector2(688, 294), 16, Color("#d6ece7"))
     _ruin_dialogue_body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
     _ruin_dialogue_body.vertical_alignment = VERTICAL_ALIGNMENT_TOP
     _ruin_dialogue_options = VBoxContainer.new()
@@ -958,15 +984,19 @@ func _show_ruin_dialogue_panel(npc_id: String, body: String, options: Array[Stri
     _ensure_ruin_dialogue_panel()
     _ruin_dialogue_npc = npc_id
     _ruin_dialogue_visible = true
-    _ruin_dialogue_title.text = "老工程师" if npc_id == "engineer" else "年轻医生"
+    _ruin_dialogue_title.text = ("老工程师" if npc_id == "engineer" else "年轻医生") + "  ·  E 继续"
     _ruin_dialogue_body.text = body
+    _ruin_dialogue_option_count = options.size()
     for child in _ruin_dialogue_options.get_children():
         child.queue_free()
     for index: int in options.size():
         var button := Button.new()
-        button.text = "%d  %s" % [index + 1, options[index]]
+        if index == 0:
+            button.text = "[E] " + options[index]
+        else:
+            button.text = "%d  %s" % [index + 1, options[index]]
         button.focus_mode = Control.FOCUS_NONE
-        button.custom_minimum_size = Vector2(688, 38)
+        button.custom_minimum_size = Vector2(688, 44)
         button.add_theme_font_size_override("font_size", 17)
         var normal := StyleBoxFlat.new()
         normal.bg_color = Color("#17334a")
@@ -976,9 +1006,14 @@ func _show_ruin_dialogue_panel(npc_id: String, body: String, options: Array[Stri
         button.add_theme_stylebox_override("normal", normal)
         button.add_theme_color_override("font_color", Color("#e8faff"))
         button.add_theme_stylebox_override("hover", normal)
+        UIStyleKit.style_button(button, "teal" if index == 0 else "sand")
         button.pressed.connect(_choose_ruin_dialogue.bind(index))
         _ruin_dialogue_options.add_child(button)
     _ruin_dialogue_panel.visible = true
+    if _interaction_panel != null:
+        _interaction_panel.visible = false
+    if _interaction_progress != null:
+        _interaction_progress.visible = false
     _ruin_dialogue_previous_mouse = Input.mouse_mode
     Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 
@@ -989,6 +1024,8 @@ func _hide_ruin_dialogue_panel() -> void:
     _ruin_dialogue_visible = false
     _ruin_dialogue_panel.visible = false
     _ruin_dialogue_npc = ""
+    # 同一次 E 按键会在对话关闭后仍触发玩家 interact；短暂锁住，避免自动重开。
+    _ruin_dialogue_reopen_lock_until = Time.get_ticks_msec() + 350
     Input.mouse_mode = _ruin_dialogue_previous_mouse
     var local := players.get(multiplayer.get_unique_id()) as SpacePlayer3D
     if local != null:
@@ -1458,6 +1495,7 @@ func _create_campaign(continuing: bool = false) -> void:
         is_host = false
         _set_status("航程存档无法读取 · 原文件已保留")
         return
+    _ship_session.campaign.debug_free_destination = DEBUG_FREE_DESTINATION
     _ship_session.enter_ship(true, connected_ids, _ship_session.snapshot())
     _ship_session.save_state()
     _ship_session.show_notice("核心损坏 · 去气闸旁的出舱电脑探索霜烬星" if not _ship_session.campaign.navigation_restored else "航程已恢复 · 查看航线电脑")
@@ -1690,15 +1728,6 @@ func _consume_lost_cargo(kind: int, item_id: int) -> void:
             lost_cargo.remove_at(index)
             return
 
-func broadcast_ruin_enemies(state: Array) -> void:
-    if current_planet_id == "ruin" and _ruin_planet != null and is_host:
-        sync_ruin_enemies.rpc(state)
-
-@rpc("authority", "call_local", "reliable")
-func sync_ruin_enemies(state: Array) -> void:
-    if _ruin_planet != null and current_planet_id == "ruin":
-        _ruin_planet.apply_enemy_snapshot(state)
-
 @rpc("authority", "call_remote", "reliable")
 func sync_ruin_progress(state: Dictionary) -> void:
     if _ruin_planet != null and current_planet_id == "ruin":
@@ -1749,7 +1778,7 @@ func _start_ruin_planet() -> void:
         var walker: SpacePlayer3D = players.get(peer_id) as SpacePlayer3D
         if walker != null and walker.is_multiplayer_authority():
             walker.configure_ruin_camera()
-    _set_status("腐墟星：第一人称搜刮。F 近战攻击，E 撬锁/交互（需要撬锁工具），R 暴力撬门，靠近登陆艇按 E 返航。")
+    _set_status("腐墟星：第一人称搜刮。E 撬锁/交互（需要撬锁工具），R 暴力撬门，靠近登陆艇按 E 返航。")
     if is_host:
         # 客户端不在同一台机器上，必须靠快照切星球；否则会留在主舱。
         sync_full_state.rpc(_world_snapshot())
@@ -3717,6 +3746,8 @@ func _unlock_ruin_building(peer_id: int, building_id: String) -> void:
 func enter_hospital(peer_id: int) -> void:
     if not is_host or _ruin_planet == null:
         return
+    if _ruin_planet.hospital_interior != null:
+        _ruin_planet.note_interior_entry(peer_id, _ruin_planet.hospital_spawn_position(), _ruin_planet.hospital_interior.global_position.y)
     enter_hospital_rpc.rpc(peer_id)
 
 
@@ -3743,7 +3774,34 @@ func enter_hospital_rpc(peer_id: int) -> void:
 func exit_hospital(peer_id: int) -> void:
     if not is_host or _ruin_planet == null:
         return
+    _ruin_planet.clear_interior_entry(peer_id)
     exit_hospital_rpc.rpc(peer_id)
+
+
+## 掉出室内地板时的兜底：主机广播，目标客户端回到最近室内入口。
+func recover_ruin_player(peer_id: int, point: Vector3) -> void:
+    if not is_host or _ruin_planet == null:
+        return
+    show_feedback_rpc.rpc("踩空 · 已回到入口", Color("#ffbd75"), 2.0)
+    recover_ruin_player_rpc.rpc(peer_id, point)
+
+
+@rpc("authority", "call_local", "reliable")
+func recover_ruin_player_rpc(peer_id: int, point: Vector3) -> void:
+    if peer_id != multiplayer.get_unique_id():
+        return
+    var player := players.get(peer_id) as SpacePlayer3D
+    if player == null:
+        return
+    player.teleport_to(point)
+    player.rotation.y = 0.0
+    player._camera_yaw = 0.0
+    player._camera_yaw_target = 0.0
+    player._camera_pitch = 0.0
+    player._camera_pitch_target = 0.0
+    player._update_ruin_first_person(0.016)
+    if _ruin_planet != null:
+        _ruin_planet._apply_camera_environment()
 
 
 ## 3F 唯一未上锁的病房门：由主机广播推开，所有客户端看到同一扇门。
@@ -3762,6 +3820,24 @@ func open_hospital_ward_door_rpc() -> void:
     _ruin_planet.hospital_interior.call("open_ward_door")
 
 
+## 所有建筑出口共用：站在门外，并让身体和镜头都背向门/建筑。
+func _place_player_outside(player: SpacePlayer3D, exit_point: Vector3, door_origin: Vector3) -> void:
+    var outward := Vector3(exit_point.x - door_origin.x, 0.0, exit_point.z - door_origin.z)
+    if outward.length_squared() < 0.0001:
+        outward = Vector3(0.0, 0.0, 1.0)
+    outward = outward.normalized()
+    var outward_yaw := atan2(-outward.x, -outward.z)
+    player.teleport_to(exit_point + Vector3(0.0, 0.05, 0.0))
+    player.rotation.y = outward_yaw
+    player._camera_yaw = outward_yaw
+    player._camera_yaw_target = outward_yaw
+    player._camera_pitch = 0.0
+    player._camera_pitch_target = 0.0
+    player._update_ruin_first_person(0.016)
+    if _ruin_planet != null:
+        _ruin_planet._apply_camera_environment()
+
+
 @rpc("authority", "call_local", "reliable")
 func exit_hospital_rpc(peer_id: int) -> void:
     if peer_id != multiplayer.get_unique_id():
@@ -3772,21 +3848,16 @@ func exit_hospital_rpc(peer_id: int) -> void:
     if _ruin_planet != null and not _ruin_planet.is_inside_hospital(player.global_position):
         return
     if _ruin_planet != null:
-        var entry: Vector3 = _ruin_planet.buildings["hospital"].entry
-        player.teleport_to(entry + Vector3(0.0, 0.05, 1.2))
-        player.rotation.y = PI
-        player._camera_yaw = PI
-        player._camera_yaw_target = PI
-        player._camera_pitch = 0.0
-        player._camera_pitch_target = 0.0
-        player._update_ruin_first_person(0.016)
-        _ruin_planet._apply_camera_environment()
+        var data: Dictionary = _ruin_planet.buildings["hospital"]
+        _place_player_outside(player, data.entry as Vector3, (data.root as Node3D).global_position)
 
 
 ## 能源站室内：2F/1F/B1/B2 四层工业设施，只切目标玩家。
 func enter_energy_station(peer_id: int) -> void:
     if not is_host or _ruin_planet == null:
         return
+    if _ruin_planet.energy_station_interior != null:
+        _ruin_planet.note_interior_entry(peer_id, _ruin_planet.energy_spawn_position(), _ruin_planet.energy_station_interior.global_position.y)
     enter_energy_station_rpc.rpc(peer_id)
 
 
@@ -3813,6 +3884,7 @@ func enter_energy_station_rpc(peer_id: int) -> void:
 func exit_energy_station(peer_id: int) -> void:
     if not is_host or _ruin_planet == null:
         return
+    _ruin_planet.clear_interior_entry(peer_id)
     exit_energy_station_rpc.rpc(peer_id)
 
 
@@ -3820,6 +3892,8 @@ func exit_energy_station(peer_id: int) -> void:
 func enter_school(peer_id: int) -> void:
     if not is_host or _ruin_planet == null:
         return
+    if _ruin_planet.school_interior != null:
+        _ruin_planet.note_interior_entry(peer_id, _ruin_planet.school_spawn_position(), _ruin_planet.school_interior.global_position.y)
     enter_school_rpc.rpc(peer_id)
 
 
@@ -3846,6 +3920,7 @@ func enter_school_rpc(peer_id: int) -> void:
 func exit_school(peer_id: int) -> void:
     if not is_host or _ruin_planet == null:
         return
+    _ruin_planet.clear_interior_entry(peer_id)
     exit_school_rpc.rpc(peer_id)
 
 
@@ -3859,21 +3934,16 @@ func exit_school_rpc(peer_id: int) -> void:
     if _ruin_planet != null and not _ruin_planet.is_inside_school(player.global_position):
         return
     if _ruin_planet != null:
-        var entry: Vector3 = _ruin_planet.buildings["school"].entry
-        player.teleport_to(entry + Vector3(0.0, 0.05, 1.2))
-        player.rotation.y = PI
-        player._camera_yaw = PI
-        player._camera_yaw_target = PI
-        player._camera_pitch = 0.0
-        player._camera_pitch_target = 0.0
-        player._update_ruin_first_person(0.016)
-        _ruin_planet._apply_camera_environment()
+        var data: Dictionary = _ruin_planet.buildings["school"]
+        _place_player_outside(player, data.entry as Vector3, (data.root as Node3D).global_position)
 
 
 ## 超市室内：1F 卖场/收银/冷柜，2F 仓库/办公室。
 func enter_market(peer_id: int) -> void:
     if not is_host or _ruin_planet == null:
         return
+    if _ruin_planet.market_interior != null:
+        _ruin_planet.note_interior_entry(peer_id, _ruin_planet.market_spawn_position(), _ruin_planet.market_interior.global_position.y)
     enter_market_rpc.rpc(peer_id)
 
 
@@ -3900,6 +3970,7 @@ func enter_market_rpc(peer_id: int) -> void:
 func exit_market(peer_id: int) -> void:
     if not is_host or _ruin_planet == null:
         return
+    _ruin_planet.clear_interior_entry(peer_id)
     exit_market_rpc.rpc(peer_id)
 
 
@@ -3913,15 +3984,8 @@ func exit_market_rpc(peer_id: int) -> void:
     if _ruin_planet != null and not _ruin_planet.is_inside_market(player.global_position):
         return
     if _ruin_planet != null:
-        var entry: Vector3 = _ruin_planet.buildings["market"].entry
-        player.teleport_to(entry + Vector3(0.0, 0.05, 1.2))
-        player.rotation.y = PI
-        player._camera_yaw = PI
-        player._camera_yaw_target = PI
-        player._camera_pitch = 0.0
-        player._camera_pitch_target = 0.0
-        player._update_ruin_first_person(0.016)
-        _ruin_planet._apply_camera_environment()
+        var data: Dictionary = _ruin_planet.buildings["market"]
+        _place_player_outside(player, data.entry as Vector3, (data.root as Node3D).global_position)
 
 
 ## 能源站维护门：物理门由各端本地模拟，主机只广播一次推力。
@@ -3951,21 +4015,16 @@ func exit_energy_station_rpc(peer_id: int) -> void:
     if _ruin_planet != null and not _ruin_planet.is_inside_energy_station(player.global_position):
         return
     if _ruin_planet != null:
-        var entry: Vector3 = _ruin_planet.buildings["energy_station"].entry
-        player.teleport_to(entry + Vector3(0.0, 0.05, 1.2))
-        player.rotation.y = PI
-        player._camera_yaw = PI
-        player._camera_yaw_target = PI
-        player._camera_pitch = 0.0
-        player._camera_pitch_target = 0.0
-        player._update_ruin_first_person(0.016)
-        _ruin_planet._apply_camera_environment()
+        var data: Dictionary = _ruin_planet.buildings["energy_station"]
+        _place_player_outside(player, data.entry as Vector3, (data.root as Node3D).global_position)
 
 
 ## 能源站配电间暗门后的地下庇护所。
 func enter_shelter(peer_id: int) -> void:
     if not is_host or _ruin_planet == null:
         return
+    if _ruin_planet.shelter_interior != null:
+        _ruin_planet.note_interior_entry(peer_id, _ruin_planet.shelter_spawn_position(), _ruin_planet.shelter_interior.global_position.y)
     enter_shelter_rpc.rpc(peer_id)
 
 
@@ -3991,6 +4050,10 @@ func enter_shelter_rpc(peer_id: int) -> void:
 func exit_shelter(peer_id: int) -> void:
     if not is_host or _ruin_planet == null:
         return
+    _ruin_planet.clear_interior_entry(peer_id)
+    # 庇护所出口回到能源站内部，仍然属于室内，需要能源站锚点。
+    if _ruin_planet.energy_station_interior != null:
+        _ruin_planet.note_interior_entry(peer_id, _ruin_planet.energy_spawn_position(), _ruin_planet.energy_station_interior.global_position.y)
     exit_shelter_rpc.rpc(peer_id)
 
 
@@ -4003,14 +4066,9 @@ func exit_shelter_rpc(peer_id: int) -> void:
         return
     if not _ruin_planet.is_inside_shelter(player.global_position):
         return
-    player.teleport_to(_ruin_planet.energy_secret_return_position())
-    player.rotation.y = PI
-    player._camera_yaw = PI
-    player._camera_yaw_target = PI
-    player._camera_pitch = 0.0
-    player._camera_pitch_target = 0.0
-    player._update_ruin_first_person(0.016)
-    _ruin_planet._apply_camera_environment()
+    var exit_point: Vector3 = _ruin_planet.energy_secret_return_position()
+    var door_origin: Vector3 = _ruin_planet.energy_station_interior.call("secret_door_position")
+    _place_player_outside(player, exit_point, door_origin)
 
 
 ## 庇护所对话：主机生成文本/选项，只发给正在交谈的玩家。
@@ -4316,12 +4374,6 @@ func handle_action(peer_id: int, action: String) -> void:
         elif _items != null:
             _items.handle_action(peer_id, action)
         return
-    if action == "ruin_melee":
-        if not is_host:
-            request_action.rpc_id(1, peer_id, action)
-        else:
-            attack_from_peer(peer_id)
-        return
     if action == "ruin_force_door":
         if not is_host:
             request_action.rpc_id(1, peer_id, action)
@@ -4612,31 +4664,6 @@ func attack_from_peer(peer_id: int) -> void:
     if now < int(_attack_ready_at.get(peer_id, 0)):
         return
     _attack_ready_at[peer_id] = now + int(SpacePlayer3D.ATTACK_INTERVAL * 1000.0) - 20
-    # 腐墟星：感染者不在 enemies 字典里，而且第一人称下必须"对准"才算命中。
-    if current_planet_id == "ruin" and _ruin_planet != null:
-        var aimed := _ruin_planet.nearest_zombie_in_aim(player, RuinPlanet.MELEE_RANGE, RuinPlanet.MELEE_MIN_DOT)
-        if aimed == null:
-            attack_feedback.rpc(peer_id, player.global_position + player.aim_direction() * 1.6, false, false)
-            if peer_id == multiplayer.get_unique_id():
-                show_feedback_rpc.rpc("近战落空 · 对准感染者再按 F", Color("#ffb27a"), 0.8)
-            return
-        var killed: bool = aimed.take_damage(1)
-        attack_feedback.rpc(peer_id, aimed.global_position + Vector3(0.0, 1.05, 0.0), true, killed)
-        if killed:
-            if aimed.has_method("play_death"):
-                aimed.call("play_death")
-            _spawn_particle_burst(aimed.global_position + Vector3(0, 1.0, 0), Color("#ffb07a"), 12)
-            show_feedback_rpc.rpc("击倒感染体", Color("#ffd166"), 0.9)
-            get_tree().create_timer(0.50).timeout.connect(func():
-                if is_instance_valid(aimed):
-                    aimed.queue_free()
-            )
-        else:
-            if aimed.has_method("flinch"):
-                aimed.call("flinch")
-            _spawn_particle_burst(aimed.global_position + Vector3(0, 1.1, 0), Color("#ff9a74"), 6)
-            show_feedback_rpc.rpc("命中 -1", Color("#ffb27a"), 0.6)
-        return
     var nearest: SpaceEnemy3D
     var distance_limit := SpacePlayer3D.ATTACK_RANGE
     for enemy in enemies.values():
@@ -4664,48 +4691,12 @@ func attack_feedback(peer_id: int, target: Vector3, hit: bool, killed := false) 
     var player := players.get(peer_id) as SpacePlayer3D
     if player == null:
         return
-    if current_planet_id == "ruin":
-        # 第一人称：不画从胸口射出的光束，也不弹悬浮"命中"。
-        # 手部挥拳 + 准星命中反馈 + 目标身上的冲击环就是全部反馈。
-        player.play_ruin_attack()
-        player.trigger_camera_shake(0.055 if hit else 0.025, 0.09)
-        if hit:
-            _spawn_melee_impact(target)
-        if peer_id == multiplayer.get_unique_id():
-            if _ruin_planet != null and _ruin_planet.hud != null:
-                _ruin_planet.hud.flash_hit(killed)
-            _set_status("击倒感染体。" if killed else ("命中感染体 -1。" if hit else "挥空 · 准星对准感染者再按 F。"))
-        return
     player.show_attack_animation()
     player.trigger_camera_shake(0.045 if hit else 0.025, 0.08)
     _spawn_attack_effect(player.global_position, target)
     floating_feedback_rpc(target + Vector3(0, 1.2, 0), "命中" if hit else "未命中", Color("#ffd089") if hit else Color("#ff9d9d"))
     if peer_id == multiplayer.get_unique_id():
         _set_status("命中！按住空格连续攻击范围圈内的异形。" if hit else "已开火 · 圈内没有敌人，请靠近红色异形。")
-
-## 近战命中环：贴在被击中的感染者胸口，短促放大后消失。
-func _spawn_melee_impact(target: Vector3) -> void:
-    var ring := MeshInstance3D.new()
-    ring.name = "MeleeImpact"
-    var mesh := TorusMesh.new()
-    mesh.inner_radius = 0.35
-    mesh.outer_radius = 0.42
-    mesh.rings = 24
-    mesh.ring_segments = 8
-    ring.mesh = mesh
-    ring.material_override = _glow_material(Color("#8ff5e3"), 1.6)
-    ring.rotation_degrees.x = 90.0
-    add_child(ring)
-    ring.global_position = target
-    ring.scale = Vector3.ONE * 0.55
-    var tween := ring.create_tween()
-    tween.set_parallel(true)
-    tween.tween_property(ring, "scale", Vector3.ONE * 1.55, 0.18)
-    tween.tween_property(ring, "position:y", target.y + 0.18, 0.18)
-    tween.finished.connect(func():
-        if is_instance_valid(ring):
-            ring.queue_free()
-    )
 
 func _spawn_attack_effect(from_position: Vector3, to_position: Vector3) -> void:
     var effect := MeshInstance3D.new()
@@ -4960,7 +4951,7 @@ func return_to_ship(reason: String, final_vitals: Array = []) -> void:
             _ruin_planet.clear_run()
     var returning_vitals := final_vitals if not final_vitals.is_empty() else _vitals_snapshot()
     if was_ruin and _ruin_planet != null:
-        # 腐墟星不在任何星球存档里，返航时直接收起世界并清掉本局感染者，
+        # 腐墟星不在任何星球存档里，返航时直接收起世界并清空本局临时状态，
         # 否则它们会在主舱里继续 tick、甚至刷到飞船内部。
         _ruin_planet.set_visible(false)
         _ruin_planet.clear_run()
@@ -5068,6 +5059,96 @@ func return_to_ship(reason: String, final_vitals: Array = []) -> void:
         _ship_session.broadcast()
 
 
+func _start_resonance_planet() -> void:
+    if game_started:
+        return
+    if _settings_visible:
+        _close_settings()
+    var departure := _vitals_snapshot() if ship_active else []
+    _ship_session.leave()
+    _ship_session.disable_menu_environment()
+    _clear_players()
+    game_started = true
+    current_planet_id = "electromagnetic"
+    mission_completed = false
+    mission_failed = false
+    mission_summary = ""
+    mission_return_timer = 0.0
+    mission_elapsed = 0.0
+    salvage_value = 0
+    contract_sync_accumulator = 0.0
+    extraction_enabled = false
+    extraction_progress = 0.0
+    storm_active = false
+    storm_elapsed = 0.0
+    storm_remaining = 0.0
+    enemy_spawned = false
+    enemy_wave_index = 0
+    enemy_wave_timer = 0.0
+    next_enemy_id = 1
+    reviving.clear()
+    revive_progress.clear()
+    scan_device_active = false
+    scan_device_position = Vector3.ZERO
+    scan_peer_id = -1
+    scan_remaining = 0.0
+    scan_cooldown = 0.0
+    _journal_visible = false
+    if _journal_panel != null:
+        _journal_panel.visible = false
+    _hide_clue_minigame()
+    if _menu_world != null:
+        _menu_world.visible = false
+    if _resonance_stage != null:
+        _resonance_stage.start_planet("electromagnetic")
+    _game_layer.visible = true
+    _menu_layer.visible = false
+    var focused := get_viewport().gui_get_focus_owner()
+    if focused != null:
+        focused.release_focus()
+    for peer_id in connected_ids:
+        if is_host:
+            spawn_player_for_peer.rpc(peer_id)
+        else:
+            spawn_player_for_peer(peer_id)
+    sync_vitals(departure)
+    if is_host:
+        sync_full_state.rpc(_world_snapshot())
+
+
+func _return_from_resonance(reason: String, final_vitals: Array = []) -> void:
+    var returning_vitals := final_vitals if not final_vitals.is_empty() else _vitals_snapshot()
+    if is_host:
+        _items.clear_planet_cargo()
+        _ship_session.settle(mission_completed, 0, reason)
+    if _resonance_stage != null:
+        _resonance_stage.stop_stage()
+    current_planet_id = "demo"
+    game_started = false
+    mission_completed = false
+    mission_failed = false
+    mission_summary = ""
+    mission_return_timer = 0.0
+    extraction_enabled = false
+    extraction_progress = 0.0
+    storm_active = false
+    storm_elapsed = 0.0
+    storm_remaining = 0.0
+    reviving.clear()
+    revive_progress.clear()
+    _clear_players()
+    if _menu_world != null:
+        _menu_world.visible = true
+    if _game_layer != null:
+        _game_layer.visible = false
+    if _menu_layer != null:
+        _menu_layer.visible = true
+    _ship_session.enter_ship(true, connected_ids, _ship_session.snapshot(), returning_vitals)
+    _ship_session.show_notice(reason)
+    if is_host:
+        _ship_session.broadcast()
+
+
 func _objectives_ready() -> bool:
     return activated_beacons.size() >= beacon_positions.size() and anomaly_resolved and _missing_required_knowledge().is_empty()
 
@@ -5082,7 +5163,7 @@ func _enemy_snapshot() -> Array:
     return snapshot
 
 func _world_snapshot() -> Dictionary:
-    return {"extraction_enabled": extraction_enabled, "extraction_progress": extraction_progress, "planet_id": current_planet_id, "ruin_enemies": _ruin_planet.enemy_snapshot() if (_ruin_planet != null and current_planet_id == "ruin") else [], "ruin_state": _ruin_planet.snapshot() if (_ruin_planet != null and current_planet_id == "ruin") else {}, "kit": kit_assignments.duplicate(true), "credits": credits, "owned_skins": owned_skins, "player_skins": player_skins.duplicate(true), "resonance_state": _resonance_stage.stage_snapshot() if current_planet_id == "electromagnetic" and _resonance_stage != null else {}, "ship_state": _ship_session.snapshot(), "wave": enemy_wave_index, "timer": enemy_wave_timer, "enemies": _enemy_snapshot(), "beacons": activated_beacons, "crates": taken_crates, "samples": taken_samples, "deposited": deposited_resources, "salvage": salvage_value, "mission_elapsed": mission_elapsed, "knowledge": knowledge_flags.keys(), "anomaly_resolved": anomaly_resolved, "ending_choice": ending_choice, "story_flags": story_flags, "side_quest_states": side_quest_states, "achievements": achievement_flags, "world_flags": world_flags, "resource_epoch": _planet_resource_epoch, "lost_cargo": lost_cargo, "rift_valve_open": rift_valve_open, "signal_mode": signal_mode, "signal_lure_until": signal_lure_until, "signal_lure_position": signal_lure_position, "signal_cooldown_until": signal_cooldown_until, "map_markers": map_markers, "vitals": _vitals_snapshot(), "beacon_positions": beacon_positions, "crate_positions": crate_positions, "sample_positions": sample_positions, "journal": journal_entries, "regions": discovered_regions, "clues": discovered_clues, "scan_clues": scan_revealed_clues, "scan_device_active": scan_device_active, "scan_device_position": scan_device_position, "scan_remaining": scan_remaining, "goofy_effects": _goofy_items.snapshot() if _goofy_items != null else [], "field_state": _field_interactions.snapshot() if _field_interactions != null else {}, "roam_state": _roam_activities.snapshot() if _roam_activities != null else {}}
+    return {"extraction_enabled": extraction_enabled, "extraction_progress": extraction_progress, "planet_id": current_planet_id, "ruin_state": _ruin_planet.snapshot() if (_ruin_planet != null and current_planet_id == "ruin") else {}, "kit": kit_assignments.duplicate(true), "credits": credits, "owned_skins": owned_skins, "player_skins": player_skins.duplicate(true), "resonance_state": _resonance_stage.stage_snapshot() if current_planet_id == "electromagnetic" and _resonance_stage != null else {}, "ship_state": _ship_session.snapshot(), "wave": enemy_wave_index, "timer": enemy_wave_timer, "enemies": _enemy_snapshot(), "beacons": activated_beacons, "crates": taken_crates, "samples": taken_samples, "deposited": deposited_resources, "salvage": salvage_value, "mission_elapsed": mission_elapsed, "knowledge": knowledge_flags.keys(), "anomaly_resolved": anomaly_resolved, "ending_choice": ending_choice, "story_flags": story_flags, "side_quest_states": side_quest_states, "achievements": achievement_flags, "world_flags": world_flags, "resource_epoch": _planet_resource_epoch, "lost_cargo": lost_cargo, "rift_valve_open": rift_valve_open, "signal_mode": signal_mode, "signal_lure_until": signal_lure_until, "signal_lure_position": signal_lure_position, "signal_cooldown_until": signal_cooldown_until, "map_markers": map_markers, "vitals": _vitals_snapshot(), "beacon_positions": beacon_positions, "crate_positions": crate_positions, "sample_positions": sample_positions, "journal": journal_entries, "regions": discovered_regions, "clues": discovered_clues, "scan_clues": scan_revealed_clues, "scan_device_active": scan_device_active, "scan_device_position": scan_device_position, "scan_remaining": scan_remaining, "goofy_effects": _goofy_items.snapshot() if _goofy_items != null else [], "field_state": _field_interactions.snapshot() if _field_interactions != null else {}, "roam_state": _roam_activities.snapshot() if _roam_activities != null else {}}
 
 func _vitals_snapshot() -> Array:
     var snapshot: Array = []
@@ -5129,8 +5210,6 @@ func sync_full_state(snapshot: Dictionary) -> void:
     _ship_session.apply_state(snapshot.get("ship_state", {}))
     if snapshot.has("kit"):
         kit_assignments = (snapshot["kit"] as Dictionary).duplicate(true)
-    if snapshot.has("ruin_enemies") and _ruin_planet != null and current_planet_id == "ruin":
-        _ruin_planet.apply_enemy_snapshot(snapshot.get("ruin_enemies", []))
     if snapshot.has("credits"):
         credits = int(snapshot["credits"])
     if snapshot.has("owned_skins"):
@@ -5152,8 +5231,7 @@ func sync_full_state(snapshot: Dictionary) -> void:
         if not game_started or current_planet_id != "ruin":
             _start_ruin_planet()
         if _ruin_planet != null:
-            _ruin_planet.apply_enemy_snapshot(snapshot.get("ruin_enemies", []))
-            _ruin_planet.apply_snapshot(snapshot.get("ruin_state", {}))
+                        _ruin_planet.apply_snapshot(snapshot.get("ruin_state", {}))
         extraction_enabled = bool(snapshot.get("extraction_enabled", false))
         extraction_progress = float(snapshot.get("extraction_progress", 0.0))
         if _ruin_planet != null:
@@ -5378,6 +5456,39 @@ func _next_objective_text() -> String:
 
     return "前往撤离平台集合"
 
+func _toggle_task_hud() -> void:
+    _task_hud_collapsed = not _task_hud_collapsed
+    _apply_task_hud_layout()
+
+
+func _apply_task_hud_layout() -> void:
+    if _objective_panel == null or _task_title_label == null:
+        return
+    if _task_hud_collapsed:
+        _objective_panel.size = Vector2(420, 52)
+        _task_title_label.position = Vector2(16, 6)
+        _task_title_label.size = Vector2(388, 20)
+        _progress_label.visible = false
+        _task_items_label.visible = false
+        _task_hint_label.position = Vector2(16, 28)
+        _task_hint_label.size = Vector2(388, 16)
+        _task_hint_label.text = "Tab 展开任务栏"
+    else:
+        var show_items := _ruin_planet != null and _ruin_planet.quest_intel_unlocked()
+        _objective_panel.size = Vector2(420, 208 if show_items else 148)
+        _task_title_label.position = Vector2(16, 6)
+        _task_title_label.size = Vector2(388, 20)
+        _progress_label.position = Vector2(16, 24)
+        _progress_label.size = Vector2(388, 44)
+        _progress_label.visible = true
+        _task_items_label.position = Vector2(16, 84)
+        _task_items_label.size = Vector2(388, 104 if show_items else 40)
+        _task_items_label.visible = true
+        _task_hint_label.position = Vector2(16, 188 if show_items else 128)
+        _task_hint_label.size = Vector2(388, 16)
+        _task_hint_label.text = "Tab 收起任务栏"
+
+
 func _update_hud() -> void:
     if not game_started:
         return
@@ -5393,7 +5504,7 @@ func _update_hud() -> void:
         _journal_map_view.configure(FrostMapLayout.ICE_CLIFFS, FrostMapLayout.PATHWAYS, LANDMARK_DATA, SAFEHOUSE, EXTRACTION)
     # 支线面板属于霜烬星，腐墟星上隐藏。
     _side_quest_panel.visible = not _journal_visible and current_planet_id != "ruin"
-    _vitals_panel.visible = not _journal_visible
+    _vitals_panel.visible = false  # 由头盔 VITALS 面板统一显示生命/氧气/体温
     _hint_label.visible = not _journal_visible
     _compass_panel.visible = not _journal_visible
     var phase := "探索腐墟星" if current_planet_id == "ruin" else "探索霜烬星"
@@ -5421,32 +5532,27 @@ func _update_hud() -> void:
         elif signal_mode == "low":
             signal_text = "低频 · 诱导"
         _progress_label.text = "%s · %s\n调查 %d/%d · 信标 %d/%d · %s\n%s" % [phase, _region_hint(local.global_position), knowledge_count, REQUIRED_KNOWLEDGE.size(), activated_beacons.size(), beacon_positions.size(), signal_text, _next_objective_text()]
+        _task_items_label.text = ""
         _update_side_quest_tracker(local)
         _vitals_label.text = "氧气 %d%%   体温 %d%%" % [int(local.oxygen), int(local.warmth * 100.0)]
         if not carry_text.is_empty():
             _vitals_label.text += "\n" + carry_text
         if current_planet_id == "ruin":
-            # 腐墟星没有信标、异常、信号频段，也没有体温机制，覆盖成它自己的读数。
-            var ruin_noise := 0
-            var ruin_status := "目标：翻找物资并查看建筑"
+            # 腐墟星任务栏：当前目标与任务物品进度分开显示，避免文字挤在一起。
+            var objective_line := "翻找物资并查看建筑"
+            var item_line := "%d/%d" % [_ruin_planet.quest_item_count(), _ruin_planet.quest_item_total()] if _ruin_planet != null else "0/0"
             if _ruin_planet != null:
-                ruin_noise = int(round(_ruin_planet.noise_level(local.peer_id) * 100.0))
-                ruin_status = "目标：" + _ruin_planet.objective_text()
+                objective_line = _ruin_planet.objective_text()
                 if _ruin_planet.story_plan != "" or not _ruin_planet.story_flags.is_empty():
-                    ruin_status = "剧情：" + _ruin_planet.story_objective_text()
-                if _ruin_planet.is_inside_hospital(local.global_position):
-                    ruin_status += "\n" + _ruin_planet.hospital_quest_hud_text()
-                elif _ruin_planet.is_inside_school(local.global_position):
-                    ruin_status += "\n" + _ruin_planet.school_quest_hud_text()
-                elif _ruin_planet.is_inside_market(local.global_position):
-                    ruin_status += "\n" + _ruin_planet.market_quest_hud_text()
-                elif _ruin_planet.quest_item_count() > 0 and not (_ruin_planet.story_plan != "" or not _ruin_planet.story_flags.is_empty()):
-                    ruin_status += " · 任务物 %d/%d" % [_ruin_planet.quest_item_count(), _ruin_planet.quest_item_total()]
+                    objective_line = _ruin_planet.story_objective_text()
+                item_line = _ruin_planet.quest_item_hud_text() if _ruin_planet.quest_intel_unlocked() else "任务物品 · 未获取任务信息\n先到能源站配电间门外使用门禁通讯"
                 if extraction_enabled:
-                    ruin_status = "撤离开放 · 全员到登陆艇集合"
+                    objective_line = "撤离开放 · 全员到登陆艇集合"
                 if extraction_progress > 0.0:
-                    ruin_status = "撤离中 · %.1f / 3.0 秒" % extraction_progress
-            _progress_label.text = "%s · %s\n%s\n噪音 %d%%   回收价值 %d   %.0fs" % [phase, _region_hint(local.global_position), ruin_status, ruin_noise, salvage_value, mission_elapsed]
+                    objective_line = "撤离中 · %.1f / 3.0 秒" % extraction_progress
+            _progress_label.text = "%s\n回收价值 %d · %.0fs" % [objective_line, salvage_value, mission_elapsed]
+            _task_items_label.text = item_line
+            _apply_task_hud_layout()
             _vitals_label.text = "氧气 %d%%" % int(local.oxygen)
             if not carry_text.is_empty():
                 _vitals_label.text += "\n" + carry_text
@@ -5495,7 +5601,7 @@ func _finish_ruin_hud(local: SpacePlayer3D) -> void:
     var vital_color := Color("#ffad9f") if local.downed or local.health <= 2 else Color("#d9eef4")
     _vitals_label.add_theme_color_override("font_color", vital_color)
     var cooldown := local.scan_cooldown_remaining
-    var hint_parts: Array[String] = ["F 激光剑"]
+    var hint_parts: Array[String] = []
     if cooldown > 0.0:
         hint_parts.append("扫描 %.0fs" % ceilf(cooldown))
     _hint_label.text = " · ".join(hint_parts)
@@ -5520,16 +5626,12 @@ func _finish_ruin_hud(local: SpacePlayer3D) -> void:
         warning = "已登艇 · 正在返航"
     elif local.downed:
         warning = "你已倒地 · 等待队友救援"
-    elif _nearest_threat_distance(local) <= 3.4:
-        warning = "感染者贴近 · 按 F 激光剑，或后退拉开距离"
     elif extraction_progress > 0.0:
         warning = "撤离中 · 全员留在登陆艇上 %.1f / 3.0 秒" % extraction_progress
     elif extraction_enabled:
         warning = "撤离开放 · 全员到登陆艇集合"
-    elif _ruin_planet != null and _ruin_planet.noise_level(local.peer_id) >= 0.55:
-        warning = "噪音过高 · 感染者正循声而来"
-    elif _ruin_planet != null and _ruin_planet.zombies.is_empty():
-        warning = "附近暂时安静 · 找到 3 处物资与 3 栋建筑后开放撤离"
+    elif _ruin_planet != null:
+        warning = "找到 3 处物资与 3 栋建筑后开放撤离"
     # 腐墟星的撤离罗盘常驻在正上方，警告必须下移，避免两行字叠在一起。
     _alert_label.offset_top = 88.0
     _alert_label.offset_bottom = 144.0
@@ -5728,11 +5830,6 @@ func _nearest_threat_distance(local: SpacePlayer3D) -> float:
         var enemy := enemy_value as SpaceEnemy3D
         if is_instance_valid(enemy):
             nearest = minf(nearest, _flat_distance(local.global_position, enemy.global_position))
-    # 腐墟星的感染体不在 enemies 字典里，威胁提示必须单独查。
-    if current_planet_id == "ruin" and _ruin_planet != null:
-        var zombie := _ruin_planet.nearest_zombie(local.global_position, 60.0)
-        if zombie != null:
-            nearest = minf(nearest, _flat_distance(local.global_position, zombie.global_position))
     return nearest
 
 func _update_interaction_hint() -> void:
@@ -5743,6 +5840,11 @@ func _update_interaction_hint() -> void:
     var local := players.get(multiplayer.get_unique_id()) as SpacePlayer3D
     if local == null:
         _interaction_panel.visible = false
+        return
+    if _ruin_dialogue_visible:
+        # 对话选项已经是唯一交互按钮，隐藏场景底部提示，避免压住对话文案。
+        _interaction_panel.visible = false
+        _interaction_progress.visible = false
         return
     _update_nearby_object_labels(local)
     var threat_distance := _nearest_threat_distance(local)
@@ -5891,8 +5993,6 @@ func _update_ruin_interaction_hint(local: SpacePlayer3D, threat_distance: float)
         var mate := mate_value as SpacePlayer3D
         if mate != null and mate.peer_id != local.peer_id and mate.downed and _flat_distance(local.global_position, mate.global_position) <= REVIVE_RANGE:
             prompts.append({"distance": -1.0, "priority": 100, "text": "[E]  救援队友 · 保持 3 秒"})
-    if threat_distance <= RuinPlanet.MELEE_RANGE:
-        prompts.append({"distance": threat_distance, "priority": 80, "text": "[F] 激光剑 · 准星对准感染者"})
     prompts.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
         if int(a.priority) == int(b.priority):
             return float(a.distance) < float(b.distance)

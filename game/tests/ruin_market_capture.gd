@@ -1,5 +1,7 @@
 extends SceneTree
 
+const QUIET := preload("res://tests/quiet_window.gd")
+
 ## 超市室内效果图：卖场、货架、收银、路障、仓库、办公室、装卸口。
 
 var output_dir := "user://ruin-market-interior"
@@ -13,6 +15,7 @@ func _initialize() -> void:
 
 
 func run() -> void:
+	QUIET.apply()
 	var args := OS.get_cmdline_user_args()
 	if not args.is_empty():
 		output_dir = String(args[0])

@@ -6,19 +6,19 @@ const EQUIPMENT_CAPACITY: int = 2
 const JET_REFILL_DELAY: float = 0.3
 const JET_REFILL_RATE: float = 1.0
 const JET_OXYGEN_COST: float = 2.0
-const NAMES: Dictionary = {"suction": "手持吸推器", "chips": "薯片", "keepsake": "科考纪念杯", "crate": "轻型样本箱", "heater": "便携热风机", "cell": "备用电池", "fuel": "普通燃料", "medical": "医疗包", "oxygen": "氧气瓶", "battery": "热能电池", "sample": "异常冰样", "penguin": "回声企鹅", "bubble": "反重力泡", "board": "雪地滑板", "hologram": "全息替身", "smoke": "彩色信号烟", "thermal_suit": "恒温外套", "wide_scanner": "广域扫描器", "signal_stabilizer": "信号稳压器", "lockpick": "撬锁工具"}
+const NAMES: Dictionary = {"suction": "手持吸推器", "chips": "薯片", "keepsake": "科考纪念杯", "crate": "轻型样本箱", "heater": "便携热风机", "cell": "备用电池", "fuel": "普通燃料", "medical": "医疗包", "oxygen": "氧气瓶", "battery": "热能电池", "sample": "异常冰样", "penguin": "回声企鹅", "bubble": "反重力泡", "board": "雪地滑板", "hologram": "全息替身", "smoke": "彩色信号烟", "thermal_suit": "恒温外套", "wide_scanner": "广域扫描器", "signal_stabilizer": "信号稳压器", "lockpick": "撬锁工具", "launch_key": "跃迁钥匙"}
 const EQUIPPABLE: Array[String] = ["oxygen", "thermal_suit", "wide_scanner", "signal_stabilizer"]
 const SUPPLIES: Array[String] = ["medical", "oxygen"]
 const CARGO: Array[String] = ["battery", "sample"]
 const HEAVY: Dictionary = {3: "core", 4: "freight", 5: "coolant"}
 const ICONS: Dictionary = {
-    "suction": preload("res://previews/frost_station/signs/icon_suction.png"),
-    "chips": preload("res://previews/frost_station/signs/icon_chips.png"),
-    "keepsake": preload("res://previews/frost_station/signs/icon_keepsake.png"),
-    "crate": preload("res://previews/frost_station/signs/icon_crate.png"),
-    "heater": preload("res://previews/frost_first_playable/heat.svg"),
-    "cell": preload("res://previews/frost_first_playable/cell.svg"),
-    "fuel": preload("res://previews/frost_first_playable/cell.svg"),
+    "suction": preload("res://assets/ship_signs/icon_suction.png"),
+    "chips": preload("res://assets/ship_signs/icon_chips.png"),
+    "keepsake": preload("res://assets/ship_signs/icon_keepsake.png"),
+    "crate": preload("res://assets/ship_signs/icon_crate.png"),
+    "heater": preload("res://assets/ship_signs/heat.svg"),
+    "cell": preload("res://assets/ship_signs/cell.svg"),
+    "fuel": preload("res://assets/ship_signs/cell.svg"),
     "medical": preload("res://assets/items/icons/medical.svg"),
     "oxygen": preload("res://assets/items/icons/oxygen.svg"),
     "battery": preload("res://assets/items/icons/battery.svg"),
@@ -35,6 +35,7 @@ const ICONS: Dictionary = {
     "wide_scanner": preload("res://assets/ship-hub/computer-icons/wide_scanner.svg"),
     "signal_stabilizer": preload("res://assets/ship-hub/computer-icons/signal_stabilizer.svg"),
     "lockpick": preload("res://assets/ship-hub/computer-icons/repair.svg"),
+    "launch_key": preload("res://assets/items/icons/core.svg"),
 }
 const TRAINING_POSITIONS: Dictionary = {"oxygen": Vector3(-7.0, 0.96, 3.8)}
 
@@ -399,7 +400,7 @@ func mount_oxygen(peer_id: int, slot_index: int = -1) -> void:
     if item.get("kind", "") != "oxygen":
         return
     if not can_equip(peer_id, "oxygen"):
-        controller._ship_session._notify(peer_id, "装备栏已满 · Tab 选择装备后 G 卸下")
+        controller._ship_session._notify(peer_id, "装备栏已满 · I 选择装备后 G 卸下")
         return
     var target: int = equipment_target(peer_id, "oxygen")
     var replacement: Dictionary = (bag.equipment[target] as Dictionary).duplicate(true)
@@ -824,7 +825,7 @@ func _use_selected(peer_id: int) -> void:
         mount_oxygen(peer_id)
     elif ShipSession3D.GEAR_ITEMS.has(kind):
         if not equip_gear(peer_id, kind, true):
-            controller._ship_session._notify(peer_id, "装备栏已满 · Tab 选择装备后 G 卸下")
+            controller._ship_session._notify(peer_id, "装备栏已满 · I 选择装备后 G 卸下")
     elif SUPPLIES.has(kind):
         controller._ship_session._use_supply(peer_id, kind)
     elif kind == "chips":

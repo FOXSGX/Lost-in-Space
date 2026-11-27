@@ -34,6 +34,9 @@ var _close_timer := 0.0
 var _pin_bodies: Array[ColorRect] = []
 var _pin_latches: Array[ColorRect] = []
 var _pick: ColorRect
+var _pick_x := 70.0
+var _pick_target_x := 70.0
+var _pick_phase := 0.0
 var _progress: Label
 var _status: Label
 var _hint: Label
@@ -177,6 +180,12 @@ func _process(delta: float) -> void:
 		_solved = true
 		_close_timer = 0.55
 		_status.text = "咔哒 · 锁芯归位，门锁打开了。"
+	# 撬锁针平滑移动到当前弹子；下压时轻微抖动，避免静态贴图感。
+	_pick_phase += delta
+	_pick_x = lerpf(_pick_x, _pick_target_x, 1.0 - exp(-18.0 * delta))
+	var wobble := sin(_pick_phase * 22.0) * (2.5 if _holding and not _latched[_selected] else 0.6)
+	_pick.position = Vector2(_pick_x + wobble, 252.0 + (4.0 if _holding else 0.0))
+	_pick.rotation = deg_to_rad(wobble * 1.8 + (6.0 if _holding else 0.0))
 	_update_visuals()
 
 
@@ -192,7 +201,7 @@ func _update_visuals() -> void:
 			_pin_bodies[index].color = COLOR_DONE if _latched[index] else COLOR_BRASS
 		if index < _pin_latches.size():
 			_pin_latches[index].color = COLOR_DONE if _latched[index] else Color("#4a3522")
-	_pick.position.x = 54.0 + float(_selected) * 116.0 + 16.0
+	_pick_target_x = 54.0 + float(_selected) * 116.0 + 16.0
 	_progress.text = "已固定 %d / %d" % [count, PIN_COUNT]
 
 

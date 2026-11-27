@@ -1,0 +1,138 @@
+{
+  "checkpoint": 3,
+  "checks": [
+    {
+      "details": {
+        "cp": 1
+      },
+      "label": "hall checkpoint reached",
+      "ok": true
+    },
+    {
+      "details": {},
+      "label": "core locked for checkpoint 2",
+      "ok": true
+    },
+    {
+      "details": {
+        "cp": 2
+      },
+      "label": "lock checkpoint set",
+      "ok": true
+    },
+    {
+      "details": {},
+      "label": "reset kept checkpoint 2",
+      "ok": true
+    },
+    {
+      "details": {
+        "pos": "(0.0, 0.000039, 8.4)"
+      },
+      "label": "reset respawn at console",
+      "ok": true
+    },
+    {
+      "details": {},
+      "label": "reset restored locked core",
+      "ok": true
+    },
+    {
+      "details": {
+        "L": 0.58,
+        "R": 0.02
+      },
+      "label": "reset restored weight snapshot",
+      "ok": true
+    },
+    {
+      "details": {},
+      "label": "reset restored entrance door open",
+      "ok": true
+    },
+    {
+      "details": {},
+      "label": "reset cleared isolation/data",
+      "ok": true
+    },
+    {
+      "details": {},
+      "label": "reset leaves operating mode",
+      "ok": true
+    },
+    {
+      "details": {
+        "cp": 3
+      },
+      "label": "isolation checkpoint set",
+      "ok": true
+    },
+    {
+      "details": {},
+      "label": "isolation separated",
+      "ok": true
+    },
+    {
+      "details": {},
+      "label": "data revealed",
+      "ok": true
+    },
+    {
+      "details": {},
+      "label": "reset kept checkpoint 3",
+      "ok": true
+    },
+    {
+      "details": {},
+      "label": "reset restored isolation",
+      "ok": true
+    },
+    {
+      "details": {},
+      "label": "reset restored data reveal",
+      "ok": true
+    },
+    {
+      "details": {},
+      "label": "reset kept exit locked",
+      "ok": true
+    },
+    {
+      "details": {},
+      "label": "reset cleared taken data",
+      "ok": true
+    },
+    {
+      "details": {},
+      "label": "data can be taken after reset",
+      "ok": true
+    },
+    {
+      "details": {},
+      "label": "exit opens after data",
+      "ok": true
+    },
+    {
+      "details": {},
+      "label": "reset returns to pre-data state",
+      "ok": true
+    },
+    {
+      "details": {},
+      "label": "data remains available for a retry",
+      "ok": true
+    },
+    {
+      "details": {},
+      "label": "retry after reset succeeds",
+      "ok": true
+    },
+    {
+      "details": {},
+      "label": "exit unlocks on retry",
+      "ok": true
+    }
+  ],
+  "failures": 0,
+  "ok": true
+}

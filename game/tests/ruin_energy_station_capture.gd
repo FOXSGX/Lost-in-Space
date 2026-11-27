@@ -1,5 +1,7 @@
 extends SceneTree
 
+const QUIET := preload("res://tests/quiet_window.gd")
+
 ## 能源站内部效果图：1F 大厅/控制/汽轮机、B1 泵房/冷却、B2 反应堆/星髓、2F 通风。
 
 var output_dir := "user://ruin-energy-station"
@@ -13,6 +15,7 @@ func _initialize() -> void:
 
 
 func run() -> void:
+	QUIET.apply()
 	var args := OS.get_cmdline_user_args()
 	if not args.is_empty():
 		output_dir = String(args[0])
@@ -38,6 +41,9 @@ func run() -> void:
 		main._close_settings()
 
 	await _shot("01_entry_1f.png", 2, Vector3(0.0, 0.0, 7.4), 0.0, -0.04)
+	await _shot("01d_entry_directory.png", 2, Vector3(0.0, 0.0, 7.4), 1.35, -0.05)
+	await _shot("01b_entry_right_wall.png", 2, Vector3(0.0, 0.0, 7.4), -PI * 0.5, -0.02)
+	await _shot("01c_entry_right_close.png", 2, Vector3(0.2, 0.0, 7.0), -PI * 0.75, -0.02)
 	await _shot("02_control_1f.png", 2, Vector3(8.8, 0.0, 4.8), PI, -0.04)
 	await _shot("03_turbine_1f.png", 2, Vector3(5.0, 0.0, -1.5), -0.75, -0.04)
 	await _shot("04_pump_b1.png", 1, Vector3(6.5, 0.0, -1.8), 0.0, -0.04)
@@ -50,6 +56,7 @@ func run() -> void:
 	await _shot("11_art_console.png", 2, Vector3(8.0, 0.0, 3.4), PI, -0.06)
 	await _shot("12_physics_door.png", 2, Vector3(9.1, 0.0, 2.1), 0.0, -0.03)
 	await _shot("13_art_press.png", 1, Vector3(7.0, 0.0, -3.0), -0.90, -0.04)
+	await _shot("14_stair_1f.png", 1, Vector3(-12.0, 0.0, 5.6), 0.0, 0.04)
 
 	print("RUIN_ENERGY_CAPTURE done: ", output_dir)
 	quit(0)

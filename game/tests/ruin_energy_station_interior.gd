@@ -89,6 +89,8 @@ func run() -> void:
 	check(not ruin.is_inside_energy_station(player.global_position), "离开能源站后仍在室内层")
 	var entry: Vector3 = ruin.buildings["energy_station"].entry
 	check(player.global_position.distance_to(entry) < 3.0, "离开能源站后没有回到大门")
+	check((-player.global_transform.basis.z).dot(Vector3(0.0, 0.0, 1.0)) > 0.9, "离开能源站后没有朝向外侧")
+	check((-player._camera.global_transform.basis.z).dot(Vector3(0.0, 0.0, 1.0)) > 0.8, "离开能源站后镜头仍朝向大门")
 
 	var collision_count := 0
 	for child in interior.get_children():
@@ -96,5 +98,14 @@ func run() -> void:
 			collision_count += 1
 	check(collision_count >= 30, "能源站内部碰撞体数量不足：%d" % collision_count)
 
+	check(interior.find_children("CorePipe*", "MeshInstance3D", true, false).is_empty(), "能源站仍有多余核心管线")
+	var pump_wheel := interior.find_child("PumpWheel", true, false) as Node3D
+	var reactor_wheel := interior.find_child("ReactorWheel", true, false) as Node3D
+	check(pump_wheel != null, "菌群泵手轮没有建立")
+	check(reactor_wheel != null, "反应堆手轮没有建立")
+	if pump_wheel != null:
+		var before_angle := pump_wheel.rotation_degrees.z
+		interior.call("turn_energy_wheel", "pump", 0.5)
+		check(absf(pump_wheel.rotation_degrees.z - before_angle) > 30.0, "菌群泵手轮没有旋转")
 	print("RUIN_ENERGY_STATION_INTERIOR: %d checks, %d failures" % [checks, failures.size()])
 	quit(0 if failures.is_empty() else 1)

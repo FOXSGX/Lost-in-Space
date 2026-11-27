@@ -2,6 +2,8 @@ extends CharacterBody3D
 class_name SpacePlayer3D
 
 const VISUAL_SCENE := preload("res://scenes/protagonist_visual.tscn")
+const RUIN_ART := preload("res://scripts/ruin_cartoon_art.gd")
+const RUIN_SURFACE := preload("res://scripts/ruin_surface_lib.gd")
 const SPEED := 5.8
 const SPRINT_MULTIPLIER := 1.65
 const SHIP_EYE_HEIGHT: float = 1.6
@@ -95,16 +97,10 @@ var _ship_first_person_mode: bool = false
 var _ship_cursor_released: bool = false
 var _ruin_first_person_mode: bool = false
 var _ruin_cursor_released: bool = false
-var _ruin_viewmodel: Node3D
 var _ruin_crowbar: Node3D
-var _ruin_blade_pivot: Node3D
-var _ruin_blade_core: MeshInstance3D
-var _ruin_blade_glow: MeshInstance3D
-var _ruin_blade_light: OmniLight3D
 var _ruin_force_active := false
 var _ruin_force_progress := 0.0
 var _ruin_force_cooldown := 0.0
-var _ruin_swing_remaining: float = 0.0
 var _ruin_bob_phase: float = 0.0
 var jet_active: bool = false
 var jet_charge: float = 0.0
@@ -302,6 +298,7 @@ func configure_ruin_camera() -> bool:
         # 第一人称已经有准星，地面上的攻击范围圈会变成脚下的一个突兀圆环。
         attack_range_visual.visible = false
     _ruin_cursor_released = false
+    # 恢复激光剑第一人称武器模型；F 攻击沿用原有挥剑动作。
     _build_ruin_viewmodel()
     _update_ruin_first_person(0.016)
     refresh_ruin_mouse_mode()
@@ -321,7 +318,8 @@ func _ruin_ui_blocked() -> bool:
         or controller.is_journal_visible() \
         or controller.lockpick_active \
         or (controller._ship_session != null and controller._ship_session.has_panel()) \
-        or (controller._items != null and controller._items.choice_open)
+        or (controller._items != null and controller._items.choice_open) \
+        or controller._ruin_dialogue_visible
 
 
 func refresh_ruin_mouse_mode() -> void:
@@ -366,234 +364,12 @@ func _update_ruin_first_person(delta: float) -> void:
 
 
 func _build_ruin_viewmodel() -> void:
-    if _ruin_viewmodel != null or _camera == null:
+    if _ruin_crowbar != null or _camera == null:
         return
-    var root := Node3D.new()
-    root.name = "RuinViewmodel"
-    root.position = Vector3(0.42, -0.45, -0.90)
-    root.scale = Vector3.ONE * 0.65
-    root.rotation_degrees = Vector3(6.0, -6.0, -4.0)
-    _camera.add_child(root)
-    # 手部材质单独压暗：space_player 的 _material 不做 sRGB→线性转换，
-    # 直接写奶油白会在白天场景里烧成一团白球。
-    var glove := _material(Color("#a9865c"))
-    glove.roughness = 0.78
-    var sleeve := _material(Color("#1f4d55"))
-    sleeve.roughness = 0.84
-    var cuff := _material(Color("#9a541f"))
-    cuff.roughness = 0.72
-    # space_player 的 _material 不做色彩空间转换，手部单独转一次，
-    # 否则在明亮的腐墟星里会烧成白手套。
-    glove.albedo_color = glove.albedo_color.srgb_to_linear()
-    sleeve.albedo_color = sleeve.albedo_color.srgb_to_linear()
-    cuff.albedo_color = cuff.albedo_color.srgb_to_linear()
-
-    # 前臂：圆柱沿 Z 轴伸向镜头后方，镜头只看到袖口和手套。
-    var forearm := MeshInstance3D.new()
-    forearm.name = "Forearm"
-    var forearm_mesh := CylinderMesh.new()
-    forearm_mesh.top_radius = 0.055
-    forearm_mesh.bottom_radius = 0.05
-    forearm_mesh.height = 0.42
-    forearm_mesh.radial_segments = 16
-    forearm.mesh = forearm_mesh
-    forearm.rotation_degrees.x = 90.0
-    forearm.position = Vector3(0.0, 0.0, 0.18)
-    forearm.material_override = sleeve
-    forearm.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-    root.add_child(forearm)
-
-    var cuff_mesh := MeshInstance3D.new()
-    cuff_mesh.name = "Cuff"
-    var cuff_cyl := CylinderMesh.new()
-    cuff_cyl.top_radius = 0.064
-    cuff_cyl.bottom_radius = 0.064
-    cuff_cyl.height = 0.07
-    cuff_cyl.radial_segments = 16
-    cuff_mesh.mesh = cuff_cyl
-    cuff_mesh.rotation_degrees.x = 90.0
-    cuff_mesh.position = Vector3(0.0, 0.0, -0.03)
-    cuff_mesh.material_override = cuff
-    cuff_mesh.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-    root.add_child(cuff_mesh)
-
-    var hand := MeshInstance3D.new()
-    hand.name = "Glove"
-    var hand_mesh := SphereMesh.new()
-    hand_mesh.radius = 0.5
-    hand_mesh.height = 1.0
-    hand_mesh.radial_segments = 18
-    hand_mesh.rings = 10
-    hand.mesh = hand_mesh
-    hand.scale = Vector3(0.125, 0.11, 0.14)
-    hand.position = Vector3(0.0, 0.0, -0.13)
-    hand.material_override = glove
-    hand.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-    root.add_child(hand)
-
-    var thumb := MeshInstance3D.new()
-    thumb.name = "Thumb"
-    var thumb_mesh := SphereMesh.new()
-    thumb_mesh.radius = 0.5
-    thumb_mesh.height = 1.0
-    thumb_mesh.radial_segments = 12
-    thumb_mesh.rings = 8
-    thumb.mesh = thumb_mesh
-    thumb.scale = Vector3(0.05, 0.045, 0.075)
-    thumb.position = Vector3(-0.07, 0.025, -0.14)
-    thumb.material_override = glove
-    thumb.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-    root.add_child(thumb)
-
-    # 三节指节：让手套读成握拳，而不是一颗奶油色圆球。
-    var knuckle_seam := _material(Color("#6b4a2c"))
-    for index: int in 3:
-        var finger := MeshInstance3D.new()
-        finger.name = "Finger%d" % index
-        var finger_mesh := SphereMesh.new()
-        finger_mesh.radius = 0.5
-        finger_mesh.height = 1.0
-        finger_mesh.radial_segments = 12
-        finger_mesh.rings = 8
-        finger.mesh = finger_mesh
-        finger.scale = Vector3(0.04, 0.035, 0.05)
-        finger.position = Vector3(-0.05 + float(index) * 0.05, 0.045, -0.20)
-        finger.material_override = glove
-        finger.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-        root.add_child(finger)
-        var seam := MeshInstance3D.new()
-        seam.name = "FingerSeam%d" % index
-        var seam_mesh := BoxMesh.new()
-        seam_mesh.size = Vector3(0.012, 0.045, 0.06)
-        seam.mesh = seam_mesh
-        seam.position = Vector3(-0.075 + float(index) * 0.05, 0.05, -0.235)
-        seam.material_override = knuckle_seam
-        seam.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-        root.add_child(seam)
-
-    var knuckle := MeshInstance3D.new()
-    knuckle.name = "KnuckleBand"
-    var knuckle_mesh := BoxMesh.new()
-    knuckle_mesh.size = Vector3(0.10, 0.03, 0.03)
-    knuckle.mesh = knuckle_mesh
-    knuckle.position = Vector3(0.0, 0.04, -0.20)
-    knuckle.material_override = cuff
-    knuckle.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-    root.add_child(knuckle)
-    # ── 激光剑：握在现有手套里，刀刃沿 -Z 伸向镜头前方 ──
-    var hilt_metal := _material(Color("#28383c"))
-    hilt_metal.albedo_color = hilt_metal.albedo_color.srgb_to_linear()
-    var hilt_brass := _material(Color("#c9793b"))
-    hilt_brass.albedo_color = hilt_brass.albedo_color.srgb_to_linear()
-    var hilt := MeshInstance3D.new()
-    hilt.name = "SaberHilt"
-    var hilt_mesh := CylinderMesh.new()
-    hilt_mesh.top_radius = 0.032
-    hilt_mesh.bottom_radius = 0.040
-    hilt_mesh.height = 0.25
-    hilt_mesh.radial_segments = 16
-    hilt.mesh = hilt_mesh
-    hilt.position = Vector3(0.0, -0.18, -0.08)
-    hilt.material_override = hilt_metal
-    hilt.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-    root.add_child(hilt)
-    for index: int in 3:
-        var grip_band := MeshInstance3D.new()
-        grip_band.name = "GripBand%d" % index
-        var band_mesh := CylinderMesh.new()
-        band_mesh.top_radius = 0.043
-        band_mesh.bottom_radius = 0.043
-        band_mesh.height = 0.025
-        band_mesh.radial_segments = 12
-        grip_band.mesh = band_mesh
-        grip_band.position = Vector3(0.0, -0.10 - float(index) * 0.07, -0.08)
-        grip_band.material_override = hilt_brass
-        grip_band.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-        root.add_child(grip_band)
-    var guard := MeshInstance3D.new()
-    guard.name = "SaberGuard"
-    var guard_mesh := BoxMesh.new()
-    guard_mesh.size = Vector3(0.22, 0.05, 0.10)
-    guard.mesh = guard_mesh
-    guard.position = Vector3(0.0, -0.02, -0.08)
-    guard.material_override = hilt_brass
-    guard.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-    root.add_child(guard)
-
-    _ruin_blade_pivot = Node3D.new()
-    _ruin_blade_pivot.name = "SaberBladePivot"
-    _ruin_blade_pivot.position = Vector3(0.0, 0.0, -0.08)
-    root.add_child(_ruin_blade_pivot)
-
-    var blade_glow_material := StandardMaterial3D.new()
-    var blade_glow_color := Color("#2bd8c4").srgb_to_linear()
-    blade_glow_color.a = 0.30
-    blade_glow_material.albedo_color = blade_glow_color
-    blade_glow_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-    blade_glow_material.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
-    blade_glow_material.cull_mode = BaseMaterial3D.CULL_DISABLED
-    blade_glow_material.emission_enabled = true
-    blade_glow_material.emission = Color("#2bd8c4").srgb_to_linear()
-    blade_glow_material.emission_energy_multiplier = 0.7
-    _ruin_blade_glow = MeshInstance3D.new()
-    _ruin_blade_glow.name = "SaberBladeGlow"
-    var glow_mesh := CylinderMesh.new()
-    glow_mesh.top_radius = 0.068
-    glow_mesh.bottom_radius = 0.048
-    glow_mesh.height = 1.18
-    glow_mesh.radial_segments = 16
-    _ruin_blade_glow.mesh = glow_mesh
-    _ruin_blade_glow.position = Vector3(0.0, 0.59, 0.0)
-    _ruin_blade_glow.material_override = blade_glow_material
-    _ruin_blade_glow.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-    _ruin_blade_pivot.add_child(_ruin_blade_glow)
-
-    var blade_core_material := StandardMaterial3D.new()
-    blade_core_material.albedo_color = Color("#25d9c6").srgb_to_linear()
-    blade_core_material.emission_enabled = true
-    blade_core_material.emission = Color("#25d9c6").srgb_to_linear()
-    blade_core_material.emission_energy_multiplier = 0.35
-    blade_core_material.roughness = 0.18
-    blade_core_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-    _ruin_blade_core = MeshInstance3D.new()
-    _ruin_blade_core.name = "SaberBladeCore"
-    var core_mesh := CylinderMesh.new()
-    core_mesh.top_radius = 0.012
-    core_mesh.bottom_radius = 0.009
-    core_mesh.height = 1.16
-    core_mesh.radial_segments = 10
-    _ruin_blade_core.mesh = core_mesh
-    _ruin_blade_core.position = Vector3(0.0, 0.59, 0.0)
-    _ruin_blade_core.material_override = blade_core_material
-    _ruin_blade_core.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-    _ruin_blade_pivot.add_child(_ruin_blade_core)
-
-    var tip := MeshInstance3D.new()
-    tip.name = "SaberTip"
-    var tip_mesh := SphereMesh.new()
-    tip_mesh.radius = 0.026
-    tip_mesh.height = 0.052
-    tip_mesh.radial_segments = 10
-    tip_mesh.rings = 6
-    tip.mesh = tip_mesh
-    tip.position = Vector3(0.0, 1.18, 0.0)
-    tip.material_override = blade_core_material
-    tip.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-    _ruin_blade_pivot.add_child(tip)
-
-    _ruin_blade_light = OmniLight3D.new()
-    _ruin_blade_light.name = "SaberLight"
-    _ruin_blade_light.light_color = Color("#7ff5e5")
-    _ruin_blade_light.light_energy = 1.0
-    _ruin_blade_light.omni_range = 3.0
-    _ruin_blade_light.position = Vector3(0.0, 0.62, 0.0)
-    _ruin_blade_pivot.add_child(_ruin_blade_light)
-
-    _ruin_viewmodel = root
-    _build_ruin_crowbar(root)
+    _build_ruin_crowbar(null)
 
 
-func _build_ruin_crowbar(_saber_root: Node3D) -> void:
+func _build_ruin_crowbar(_unused_root: Node3D) -> void:
     var root := Node3D.new()
     root.name = "RuinCrowbar"
     root.position = Vector3(0.30, -0.30, -0.52)
@@ -672,63 +448,22 @@ func _build_ruin_crowbar(_saber_root: Node3D) -> void:
 
 
 func _update_ruin_viewmodel(delta: float) -> void:
-    if _ruin_viewmodel == null:
+    if _ruin_crowbar == null:
         return
-    var controller := get_parent() as Main3D
-    var holding: bool = controller != null and controller._items != null and not controller._items.selected(peer_id).is_empty()
-    if _ruin_crowbar != null:
-        _ruin_crowbar.visible = _ruin_force_active and not downed
+    _ruin_crowbar.visible = _ruin_force_active and not downed
     if _ruin_force_active:
-        _ruin_viewmodel.visible = false
-        if _ruin_crowbar != null:
-            var progress := clampf(_ruin_force_progress, 0.0, 1.0)
-            var lever := sin(progress * PI * 3.0)
-            _ruin_crowbar.position = Vector3(0.30, -0.30 + lever * 0.018, -0.52 + lever * 0.035)
-            _ruin_crowbar.rotation = Vector3(
-                deg_to_rad(-14.0 + lever * 7.0),
-                deg_to_rad(35.0),
-                deg_to_rad(-20.0 + lever * 12.0)
-            )
-        return
-    _ruin_viewmodel.visible = not downed and not holding
-    if not _ruin_viewmodel.visible:
-        return
-    _ruin_swing_remaining = maxf(_ruin_swing_remaining - delta, 0.0)
-    var swing := 0.0
-    if _ruin_swing_remaining > 0.0:
-        var t: float = 1.0 - _ruin_swing_remaining / 0.26
-        swing = sin(clampf(t, 0.0, 1.0) * PI)
-    var bob: float = sin(_ruin_bob_phase) * 0.006
-    # 竖握 -> 向前下方劈砍：绕 X 轴把刀身从竖直压到接近水平。
-    _ruin_viewmodel.position = Vector3(0.42, -0.45, -0.90) + Vector3(0.02 * swing, 0.06 * swing + bob, -0.10 * swing)
-    _ruin_viewmodel.rotation = Vector3(
-        deg_to_rad(6.0 - 105.0 * swing),
-        deg_to_rad(-6.0 + 12.0 * swing),
-        deg_to_rad(-4.0 + 10.0 * swing)
-    )
-    if _ruin_blade_pivot != null:
-        _ruin_blade_pivot.rotation.x = deg_to_rad(-3.0 * swing)
-    if _ruin_blade_core != null and _ruin_blade_core.material_override is StandardMaterial3D:
-        var core_material := _ruin_blade_core.material_override as StandardMaterial3D
-        core_material.emission_energy_multiplier = 2.25 + sin(_ruin_bob_phase * 0.7) * 0.12
-    if _ruin_blade_light != null:
-        _ruin_blade_light.light_energy = 0.52 + sin(_ruin_bob_phase * 0.9) * 0.05
+        var progress := clampf(_ruin_force_progress, 0.0, 1.0)
+        var lever := sin(progress * PI * 3.0)
+        _ruin_crowbar.position = Vector3(0.30, -0.30 + lever * 0.018, -0.52 + lever * 0.035)
+        _ruin_crowbar.rotation = Vector3(deg_to_rad(-14.0 + lever * 7.0), deg_to_rad(35.0), deg_to_rad(-20.0 + lever * 12.0))
 
 
 func _dispose_ruin_viewmodel() -> void:
-    if _ruin_viewmodel != null and is_instance_valid(_ruin_viewmodel):
-        _ruin_viewmodel.queue_free()
-    _ruin_viewmodel = null
     if _ruin_crowbar != null and is_instance_valid(_ruin_crowbar):
         _ruin_crowbar.queue_free()
     _ruin_crowbar = null
-    _ruin_blade_pivot = null
-    _ruin_blade_core = null
-    _ruin_blade_glow = null
-    _ruin_blade_light = null
     _ruin_force_active = false
     _ruin_force_progress = 0.0
-    _ruin_swing_remaining = 0.0
 
 
 func start_ruin_force() -> void:
@@ -736,7 +471,6 @@ func start_ruin_force() -> void:
         return
     _ruin_force_active = true
     _ruin_force_progress = 0.0
-    _ruin_swing_remaining = 0.0
 
 
 func set_ruin_force_progress(progress: float) -> void:
@@ -746,12 +480,6 @@ func set_ruin_force_progress(progress: float) -> void:
 func stop_ruin_force() -> void:
     _ruin_force_active = false
     _ruin_force_progress = 0.0
-
-
-## 本地近战挥拳动画。远端玩家仍然走第三人称的 show_attack_animation()。
-func play_ruin_attack() -> void:
-    if _ruin_first_person_mode and not _ruin_force_active:
-        _ruin_swing_remaining = 0.26
 
 
 func _apply_mouse_look(relative: Vector2) -> void:    # Godot 的角色前方是 -Z；rotation.y 增大时前方朝 -X，
@@ -1026,19 +754,15 @@ func _physics_process(delta: float) -> void:
     var map_half := controller.get_active_map_size() * 0.5 - Vector2(1.0, 1.0)
     global_position.x = clampf(global_position.x, -map_half.x, map_half.x)
     global_position.z = clampf(global_position.z, -map_half.y, map_half.y)
+    var dialogue_lock: bool = controller._ruin_dialogue_visible or Time.get_ticks_msec() < controller._ruin_dialogue_reopen_lock_until
     for action in ["interact", "item_drop", "slot_1", "slot_2", "slot_3", "slot_4"]:
-        if Input.is_action_just_pressed(action):
+        if not dialogue_lock and Input.is_action_just_pressed(action):
             controller.handle_action(peer_id, action)
-    # 腐墟星第一人称近战：F 是"始终可打"的近战键，手里拿着物资也能挥拳。
-    # 左键空手攻击仍然保留，给只用鼠标的玩家。
-    if ruin_surface and Input.is_physical_key_pressed(KEY_F) and _attack_cooldown <= 0.0 and scan_lock_remaining <= 0.0 and not _ruin_force_active:
-        _attack_cooldown = ATTACK_INTERVAL
-        controller.handle_action(peer_id, "ruin_melee")
     # R：不需要撬锁工具，直接用撬棍暴力撬门；主机计时，玩家要留在门口。
-    if ruin_surface and Input.is_physical_key_pressed(KEY_R) and _ruin_force_cooldown <= 0.0 and not _ruin_force_active:
+    if ruin_surface and not dialogue_lock and Input.is_physical_key_pressed(KEY_R) and _ruin_force_cooldown <= 0.0 and not _ruin_force_active:
         _ruin_force_cooldown = 2.8
         controller.handle_action(peer_id, "ruin_force_door")
-    if scan_lock_remaining <= 0.0 and Time.get_ticks_msec() >= controller._items.suppress_use_until:
+    if not dialogue_lock and scan_lock_remaining <= 0.0 and Time.get_ticks_msec() >= controller._items.suppress_use_until:
         var empty_hand: bool = controller._items.selected(peer_id).is_empty()
         if (empty_hand and Input.is_action_pressed("item_use") and _attack_cooldown <= 0.0) or (not empty_hand and Input.is_action_just_pressed("item_use")):
             _attack_cooldown = ATTACK_INTERVAL

@@ -5,6 +5,9 @@ class_name CampaignNavigation
 const ENERGY_TARGET: int = 2
 const SUPPLY_TARGET: int = 2
 var enabled: bool = false
+## 临时调试：跳过起飞核心/归航能源/物资门槛，允许自由选星。
+## 正式航程请改回 false（Main3D.DEBUG_FREE_DESTINATION）。
+var debug_free_destination: bool = false
 var location: String = "demo"
 var grounded: bool = true
 var core_installed: bool = false
@@ -23,10 +26,11 @@ func start_new() -> void:
     apply({"enabled": true})
 
 func snapshot() -> Dictionary:
-    return {"enabled": enabled, "location": location, "grounded": grounded, "core_installed": core_installed, "navigation_restored": navigation_restored, "home_reached": home_reached, "ordinary_fuel": ordinary_fuel, "energy": energy, "supplies": supplies, "revision": revision, "visits": visits.duplicate(true), "claims": claims.duplicate(true), "frost_world": frost_world.duplicate(true), "ruin_state": ruin_state.duplicate(true)}
+    return {"enabled": enabled, "debug_free_destination": debug_free_destination, "location": location, "grounded": grounded, "core_installed": core_installed, "navigation_restored": navigation_restored, "home_reached": home_reached, "ordinary_fuel": ordinary_fuel, "energy": energy, "supplies": supplies, "revision": revision, "visits": visits.duplicate(true), "claims": claims.duplicate(true), "frost_world": frost_world.duplicate(true), "ruin_state": ruin_state.duplicate(true)}
 
 func apply(state: Dictionary) -> void:
     enabled = bool(state.get("enabled", false))
+    debug_free_destination = bool(state.get("debug_free_destination", false))
     location = String(state.get("location", "demo"))
     grounded = bool(state.get("grounded", true))
     core_installed = bool(state.get("core_installed", false))
@@ -47,6 +51,8 @@ func can_return_home() -> bool:
 func block_reason(destination: String) -> String:
     if not enabled:
         return ""
+    if debug_free_destination:
+        return "" if destination in ["demo", "electromagnetic", "ruin", "earth"] else "未发现航线"
     if home_reached:
         return "归航已完成"
     if destination not in ["demo", "electromagnetic", "ruin", "earth"]:
@@ -120,7 +126,7 @@ func planet_detail(destination: String) -> String:
         "electromagnetic":
             return "核心已回收 · 可重访合作设施" if claims.has("resonance_core_01") else "工厂信号：高密度反应堆能源\n完成核心搬运后带回归航储备"
         "ruin":
-            return "殖民地物资信号 · 注意噪音\n搜刮后回登陆点按 E 撤回"
+            return "殖民地物资信号\n搜刮后回登陆点按 E 撤回"
         "earth":
             return "远程归航出口\n储备达标后全员就位返航"
     return "未知信号"

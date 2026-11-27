@@ -5,7 +5,7 @@ class_name RuinHUD3D
 ##
 ## 只在腐墟星、且没有打开设置/日志/物品选择时显示。
 ## 命中时四根准星线会短暂向外扩并变成珊瑚色，给近战一个即时的确认。
-## 这里不画血量、噪音等常驻 HUD，那些仍由 Main3D 的面板负责，避免两套读数。
+## 这里不画血量等常驻 HUD，那些仍由 Main3D 的面板负责，避免两套读数。
 
 var controller: Main3D
 var _crosshair: Control

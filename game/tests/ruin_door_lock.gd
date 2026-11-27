@@ -41,8 +41,8 @@ func run() -> void:
 		check(lock != null and lock.visible, "门锁模型缺失或不可见：" + String(id))
 
 	# 没有撬锁工具时 E 不能开锁；R 的暴力撬门不依赖工具。
-	var school: Dictionary = ruin.buildings["school"]
-	player.global_position = school.entry + Vector3(0.0, 0.0, 0.8)
+	var locked_building: Dictionary = ruin.buildings["energy_station"]
+	player.global_position = locked_building.entry + Vector3(0.0, 0.0, 0.8)
 	player.rotation.y = 0.0
 	player._camera_yaw = 0.0
 	player._camera_yaw_target = 0.0
@@ -50,16 +50,23 @@ func run() -> void:
 	main.handle_action(1, "repair")
 	await process_frame
 	check(not main.lockpick_active, "没有撬锁工具仍然打开了撬锁界面")
-	check(ruin.is_building_locked("school"), "没有撬锁工具却打开了学校门")
+	check(ruin.is_building_locked("energy_station"), "没有撬锁工具却打开了能源站门")
 	main._items.add_item(1, "lockpick", -1, {}, false)
 
 	# 有工具时 E 正常进入四弹子；用真实的四弹子逻辑压到底。
 	main.handle_action(1, "repair")
 	await process_frame
-	check(main.lockpick_active, "有撬锁工具时学校门没有进入撬锁界面")
+	check(main.lockpick_active, "有撬锁工具时能源站门没有进入撬锁界面")
 	var pick := main._lockpick_layer
 	check(pick != null, "撬锁层没有创建")
 	check(int(pick.get("_pins").size()) == 4, "弹子数量不是 4")
+	var pick_marker := pick.get("_pick") as ColorRect
+	check(pick_marker != null, "撬锁针没有建立")
+	if pick_marker != null:
+		var before_pick_x := pick_marker.position.x
+		pick.set("_pick_target_x", before_pick_x + 100.0)
+		pick.call("_process", 0.05)
+		check(pick_marker.position.x > before_pick_x, "撬锁针没有移动动画")
 	for index: int in 4:
 		pick.set("_selected", index)
 		pick.set("_holding", true)
@@ -70,11 +77,11 @@ func run() -> void:
 	pick.call("_process", 0.6)
 	await process_frame
 	check(not main.lockpick_active, "撬锁成功后界面没有关闭")
-	check(not ruin.is_building_locked("school"), "学校门锁没有打开")
-	var school_lock := ruin.buildings["school"].get("lock") as Node3D
-	check(school_lock != null and not school_lock.visible, "学校门锁模型没有收起")
-	check(ruin.discovered_buildings.has("school"), "开门后没有登记建筑")
-	check((ruin.snapshot().get("unlocked", []) as Array).has("school"), "快照没有记录已开门")
+	check(not ruin.is_building_locked("energy_station"), "能源站门锁没有打开")
+	var energy_lock := ruin.buildings["energy_station"].get("lock") as Node3D
+	check(energy_lock != null and not energy_lock.visible, "能源站门锁模型没有收起")
+	check(ruin.discovered_buildings.has("energy_station"), "开门后没有登记建筑")
+	check((ruin.snapshot().get("unlocked", []) as Array).has("energy_station"), "快照没有记录已开门")
 
 	# 取消撬锁不应改变门锁状态；用医院门。
 	var hospital: Dictionary = ruin.buildings["hospital"]
@@ -94,15 +101,12 @@ func run() -> void:
 	main.handle_action(1, "ruin_force_door")
 	await process_frame
 	check(main.force_door_active, "按 R 没有进入暴力撬门")
-	check(player.get("_ruin_force_active"), "本地没有显示撬棍动作")
-	var crowbar := player.get("_ruin_crowbar") as Node3D
-	check(crowbar != null and crowbar.visible, "撬棍模型没有显示")
+	check(player.get("_ruin_force_active"), "本地没有进入暴力撬门状态")
 	ruin._tick_force_jobs(3.0)
 	await physics_frame
 	await physics_frame
 	check(not main.force_door_active, "暴力撬门结束后状态没有清掉")
 	check(not ruin.is_building_locked("market"), "暴力撬门没有打开超市门")
-	check(crowbar == null or not crowbar.visible, "暴力撬门结束后撬棍没有收起")
 	check((ruin.snapshot().get("unlocked", []) as Array).has("market"), "暴力撬门没有写入快照")
 
 	# 图书馆锁死：E / R / 直接调用 unlock 都不能打开，也不登记建筑。

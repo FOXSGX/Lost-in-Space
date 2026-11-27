@@ -12,10 +12,10 @@ const HALF_W := 9.0
 const HALF_D := 6.0
 const FLOOR_HEIGHT := 3.0
 
-const FLOOR_TILE := Color("#6d746c")
-const WALL := Color("#a9aa9b")
+const FLOOR_TILE := Color("#5b625b")
+const WALL := Color("#8a8b7c")
 const WALL_LOW := Color("#36524f")
-const CEILING := Color("#b9b7a7")
+const CEILING := Color("#989687")
 const METAL := Color("#455a58")
 const WOOD := Color("#715739")
 const LINEN := Color("#c4c6b8")
@@ -30,8 +30,6 @@ const ENGINEER := Color("#8a6b4b")
 var controller: Main3D
 var _flicker_lights: Array[OmniLight3D] = []
 var _phase := 0.0
-var _engineer_root: Node3D
-var _doctor_root: Node3D
 
 
 func build(owner: Main3D, parent: Node3D) -> void:
@@ -41,7 +39,7 @@ func build(owner: Main3D, parent: Node3D) -> void:
 	parent.add_child(self)
 	_shell()
 	_furnish()
-	_build_npcs()
+	# 庇护所不再生成工程师/医生实体；交互点保留为不可见通讯锚点，只走对话。
 	set_process(true)
 
 
@@ -51,6 +49,14 @@ func spawn_position() -> Vector3:
 
 func exit_position() -> Vector3:
 	return global_position + Vector3(0.0, 0.0, 5.35)
+
+
+func level_position(level: int) -> Vector3:
+	return global_position + Vector3(0.0, float(level) * FLOOR_HEIGHT, 0.0)
+
+
+func level_count() -> int:
+	return 1
 
 
 func is_inside(point: Vector3) -> bool:
@@ -71,10 +77,7 @@ func _process(delta: float) -> void:
 		var light := _flicker_lights[index]
 		if is_instance_valid(light):
 			light.light_energy = float(light.get_meta("base_energy", 0.45)) * (0.88 + 0.12 * sin(_phase * 5.0 + float(index)))
-	if _engineer_root != null:
-		_engineer_root.rotation_degrees.y = 12.0 + sin(_phase * 0.6) * 4.0
-	if _doctor_root != null:
-		_doctor_root.rotation_degrees.y = -12.0 + sin(_phase * 0.55 + 1.7) * 4.0
+
 
 
 # ── 房间 ─────────────────────────────────────────────────────
@@ -88,12 +91,25 @@ func _shell() -> void:
 	_wall(Vector3(0.25, FLOOR_HEIGHT, D), Vector3(-HALF_W, FLOOR_HEIGHT * 0.5, 0.0))
 	_wall(Vector3(0.25, FLOOR_HEIGHT, D), Vector3(HALF_W, FLOOR_HEIGHT * 0.5, 0.0))
 	# 南墙：中间是通往能源站的暗门，门洞左右各一段。
-	_wall(Vector3(6.6, FLOOR_HEIGHT, 0.25), Vector3(-5.7, FLOOR_HEIGHT * 0.5, HALF_D))
-	_wall(Vector3(6.6, FLOOR_HEIGHT, 0.25), Vector3(5.7, FLOOR_HEIGHT * 0.5, HALF_D))
+	_wall(Vector3(7.6, FLOOR_HEIGHT, 0.25), Vector3(-5.2, FLOOR_HEIGHT * 0.5, HALF_D))
+	_wall(Vector3(7.6, FLOOR_HEIGHT, 0.25), Vector3(5.2, FLOOR_HEIGHT * 0.5, HALF_D))
 	_door_frame(Vector3(0.0, 0.0, HALF_D), 2.8, 2.8, AMBER)
+	for side: float in [-1.0, 1.0]:
+		_collider(Vector3(0.30, FLOOR_HEIGHT, 0.44), Vector3(side * 1.45, FLOOR_HEIGHT * 0.5, HALF_D))
 	ART.block(self, "ShelterDoor", Vector3(2.4, 2.4, 0.10), Vector3(0.0, 1.2, HALF_D - 0.12), METAL, 0.05)
 	ART.block(self, "ShelterDoorGlow", Vector3(1.9, 0.07, 0.04), Vector3(0.0, 2.25, HALF_D - 0.20), AMBER, 0.01, true, 0.4)
 	ART.block(self, "ShelterExitSign", Vector3(0.8, 0.24, 0.06), Vector3(0.0, 2.6, HALF_D - 0.24), TEAL, 0.02, true, 0.45)
+	var door_body := StaticBody3D.new()
+	door_body.name = "InteriorEntranceDoorCollision"
+	door_body.collision_layer = 2
+	door_body.collision_mask = 0
+	door_body.position = Vector3(0.0, 1.2, HALF_D - 0.12)
+	var door_shape := CollisionShape3D.new()
+	var door_box := BoxShape3D.new()
+	door_box.size = Vector3(2.4, 2.4, 0.14)
+	door_shape.shape = door_box
+	door_body.add_child(door_shape)
+	add_child(door_body)
 
 	for side: float in [-1.0, 1.0]:
 		ART.block(self, "ShelterWainscot", Vector3(W - 0.4, 0.9, 0.05), Vector3(0.0, 0.45, side * (HALF_D - 0.13)), WALL_LOW, 0.03)
@@ -223,37 +239,6 @@ func _debris() -> void:
 
 
 # ── NPC ──────────────────────────────────────────────────────
-
-func _build_npcs() -> void:
-	_engineer_root = _npc_figure(Vector3(-3.2, 0.0, -1.2), ENGINEER, "engineer")
-	_doctor_root = _npc_figure(Vector3(3.2, 0.0, -1.2), DOCTOR, "doctor")
-
-
-func _npc_figure(at: Vector3, coat: Color, kind: String) -> Node3D:
-	var root := Node3D.new()
-	root.name = "ShelterEngineer" if kind == "engineer" else "ShelterDoctor"
-	root.position = at
-	root.rotation_degrees.y = 12.0 if kind == "engineer" else -12.0
-	add_child(root)
-	ART.cylinder(root, "Body", 0.32, 1.15, Vector3(0.0, 0.58, 0.0), coat)
-	ART.block(root, "CoatPanel", Vector3(0.42, 0.75, 0.08), Vector3(0.0, 0.62, 0.26), Color("#c6c8b7") if kind == "doctor" else Color("#65523d"), 0.02)
-	ART.sphere(root, "Head", Vector3(0.38, 0.42, 0.38), Vector3(0.0, 1.46, 0.0), Color("#c9a27c"))
-	if kind == "engineer":
-		ART.block(root, "Cap", Vector3(0.48, 0.14, 0.44), Vector3(0.0, 1.71, 0.0), Color("#9b6f3e"), 0.03)
-		ART.block(root, "CapBrim", Vector3(0.5, 0.05, 0.16), Vector3(0.0, 1.66, -0.23), Color("#7e5a32"), 0.01)
-		ART.block(root, "Beard", Vector3(0.28, 0.18, 0.08), Vector3(0.0, 1.33, 0.18), Color("#b9b6a4"), 0.02)
-		ART.block(root, "ToolBelt", Vector3(0.66, 0.12, 0.4), Vector3(0.0, 0.92, 0.0), Color("#4d4030"), 0.01)
-	else:
-		ART.block(root, "Hair", Vector3(0.42, 0.22, 0.40), Vector3(0.0, 1.62, 0.0), Color("#51443a"), 0.02)
-		ART.block(root, "Mask", Vector3(0.28, 0.12, 0.06), Vector3(0.0, 1.40, 0.18), Color("#d5ddd3"), 0.01)
-		ART.block(root, "MedBadge", Vector3(0.16, 0.18, 0.03), Vector3(0.18, 0.95, 0.28), RED, 0.01)
-	for side: float in [-1.0, 1.0]:
-		ART.cylinder(root, "Arm", 0.075, 0.62, Vector3(side * 0.34, 0.98, 0.0), coat).rotation_degrees.z = side * 7.0
-		ART.cylinder(root, "Leg", 0.09, 0.52, Vector3(side * 0.15, 0.26, 0.0), Color("#3f5350"))
-	return root
-
-
-# ── 碰撞 ─────────────────────────────────────────────────────
 
 func _collider(size: Vector3, center: Vector3, rotation_degrees_value := Vector3.ZERO) -> void:
 	var body := StaticBody3D.new()

@@ -2,9 +2,10 @@ extends Node3D
 
 ## 腐墟星废弃学校室内：3 层。
 ## 1F 大厅/食堂/校长室，2F 教室/实验室，3F 计算机房/天文台/广播站。
-## 剧情任务物：天文观测数据（3F 天文台）。
+## 学校已整栋封闭，内部保留为不可进入的场景。
 
 const ART := preload("res://scripts/ruin_cartoon_art.gd")
+const STAIR_TEMPLATE := preload("res://scripts/ruin_stair_template.gd")
 
 const LEVELS := 3
 const FLOOR_HEIGHT := 3.0
@@ -13,15 +14,15 @@ const W := 24.0
 const D := 17.0
 const HALF_W := 12.0
 const HALF_D := 8.5
-const STAIR_X0 := -11.0
+const STAIR_X0 := -12.0
 const STAIR_X1 := -7.0
 const STAIR_Z := 5.0
 const CORRIDOR := 1.3
 
-const FLOOR_TILE := Color("#7a7b70")
-const WALL := Color("#b5b3a4")
+const FLOOR_TILE := Color("#64655c")
+const WALL := Color("#948f80")
 const WALL_LOW := Color("#3d5e58")
-const CEILING := Color("#c3c1b2")
+const CEILING := Color("#a49f90")
 const METAL := Color("#4b5756")
 const WOOD := Color("#795d3e")
 const BLACKBOARD := Color("#2e4a43")
@@ -55,7 +56,7 @@ func build(owner: Main3D, parent: Node3D) -> void:
 
 
 func spawn_position() -> Vector3:
-	return global_position + Vector3(0.0, 0.15, 7.0)
+	return global_position + Vector3(0.0, 0.15, 6.9)
 
 
 func exit_position() -> Vector3:
@@ -110,16 +111,20 @@ func _build_level(level: int) -> void:
 	_walls(y, level)
 	_lights(y, level)
 	_furnish(level, y)
+	if level == 0:
+		_build_entrance_door(y)
 
 
 func _floor_slabs(y: float) -> void:
 	_floor_piece(Vector2(-7.0, HALF_W), Vector2(-HALF_D, HALF_D), y)
-	_floor_piece(Vector2(-HALF_W, -11.0), Vector2(-HALF_D, HALF_D), y)
-	_floor_piece(Vector2(-11.0, -7.0), Vector2(-HALF_D, -STAIR_Z), y)
-	_floor_piece(Vector2(-11.0, -7.0), Vector2(STAIR_Z, HALF_D), y)
+	_floor_piece(Vector2(-HALF_W, STAIR_X0), Vector2(-HALF_D, HALF_D), y)
+	_floor_piece(Vector2(STAIR_X0, STAIR_X1), Vector2(-HALF_D, -STAIR_Z), y)
+	_floor_piece(Vector2(STAIR_X0, STAIR_X1), Vector2(STAIR_Z, HALF_D), y)
 
 
 func _floor_piece(bounds_x: Vector2, bounds_z: Vector2, y: float) -> void:
+	if bounds_x.y - bounds_x.x < 0.01 or bounds_z.y - bounds_z.x < 0.01:
+		return
 	var size := Vector3(bounds_x.y - bounds_x.x, 0.22, bounds_z.y - bounds_z.x)
 	var center := Vector3((bounds_x.x + bounds_x.y) * 0.5, y - 0.11, (bounds_z.x + bounds_z.y) * 0.5)
 	var slab := ART.block(self, "SchoolFloor", size, center, FLOOR_TILE, 0.04)
@@ -132,12 +137,14 @@ func _floor_piece(bounds_x: Vector2, bounds_z: Vector2, y: float) -> void:
 func _ceiling_slabs(y: float) -> void:
 	var ceiling_y := y + FLOOR_HEIGHT
 	_ceiling_piece(Vector2(-7.0, HALF_W), Vector2(-HALF_D, HALF_D), ceiling_y)
-	_ceiling_piece(Vector2(-HALF_W, -11.0), Vector2(-HALF_D, HALF_D), ceiling_y)
-	_ceiling_piece(Vector2(-11.0, -7.0), Vector2(-HALF_D, -STAIR_Z), ceiling_y)
-	_ceiling_piece(Vector2(-11.0, -7.0), Vector2(STAIR_Z, HALF_D), ceiling_y)
+	_ceiling_piece(Vector2(-HALF_W, STAIR_X0), Vector2(-HALF_D, HALF_D), ceiling_y)
+	_ceiling_piece(Vector2(STAIR_X0, STAIR_X1), Vector2(-HALF_D, -STAIR_Z), ceiling_y)
+	_ceiling_piece(Vector2(STAIR_X0, STAIR_X1), Vector2(STAIR_Z, HALF_D), ceiling_y)
 
 
 func _ceiling_piece(bounds_x: Vector2, bounds_z: Vector2, y: float) -> void:
+	if bounds_x.y - bounds_x.x < 0.01 or bounds_z.y - bounds_z.x < 0.01:
+		return
 	var size := Vector3(bounds_x.y - bounds_x.x, 0.14, bounds_z.y - bounds_z.x)
 	var center := Vector3((bounds_x.x + bounds_x.y) * 0.5, y + 0.07, (bounds_z.x + bounds_z.y) * 0.5)
 	ART.block(self, "SchoolCeiling", size, center, CEILING, 0.04).cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
@@ -155,21 +162,24 @@ func _walls(y: float, level: int) -> void:
 	_wall(Vector3(0.25, h, D), Vector3(-HALF_W, y + h * 0.5, 0.0))
 	_wall(Vector3(0.25, h, D), Vector3(HALF_W, y + h * 0.5, 0.0))
 
-	# 西侧楼梯间。
-	_wall(Vector3(0.25, h, 1.8), Vector3(STAIR_X1, y + h * 0.5, -7.6))
-	_wall(Vector3(0.25, h, 10.6), Vector3(STAIR_X1, y + h * 0.5, 0.0))
-	_wall(Vector3(0.25, h, 1.8), Vector3(STAIR_X1, y + h * 0.5, 7.6))
-	_door_frame(Vector3(STAIR_X1, y, -6.0), 1.4, 2.4, TEAL)
-	_door_frame(Vector3(STAIR_X1, y, 6.0), 1.4, 2.4, TEAL)
+	# 西侧楼梯间：每层只在梯段抵达侧留一个入口，交错布置。
+	var stair_entry := 6.0 if level % 2 == 0 else -6.0
+	if stair_entry > 0.0:
+		_wall(Vector3(0.25, h, 13.3), Vector3(STAIR_X1, y + h * 0.5, -1.85))
+		_wall(Vector3(0.25, h, 1.3), Vector3(STAIR_X1, y + h * 0.5, 7.85))
+	else:
+		_wall(Vector3(0.25, h, 1.3), Vector3(STAIR_X1, y + h * 0.5, -7.85))
+		_wall(Vector3(0.25, h, 13.3), Vector3(STAIR_X1, y + h * 0.5, 1.85))
+	STAIR_TEMPLATE.build_door_frame(self, Vector3(STAIR_X1, y, stair_entry), 2.4, 2.4, TEAL)
 
 	# 中央走廊两侧房间。
 	_wall_line_x(CORRIDOR, y, h, [-4.6, 3.4, 7.4], 1.2)
 	_wall_line_x(-CORRIDOR, y, h, [-4.6, 3.4, 7.4], 1.2)
 	for x: float in [-5.0, 0.0, 5.0]:
+		if level == 0 and is_zero_approx(x):
+			continue
 		_wall(Vector3(0.20, h, 7.1), Vector3(x, y + h * 0.5, 5.05))
 		_wall(Vector3(0.20, h, 7.1), Vector3(x, y + h * 0.5, -5.05))
-	for side: float in [-1.0, 1.0]:
-		ART.block(self, "Wainscot", Vector3(19.0, 0.92, 0.04), Vector3(2.5, y + 0.46, side * (CORRIDOR - 0.14)), WALL_LOW, 0.03)
 
 
 func _wall(size: Vector3, center: Vector3) -> void:
@@ -198,36 +208,47 @@ func _door_frame(at: Vector3, width: float, height: float, color: Color) -> void
 	ART.block(self, "DoorHeader", Vector3(width + 0.28, 0.18, 0.34), at + Vector3(0.0, height, 0.0), color, 0.03)
 
 
+## 1F 入口：关着的对开校门。回头能看到门，门洞不再通向虚空。
+func _build_entrance_door(y: float) -> void:
+	var door_z := HALF_D - 0.12
+	var door_w := 2.2
+	for side: float in [-1.0, 1.0]:
+		ART.block(self, "InteriorEntranceDoorLeaf", Vector3(door_w * 0.5 - 0.03, 2.62, 0.10), Vector3(side * door_w * 0.25, y + 1.31, door_z), WOOD, 0.03)
+		ART.block(self, "InteriorEntranceDoorGlass", Vector3(door_w * 0.38, 0.70, 0.04), Vector3(side * door_w * 0.25, y + 2.02, door_z - 0.06), Color("#6b8f8d"), 0.01, true, 0.08)
+		ART.block(self, "InteriorEntranceDoorHandle", Vector3(0.06, 0.24, 0.07), Vector3(side * 0.10, y + 1.15, door_z - 0.10), METAL, 0.01)
+	ART.block(self, "InteriorEntranceDoorKick", Vector3(door_w - 0.10, 0.22, 0.05), Vector3(0.0, y + 0.18, door_z - 0.08), METAL, 0.01)
+	var body := StaticBody3D.new()
+	body.name = "InteriorEntranceDoorCollision"
+	body.collision_layer = 2
+	body.collision_mask = 0
+	body.position = Vector3(0.0, y + 1.35, door_z)
+	var shape := CollisionShape3D.new()
+	var box := BoxShape3D.new()
+	box.size = Vector3(door_w, 2.7, 0.14)
+	shape.shape = box
+	body.add_child(shape)
+	add_child(body)
+
+
 func _build_stairs() -> void:
-	for interval: int in LEVELS - 1:
-		var lower_y := float(interval) * FLOOR_HEIGHT
-		var rises_north := interval % 2 == 0
-		var angle := atan(3.0 / 10.0)
-		var rotation := angle if rises_north else -angle
-		var center := Vector3(-9.0, lower_y + 1.5, 0.0)
-		var ramp := ART.block(self, "StairRamp", Vector3(2.8, 0.18, 10.44), center, Color("#8a938c"), 0.04)
-		ramp.rotation_degrees.x = rad_to_deg(rotation)
-		ramp.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-		_collider(Vector3(2.8, 0.18, 10.44), center, Vector3(rad_to_deg(rotation), 0.0, 0.0))
-		for step: int in 14:
-			var fraction := (float(step) + 0.5) / 14.0
-			var z := 5.0 - fraction * 10.0 if rises_north else -5.0 + fraction * 10.0
-			var y := lower_y + fraction * 3.0 + 0.105
-			ART.block(self, "StairTread", Vector3(2.7, 0.025, 0.58), Vector3(-9.0, y, z), Color("#a2aaa0"), 0.02).cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-		for side: float in [-1.0, 1.0]:
-			var rail_center := Vector3(-9.0 + side * 1.48, lower_y + 1.5, 0.0)
-			var rail := ART.block(self, "StairRail", Vector3(0.12, 1.05, 10.2), rail_center, Color("#496463"), 0.03)
-			rail.rotation_degrees.x = rad_to_deg(rotation)
-			rail.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-			_collider(Vector3(0.12, 1.05, 10.2), rail_center, Vector3(rad_to_deg(rotation), 0.0, 0.0))
+	STAIR_TEMPLATE.build(self, {
+		"levels": LEVELS,
+		"floor_height": FLOOR_HEIGHT,
+		"x0": STAIR_X0,
+		"x1": STAIR_X1,
+		"stair_z": STAIR_Z,
+		"tread_color": Color("#a2aaa0"),
+		"fill_color": Color("#77847f"),
+		"rail_color": Color("#496463"),
+	})
 
 
 func _lights(y: float, level: int) -> void:
 	for point: Vector2 in [Vector2(-3.5, 5.0), Vector2(4.0, 5.0), Vector2(-3.5, -5.0), Vector2(4.0, -5.0), Vector2(0.0, 0.0)]:
-		_light_panel(Vector3(point.x, y + 2.86, point.y), Color("#d9ddd0"), 1.80, 9.0)
-	_light_panel(Vector3(0.0, y + 2.86, 7.9), TEAL, 1.10, 5.0)
-	_key_light(Vector3(0.0, y + 2.92, 0.0), Color("#ffe4bd"), 2.1, 13.5)
-	_exit_sign(Vector3(0.0, y + 2.45, HALF_D - 0.15))
+		_light_panel(Vector3(point.x, y + 2.86, point.y), Color("#d9ddd0"), 0.90, 9.0)
+	_light_panel(Vector3(0.0, y + 2.86, 7.9), TEAL, 0.60, 5.0)
+	_key_light(Vector3(0.0, y + 2.92, 0.0), Color("#ffe4bd"), 1.2, 13.5)
+	_exit_sign(Vector3(0.0, y + 2.90, HALF_D - 0.20))
 	if level == 2:
 		var red_light := OmniLight3D.new()
 		red_light.light_color = RED
@@ -297,11 +318,11 @@ func _lobby(y: float) -> void:
 	for index: int in 3:
 		ART.cylinder(self, "Trophy", 0.10, 0.40, Vector3(-4.4 + float(index) * 0.6, y + 0.9, 2.0), AMBER, true, 0.2)
 		ART.block(self, "TrophyBase", Vector3(0.28, 0.12, 0.28), Vector3(-4.4 + float(index) * 0.6, y + 0.66, 2.0), DARK, 0.02)
-	ART.block(self, "SchoolBoard", Vector3(4.6, 1.8, 0.06), Vector3(3.0, y + 1.8, 8.25), Color("#4d5a52"), 0.02)
+	ART.block(self, "SchoolBoard", Vector3(4.6, 1.8, 0.06), Vector3(3.0, y + 1.8, 1.55), Color("#4d5a52"), 0.02)
 	for index: int in 5:
-		ART.plane(self, "SchoolNotice", Vector2(0.45, 0.52), Vector3(1.4 + float(index) * 0.8, y + 1.9, 8.20), Color("#b8ad93")).rotation_degrees.y = PI
+		ART.plane(self, "SchoolNotice", Vector2(0.45, 0.52), Vector3(1.4 + float(index) * 0.8, y + 1.9, 1.50), Color("#b8ad93"))
 	for index: int in 3:
-		_chair(Vector3(-2.0 + float(index) * 1.2, y, 6.4), 0.0)
+		_chair(Vector3(-5.6 + float(index) * 1.2, y, 6.4), 0.0)
 	_locker(Vector3(-6.4, y, 7.1))
 
 
@@ -375,10 +396,6 @@ func _astronomy_room(y: float) -> void:
 	ART.block(self, "StarChart", Vector3(1.6, 0.03, 1.0), Vector3(9.6, y + 1.0, 5.0), Color("#8b9c8b"), 0.01)
 	for index: int in 7:
 		ART.sphere(self, "ChartStar", Vector3(0.06, 0.06, 0.06), Vector3(9.0 + float(index) * 0.18, y + 1.02, 4.8 + float(index % 3) * 0.15), Color("#dce6d3"), true, 0.3)
-	var data_root := _register_task_item("school_observation_data", Vector3(9.6, y + 1.01, 5.6), Color("#d8cfb8"))
-	ART.block(data_root, "ObservationFolder", Vector3(0.50, 0.06, 0.34), Vector3.ZERO, Color("#b9ac8c"), 0.01)
-	ART.block(data_root, "ObservationPrintout", Vector3(0.42, 0.015, 0.28), Vector3(0.02, 0.04, 0.0), PAPER, 0.005)
-	ART.block(data_root, "ObservationDisk", Vector3(0.14, 0.02, 0.14), Vector3(0.18, 0.05, -0.04), DARK, 0.005)
 	ART.block(self, "AstronomyPoster", Vector3(2.4, 1.6, 0.05), Vector3(8.0, y + 1.8, 8.2), Color("#3c554f"), 0.02)
 
 

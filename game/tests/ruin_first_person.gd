@@ -1,7 +1,7 @@
 extends SceneTree
 
 ## 腐墟星第一人称改版验收：
-## 相机、准星、瞄准锥近战、地图边界、返航镜头恢复，以及不影响主舱第一人称。
+## 相机、准星、最近目标近战、地图边界、返航镜头恢复，以及不影响主舱第一人称。
 
 var checks := 0
 var failures: Array[String] = []
@@ -47,46 +47,16 @@ func run() -> void:
 	check(main._ruin_planet.hud != null, "腐墟星 HUD 没有创建")
 	check(main.get_active_map_size().x <= 152.0 and main.get_active_map_size().y <= 102.0, "腐墟星地图边界仍沿用霜烬星尺寸")
 
-	# 生成一只感染体，把它放到准星正前方；第一击必须命中。
-	main._ruin_planet._spawn_one()
-	check(main._ruin_planet.zombies.size() > 0, "感染体没有生成")
-	var zombie: SpaceEnemy3D = null
-	for value in main._ruin_planet.zombies.values():
-		zombie = value as SpaceEnemy3D
-		break
-	if zombie != null:
-		player.global_position = Vector3(0.0, 0.0, 0.0)
-		player.rotation.y = 0.0
-		player._camera_yaw = 0.0
-		player._camera_yaw_target = 0.0
-		player._camera_pitch = 0.0
-		player._camera_pitch_target = 0.0
-		zombie.global_position = Vector3(0.0, 0.0, -2.0)
-		var before := zombie.health
-		main._attack_ready_at.clear()
-		main.attack_from_peer(1)
-		check(zombie.health == before - 1, "准星正前方的感染体没有被近战命中")
-
-		# 同一只感染体移到身后，攻击必须落空（第一人称不能打到背后）。
-		zombie.global_position = Vector3(0.0, 0.0, 2.0)
-		var behind_health := zombie.health
-		main._attack_ready_at.clear()
-		main.attack_from_peer(1)
-		check(zombie.health == behind_health, "身后的感染体仍然被近战命中")
-
-		# 超出近战距离也不该命中。
-		zombie.global_position = Vector3(0.0, 0.0, -6.0)
-		var far_health := zombie.health
-		main._attack_ready_at.clear()
-		main.attack_from_peer(1)
-		check(zombie.health == far_health, "超出近战距离仍然命中")
+	# 腐墟星已移除丧尸与激光剑：不再存在感染体、Saber 或腐墟星近战动画。
+	check(main._ruin_planet.get("zombies") == null, "腐墟星仍然保留感染体字典")
+	check(player.find_children("Saber*", "MeshInstance3D", true, false).is_empty(), "第一人称仍然存在激光剑网格")
+	check(not player.has_method("play_ruin_attack"), "仍然保留腐墟星近战动画")
 
 	# 返航：收起腐墟星世界，镜头回到主舱第一人称。
 	main.return_to_ship("测试返航")
 	await process_frame
 	check(main.current_planet_id == "demo", "返航后星球 id 没有复位")
 	check(not main._ruin_planet.world_root.visible, "返航后腐墟星世界仍然可见")
-	check(main._ruin_planet.zombies.is_empty(), "返航后感染体没有清理")
 	var returned: SpacePlayer3D = main.players.get(1) as SpacePlayer3D
 	check(returned != null, "返航后玩家没有重建")
 	if returned != null:

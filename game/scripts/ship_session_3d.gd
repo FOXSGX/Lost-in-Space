@@ -110,6 +110,8 @@ func tick(delta: float) -> void:
     _ship_title.text = "主舱" if in_hub else "训练舱"
     _hint_panel.visible = active and not has_panel() and controller._screen_view == "ship"
     _aim_dot.visible = active and controller._screen_view == "ship" and not controller.market_visible and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED
+    if _compass_hud != null and not active:
+        _compass_hud.visible = false
     var peer_id := multiplayer.get_unique_id()
     if not active:
         return
@@ -790,9 +792,9 @@ func confirm_land() -> void:
             controller.start_planet(selected_destination)
 
 func select_destination(destination: String) -> void:
-    if not controller.is_host or destination not in ["demo", "electromagnetic", "ruin"]:
+    if not controller.is_host or destination not in ["demo", "electromagnetic", "ruin", "earth"]:
         return
-    if campaign.enabled and not campaign.block_reason(destination).is_empty():
+    if campaign.enabled and not campaign.debug_free_destination and not campaign.block_reason(destination).is_empty():
         return
     selected_destination = destination
     if campaign.enabled:

@@ -1,5 +1,7 @@
 extends SceneTree
 
+const QUIET := preload("res://tests/quiet_window.gd")
+
 ## 腐墟星第一人称/卡通改版截图。
 ## 用法：godot --path game --script res://tests/ruin_first_person_capture.gd -- <输出目录>
 
@@ -12,6 +14,7 @@ func _initialize() -> void:
 
 
 func run() -> void:
+	QUIET.apply()
 	var args: PackedStringArray = OS.get_cmdline_user_args()
 	if not args.is_empty():
 		output_dir = String(args[0])
@@ -51,6 +54,10 @@ func run() -> void:
 	_place(player, Vector3(40.0, 0.0, -12.0), 0.0)
 	await _capture("04_hospital.png")
 
+	# 17 医院门楼近景：门楣、双开门、雨棚与接地。
+	_place(player, Vector3(36.0, 0.0, -15.6), 0.0)
+	await _capture("17_hospital_entrance.png")
+
 	# 05 学校正面。
 	_place(player, Vector3(-62.0, 0.0, 33.0), 0.0)
 	await _capture("05_school_street.png")
@@ -62,7 +69,7 @@ func run() -> void:
 	# 11/12 门锁与二级弹子锁界面。
 	_place(player, Vector3(-62.0, 0.0, 27.0), 0.0)
 	await _capture("11_door_lock.png")
-	main.start_ruin_lockpick(1, "school")
+	main.start_ruin_lockpick(1, "market")
 	await _capture("12_lockpick.png")
 	main.finish_ruin_lockpick(false)
 
@@ -81,23 +88,6 @@ func run() -> void:
 	main._ruin_planet._tick_force_jobs(3.0)
 	await process_frame
 
-	# 06 感染者近景。
-	main._ruin_planet._spawn_one()
-	await process_frame
-	var zombie: SpaceEnemy3D = null
-	for value in main._ruin_planet.zombies.values():
-		zombie = value as SpaceEnemy3D
-		break
-	if zombie != null:
-		zombie.global_position = Vector3(0.0, 0.0, -1.6)
-		zombie.rotation.y = PI
-		_place(player, Vector3(0.0, 0.0, 1.4), 0.0)
-		await _capture("06_infected_closeup.png")
-
-		# 07 近战挥拳的瞬间。
-		player.play_ruin_attack()
-		await _capture("07_melee_swing.png")
-
 	# 08 腐墟星地图。
 	main._toggle_map()
 	main._update_hud()
@@ -107,7 +97,7 @@ func run() -> void:
 	# 09/10 目标完成后的登陆艇与撤离读条。
 	for id in ["food_a", "food_b", "food_c"]:
 		main._ruin_planet._finish_search(1, String(id))
-	for id in ["market", "hospital", "school"]:
+	for id in ["market", "hospital", "energy_station"]:
 		main._ruin_planet.enter_building(1, String(id))
 	main._tick_ruin_extraction(0.1)
 	_place(player, main._ruin_planet.pad_position() + Vector3(0.0, 0.0, 3.0), 0.0)

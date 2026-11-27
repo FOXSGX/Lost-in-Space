@@ -4,6 +4,7 @@ extends SceneTree
 
 var checks := 0
 var failures: Array[String] = []
+var main: Main3D
 
 
 func _initialize() -> void:
@@ -17,8 +18,19 @@ func check(ok: bool, message: String) -> void:
 		push_error(message)
 
 
+func capsule_clear(point: Vector3) -> bool:
+	var capsule := CapsuleShape3D.new()
+	capsule.radius = 0.36
+	capsule.height = 1.45
+	var query := PhysicsShapeQueryParameters3D.new()
+	query.shape = capsule
+	query.transform = Transform3D(Basis(), point)
+	query.collision_mask = 2
+	return main.get_world_3d().direct_space_state.intersect_shape(query, 1).is_empty()
+
+
 func run() -> void:
-	var main: Main3D = load("res://scenes/main_3d.tscn").instantiate() as Main3D
+	main = load("res://scenes/main_3d.tscn").instantiate() as Main3D
 	root.add_child(main)
 	await process_frame
 	main._ship_session.persistence_enabled = false
@@ -39,10 +51,17 @@ func run() -> void:
 		var level_y: float = (interior.call("level_position", level) as Vector3).y
 		check(is_equal_approx(level_y, 570.0 + float(level) * 3.2), "超市楼层高度不对：%d" % level)
 		var hit: Dictionary = main.get_world_3d().direct_space_state.intersect_ray(
-			PhysicsRayQueryParameters3D.create(Vector3(-3.0, level_y + 2.0, 0.0), Vector3(-3.0, level_y - 1.0, 0.0), 2))
+			PhysicsRayQueryParameters3D.create(Vector3(-2.5, level_y + 2.0, 0.0), Vector3(-2.5, level_y - 1.0, 0.0), 2))
 		check(not hit.is_empty(), "超市楼层没有可站立碰撞：%d" % level)
 		if not hit.is_empty():
 			check(absf((hit.position as Vector3).y - level_y) < 0.05, "超市楼层碰撞高度不对：%d" % level)
+		if level == 0:
+			var shelf_hit: Dictionary = main.get_world_3d().direct_space_state.intersect_ray(
+				PhysicsRayQueryParameters3D.create(Vector3(-4.0, level_y + 1.0, -1.2), Vector3(-4.0, level_y + 1.0, -4.0), 2))
+			check(not shelf_hit.is_empty(), "超市货架没有实体碰撞")
+			var freezer_hit: Dictionary = main.get_world_3d().direct_space_state.intersect_ray(
+				PhysicsRayQueryParameters3D.create(Vector3(10.0, level_y + 1.2, -2.4), Vector3(10.0, level_y + 1.2, -5.6), 2))
+			check(not freezer_hit.is_empty(), "超市冷柜没有实体碰撞")
 
 	check(interior.find_children("GondolaBase*", "MeshInstance3D", true, false).size() >= 9, "超市没有货架")
 	check(interior.find_children("CheckoutBelt*", "MeshInstance3D", true, false).size() >= 2, "超市没有收银台")
@@ -85,6 +104,15 @@ func run() -> void:
 	await physics_frame
 	check(not ruin.is_inside_market(player.global_position), "离开超市后仍在室内层")
 	check(player.global_position.distance_to(ruin.buildings["market"].entry) < 3.0, "离开超市后没有回到大门")
+	check((-player.global_transform.basis.z).dot(Vector3(0.0, 0.0, 1.0)) > 0.9, "离开超市后没有面向门外")
+	check((-player._camera.global_transform.basis.z).dot(Vector3(0.0, 0.0, 1.0)) > 0.8, "离开超市后镜头没有朝外")
+
+	# 二层经理办公室必须四面封闭，只留 7.8 m 处的 1.4 m 门洞。
+	var office_y: float = (interior.call("level_position", 1) as Vector3).y
+	check(not capsule_clear(Vector3(8.4, office_y + 0.85, 6.0)), "超市办公室东墙缺失")
+	check(not capsule_clear(Vector3(6.0, office_y + 0.85, 3.3)), "超市办公室南墙缺失")
+	check(not capsule_clear(Vector3(4.1, office_y + 0.85, 6.0)), "超市办公室西墙缺失")
+	check(capsule_clear(Vector3(7.8, office_y + 0.85, 3.2)), "超市办公室门洞被堵")
 
 	print("RUIN_MARKET_INTERIOR: %d checks, %d failures" % [checks, failures.size()])
 	quit(0 if failures.is_empty() else 1)

@@ -29,7 +29,7 @@ func run() -> void:
 	main._start_ruin_planet()
 	await process_frame
 	var ruin: RuinPlanet = main._ruin_planet
-	for id in ["energy_access_card", "coolant_stabilizer", "school_observation_data", "market_navigation_module", "reactor_core"]:
+	for id in ["energy_access_card", "coolant_stabilizer", "market_navigation_module", "reactor_core"]:
 		ruin.quest_items[id] = true
 
 	ruin._apply_story_plan("engineer")
