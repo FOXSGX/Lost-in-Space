@@ -5748,42 +5748,51 @@ func _run_soak_test() -> void:
 	_set_play_enabled(true)
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 20261127
-	var recoveries := 0
 	var actions := ["move_up", "move_down", "move_left", "move_right"]
-	for step in range(240):
-		var action: String = actions[rng.randi() % actions.size()]
-		Input.action_press(action)
-		await _wait(0.05)
-		Input.action_release(action)
-		if step % 7 == 0:
-			_try_kick(rng.randf_range(0.4, 1.4))
-		if step % 31 == 0:
-			_open_pause()
-			await _wait(0.05)
-			_close_pause()
-		if step % 53 == 0:
-			player.global_position = Vector3(player.global_position.x, -20.0, player.global_position.z)
-			recoveries += 1
-			await _wait(0.2)
-		if step % 71 == 0:
-			ball.call("reset_to", Vector3(200.0, 0.4, 200.0))
-		# 每步检查不变量
-		if not is_finite(player.global_position.x) or player.global_position.y < -6.0:
-			failures.append("player out of range at step %d (y=%.1f)" % [step, player.global_position.y])
-			break
-		if ball == null or not is_finite(ball.global_position.x) or ball.global_position.y < -12.0:
-			failures.append("ball out of range at step %d" % step)
-			break
-		if round_time_left < -0.01 or round_time_left > ROUND_SECONDS + 1.0:
-			failures.append("timer out of range at step %d (%.1f)" % [step, round_time_left])
-			break
+	var recoveries := 0
+	for map_index in range(3):
+		_apply_active_map(map_index)
+		await _wait(0.15)
+		# 场外地图：球重生到场地里不能被主门误吃
+		var spawn_spots := arena_ball_spots(map_index)
+		var spot: Vector3 = spawn_spots[0] as Vector3
+		ball.call("reset_to", spot)
+		await _wait(0.35)
+		_check(not bool(ball.get("collected")), "map %d ball is not eaten after respawn" % map_index, passes, failures)
+		_check(ball.global_position.y > 0.05, "map %d ball rests on the ground (y=%.2f)" % [map_index, ball.global_position.y],
+			passes, failures)
+		for step in range(120):
+			var action: String = actions[rng.randi() % actions.size()]
+			Input.action_press(action)
+			await _wait(0.04)
+			Input.action_release(action)
+			if step % 9 == 0:
+				_try_kick(rng.randf_range(0.4, 1.4))
+			if step % 37 == 0:
+				_open_pause()
+				await _wait(0.04)
+				_close_pause()
+			if step % 61 == 0:
+				player.global_position = Vector3(player.global_position.x, -20.0, player.global_position.z)
+				recoveries += 1
+				await _wait(0.18)
+			if step % 79 == 0:
+				ball.call("reset_to", Vector3(200.0, 0.4, 200.0))
+			if not is_finite(player.global_position.x) or player.global_position.y < -6.0:
+				failures.append("map %d player out of range at step %d (y=%.1f)" % [map_index, step, player.global_position.y])
+				break
+			if ball == null or not is_finite(ball.global_position.x) or ball.global_position.y < -12.0:
+				failures.append("map %d ball out of range at step %d" % [map_index, step])
+				break
+			if round_time_left < -0.01 or round_time_left > ROUND_SECONDS + 1.0:
+				failures.append("map %d timer out of range at step %d (%.1f)" % [map_index, step, round_time_left])
+				break
 	_check(failures.is_empty(), "no invariant broke during soak (%s)" % ("; ".join(failures) if not failures.is_empty() else "ok"),
 		passes, failures)
 	_check(recoveries > 0, "fall recovery exercised %d times" % recoveries, passes, failures)
 	print("GULU SOAK SUMMARY passes=%d failures=%d" % [passes.size(), failures.size()])
 	get_tree().quit(0 if failures.is_empty() else 1)
 
-# ---------------------------------------------------------------- 输入并发 / 练习失败 / 窗口尺寸
 
 func _run_input_test() -> void:
 	var passes: Array = []
